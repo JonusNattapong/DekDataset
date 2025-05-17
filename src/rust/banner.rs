@@ -23,7 +23,7 @@ pub fn print_ascii_banner() {
 ░
 
 {yellow}
-ZOMBIT: Thai AI/ML Dataset CLI Toolkit | DeepSeek API
+ZOMBIT: Thai AI/ML Dataset CLI Toolkit | DeepSeek API - DeepSeek-V3
 {green}
  ◉ Project : zombit | JonusNattapong
  ◉ GitHub  : github.com/zombitx64

@@ -65,7 +65,7 @@ async fn main() -> anyhow::Result<()> {
                 id: format!("{}-{}", task_name, i+1),
                 content: v.clone(),
                 metadata: Some([
-                    ("source".to_string(), "DEEPSEEK AI".to_string())
+                    ("source".to_string(), "DeepSeek-V3".to_string())
                 ].iter().cloned().collect()),
             }).collect(),
         };
