@@ -1,4 +1,4 @@
-# DekDataset: Thai AI/ML Dataset Generator (Rust + Python)
+# DekDataset 🇹🇭
 
 ![Rust](https://img.shields.io/badge/Rust-%23dea584?style=flat-square&logo=rust&logoColor=black)
 ![Python](https://img.shields.io/badge/Python-%233776AB?style=flat-square&logo=python&logoColor=white)
@@ -9,13 +9,13 @@
 
 ## ✨ Overview
 
-DekDataset is a modern, robust toolkit for generating diverse, high-quality datasets for Thai AI/ML tasks (NLP, classification, QA, NER, etc.).
+DekDataset คือเครื่องมือโอเพ่นซอร์สสำหรับสร้างชุดข้อมูล (dataset) ภาษาไทยสำหรับงาน AI/ML (NLP, Classification, QA, NER ฯลฯ) แบบอัตโนมัติ รองรับทั้ง Rust และ Python
 
-- **Languages:** Rust & Python
-- **API:** Unified FastAPI task schema
+- **Unified Schema:** Rust & Python ใช้ API เดียวกัน (FastAPI)
 - **Export:** JSONL, Parquet, Arrow, CSV
-- **Metadata:** All outputs include `{ "source": "zombit" }`
-- **Beautiful CLI:** Banner, progress bar, and color
+- **Metadata:** ทุก output มี `{ "source": "zombit" }`
+- **Beautiful CLI:** Banner, progress bar, สีสัน
+- **Batch Mode:** สร้างหลาย task/format ได้ในคำสั่งเดียว
 
 ---
 
@@ -34,43 +34,45 @@ pip install -r requirements.txt
 
 ### 2. Set up DeepSeek API
 
-- Copy `.env.example` to `.env` and set your `DEEPSEEK_API_KEY`
+- สร้างไฟล์ `.env` แล้วใส่
+  ```env
+  DEEPSEEK_API_KEY=your_api_key
+  ```
 
 ### 3. Run Task Definitions API (Python)
 
 ```bash
-cd src/python
-python -m uvicorn task_definitions_api:app --reload --host 0.0.0.0 --port 8000
+python src/python/task_definitions_api.py
 ```
 
 ### 4. Generate Dataset (Rust)
 
 ```bash
-cargo run -- sentiment_analysis,text_classification 10
+cargo run -- summarization,ner 10
 ```
 
 ### 5. Generate Dataset (Python)
 
 ```bash
-python src/python/generate_dataset.py sentiment_analysis 10 --format jsonl
+python src/python/generate_dataset.py summarization 10 --format jsonl
 ```
 
-### 6. Export to Parquet/Arrow
+### 6. Export to Parquet/Arrow (optional)
 
 ```bash
-python data/output/export_parquet_arrow.py data/output/auto-dataset-sentiment_analysis-YYYYMMDD-HHMMSS.jsonl parquet
+python data/output/export_parquet_arrow.py data/output/auto-dataset-summarization-YYYYMMDD-HHMMSS.jsonl parquet
 ```
 
 ---
 
 ## 🛠️ Features
 
-- **Unified Task Schema:** Rust & Python fetch from the same API
-- **Batch & Flexible Output:** Generate multiple tasks, choose output format
-- **Progress Bar & Banner:** Beautiful CLI experience
-- **Robust Export:** Handles empty struct fields, nested metadata
-- **Metadata:** All data entries include `{ "source": "zombit" }`
-- **Extensible:** Add new tasks easily in `task_definitions.py`/API
+- **Unified Task Schema:** Rust & Python fetch จาก API เดียวกัน
+- **Batch & Flexible Output:** สร้างหลาย task, เลือก format ได้
+- **Progress Bar & Banner:** CLI สวยงาม
+- **Robust Export:** รองรับ field ซ้อน, metadata, empty struct
+- **Metadata:** ทุก entry มี `{ "source": "zombit" }`
+- **Extensible:** เพิ่ม task ใหม่ได้ง่ายใน `tasks.json`/API
 
 ---
 
@@ -89,11 +91,17 @@ DekDataset/
 
 ---
 
-## 👤 Credits
+## 👤 Credits Developer
 
-- Developer: zombit | JonusNattapong
-- GitHub: [zombitx64](https://github.com/zombitx64)
-- Contact: [zombitx64@gmail.com](mailto:zombitx64@gmail.com)
+<div align="center">
+  <table>
+    <tr>
+      <td align="center"><a href="https://github.com/JonusNattapong"><img src="https://github.com/JonusNattapong.png" width="100px;" alt="JonusNattapong"/><br /><sub><b>JonusNattapong</b></sub></a></td>
+      <td align="center"><a href="https://github.com/zombitx64"><img src="https://github.com/zombitx64.png" width="100px;" alt="zombitx64"/><br /><sub><b>zombitx64</b></sub></a></td>
+    </tr>
+  </table>
+</div>
+
 
 ## 📝 License
 
@@ -101,9 +109,13 @@ MIT
 
 ---
 
-## 💡 Tips
+## 💡 Tips (ภาษาไทย)
 
-- Set `DEEPSEEK_API_KEY` before use
-- API server must be running for Rust/Python to fetch tasks
-- All output includes metadata for provenance
-- See `docs/task.md` for task schema details
+- ตั้งค่า `DEEPSEEK_API_KEY` ก่อนใช้งาน
+- ต้องรัน API server ก่อน Rust/Python จะ fetch task ได้
+- ทุก output มี metadata สำหรับตรวจสอบแหล่งที่มา
+- ดูตัวอย่าง schema เพิ่มเติมใน `docs/` หรือ README
+
+---
+
+> สร้าง AI ภาษาไทยได้ง่าย ๆ ด้วย DekDataset! 🇹🇭✨
