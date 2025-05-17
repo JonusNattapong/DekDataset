@@ -43,25 +43,36 @@ async fn main() -> anyhow::Result<()> {
     let arrow_enabled = args.iter().any(|s| s == "--arrow" || s == "--both");
     let parquet_enabled = !arrow_enabled || args.iter().any(|s| s == "--parquet" || s == "--both");
 
+    let batch_size: usize = args.iter().position(|s| s == "--batch-size").and_then(|i| args.get(i+1)).and_then(|s| s.parse().ok()).unwrap_or(500);
+
     for task_name in task_names {
         let task_value = tasks_json.get(task_name)
             .unwrap_or_else(|| panic!("Task '{}' not found. Available: {:?}", task_name, tasks_json.keys()));
         let task: TaskDefinition = serde_json::from_value(task_value.clone())
             .expect("Failed to parse task definition from API JSON");
-        println!("Requesting Deepseek API to generate dataset for task: {} ({} samples)", task.name, count);
-
-        // --- Progress bar ---
-        for percent in (0..=100).step_by(10) {
-            banner::print_loading_bar(percent);
-            std::thread::sleep(std::time::Duration::from_millis(60));
+        let total = count;
+        let num_batches = (total + batch_size - 1) / batch_size;
+        let mut all_entries = Vec::new();
+        for batch_idx in 0..num_batches {
+            let current_batch = if batch_idx == num_batches - 1 {
+                total - batch_idx * batch_size
+            } else {
+                batch_size
+            };
+            println!("Batch {}/{} : Generating {} samples...", batch_idx+1, num_batches, current_batch);
+            // --- Progress bar ---
+            for percent in (0..=100).step_by(10) {
+                banner::print_loading_bar(percent);
+                std::thread::sleep(std::time::Duration::from_millis(40));
+            }
+            println!();
+            let entries = client.generate_dataset_with_prompt(&task, current_batch).await?;
+            all_entries.extend(entries);
         }
-        println!();
-
-        let entries = client.generate_dataset_with_prompt(&task, count).await?;
         let data = GeneratedData {
             task_name: task.name.clone(),
             format: task.format.clone(),
-            data: entries.iter().enumerate().map(|(i, v)| models::DataEntry {
+            data: all_entries.iter().enumerate().map(|(i, v)| models::DataEntry {
                 id: format!("{}-{}", task_name, i+1),
                 content: v.clone(),
                 metadata: Some([
@@ -84,7 +95,7 @@ async fn main() -> anyhow::Result<()> {
         let formatted = generator.format_output(&data)?;
         let mut file = File::create(&output_path)?;
         file.write_all(formatted.as_bytes())?;
-        println!("Dataset saved to {:?}", output_path);
+        println!("Dataset saved to {:?} (total {} samples)", output_path, data.data.len());
         // Automate Parquet conversion (always)
         if parquet_enabled {
             let status = Command::new("python")
