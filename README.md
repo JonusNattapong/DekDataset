@@ -19,7 +19,7 @@ DekDataset คือเครื่องมือโอเพ่นซอร์
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick Start (Windows/Bash)
 
 ### 1. Clone & Install
 
@@ -35,9 +35,10 @@ pip install -r requirements.txt
 ### 2. Set up DeepSeek API
 
 - สร้างไฟล์ `.env` แล้วใส่
-  ```env
-  DEEPSEEK_API_KEY=your_api_key
-  ```
+
+```env
+DEEPSEEK_API_KEY=your_api_key
+```
 
 ### 3. Run Task Definitions API (Python)
 
@@ -48,8 +49,11 @@ python src/python/task_definitions_api.py
 ### 4. Generate Dataset (Rust)
 
 ```bash
-cargo run -- summarization,ner 10
+cargo run -- summarization,ner 10 --parquet
 ```
+
+- รองรับหลาย task พร้อมกัน (คั่นด้วย ,)
+- สามารถเลือก output format: `--parquet`, `--arrow`, `--both` หรือไม่ใส่ (default: jsonl)
 
 ### 5. Generate Dataset (Python)
 
@@ -57,11 +61,17 @@ cargo run -- summarization,ner 10
 python src/python/generate_dataset.py summarization 10 --format jsonl
 ```
 
+- รองรับ format: `json`, `jsonl`
+- สามารถใช้ task อื่น ๆ ได้ เช่น `sentiment_analysis`, `translation`, `ner`, `text_classification`, `question_answer`
+
 ### 6. Export to Parquet/Arrow (optional)
 
 ```bash
 python data/output/export_parquet_arrow.py data/output/auto-dataset-summarization-YYYYMMDD-HHMMSS.jsonl parquet
+python data/output/export_parquet_arrow.py data/output/auto-dataset-summarization-YYYYMMDD-HHMMSS.jsonl arrow
 ```
+
+- สามารถแปลงไฟล์ json/jsonl/csv เป็น parquet หรือ arrow ได้ทันที
 
 ---
 
@@ -71,7 +81,7 @@ python data/output/export_parquet_arrow.py data/output/auto-dataset-summarizatio
 - **Batch & Flexible Output:** สร้างหลาย task, เลือก format ได้
 - **Progress Bar & Banner:** CLI สวยงาม
 - **Robust Export:** รองรับ field ซ้อน, metadata, empty struct
-- **Metadata:** ทุก entry มี `{ "source": "DEEPSEEK-V3" }`
+- **Metadata:** ทุก entry มี `{ "source": "zombit" }`
 - **Extensible:** เพิ่ม task ใหม่ได้ง่ายใน `tasks.json`/API
 
 ---
@@ -91,17 +101,11 @@ DekDataset/
 
 ---
 
-## 👤 Credits Developer
+## 👤 Credits
 
-<div align="center">
-  <table>
-    <tr>
-      <td align="center"><a href="https://github.com/JonusNattapong"><img src="https://github.com/JonusNattapong.png" width="100px;" alt="JonusNattapong"/><br /><sub><b>JonusNattapong</b></sub></a></td>
-      <td align="center"><a href="https://github.com/zombitx64"><img src="https://github.com/zombitx64.png" width="100px;" alt="zombitx64"/><br /><sub><b>zombitx64</b></sub></a></td>
-    </tr>
-  </table>
-</div>
-
+- Developer: zombit | JonusNattapong
+- GitHub: [zombitx64](https://github.com/zombitx64)
+- Contact: [zombitx64@gmail.com](mailto:zombitx64@gmail.com)
 
 ## 📝 License
 
@@ -115,6 +119,7 @@ MIT
 - ต้องรัน API server ก่อน Rust/Python จะ fetch task ได้
 - ทุก output มี metadata สำหรับตรวจสอบแหล่งที่มา
 - ดูตัวอย่าง schema เพิ่มเติมใน `docs/` หรือ README
+- ใช้ Bash หรือ Command Prompt ได้ (แต่ path ต้องถูกต้อง)
 
 ---
 
