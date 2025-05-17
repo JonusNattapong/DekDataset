@@ -153,13 +153,69 @@ def main():
         print(f"[ERROR] No data generated. Deepseek output was empty or invalid. File will not be saved.")
         return
 
+    def validate_entry(entry: dict, schema: dict) -> bool:
+        fields = schema.get("fields", {})
+        for field, field_def in fields.items():
+            # Required check
+            if field_def.get("required", False) and field not in entry:
+                return False
+            if field not in entry:
+                continue
+            value = entry[field]
+            ftype = field_def.get("field_type")
+            # Type check (basic)
+            if ftype == "Text" and not isinstance(value, str):
+                return False
+            if ftype == "Number" and not isinstance(value, (int, float)):
+                return False
+            if ftype == "Boolean" and not isinstance(value, bool):
+                return False
+            if isinstance(ftype, dict) and "Enum" in ftype:
+                if value not in ftype["Enum"]:
+                    return False
+            # Constraint check (length, range)
+            for cons in field_def.get("constraints", []):
+                if "Length" in cons and isinstance(value, str):
+                    minl = cons["Length"].get("min")
+                    maxl = cons["Length"].get("max")
+                    if minl is not None and len(value) < minl:
+                        return False
+                    if maxl is not None and len(value) > maxl:
+                        return False
+                if "Range" in cons and isinstance(value, (int, float)):
+                    minv = cons["Range"].get("min")
+                    maxv = cons["Range"].get("max")
+                    if minv is not None and value < minv:
+                        return False
+                    if maxv is not None and value > maxv:
+                        return False
+        return True
+
+    # Filter: schema validation
+    valid_entries = [e for e in all_entries if validate_entry(e, task["schema"])]
+    if len(valid_entries) < len(all_entries):
+        print(f"[INFO] Filtered out {len(all_entries)-len(valid_entries)} invalid entries (schema mismatch)")
+    # Post-processing: deduplicate
+    deduped_entries = deduplicate_entries(valid_entries)
+    if len(deduped_entries) < len(valid_entries):
+        print(f"[INFO] Removed {len(valid_entries)-len(deduped_entries)} duplicate entries")
+    # Post-processing: enrich (placeholder, no-op)
+    enriched_entries = enrich_entries(deduped_entries)
+    # Diversity/Balance (example: sentiment label)
+    if args.task == "sentiment_analysis":
+        labels = ["positive", "negative", "neutral"]
+        n_per_label = min(len(enriched_entries)//len(labels), 100)
+        balanced_entries = balance_label_entries(enriched_entries, "sentiment", labels, n_per_label)
+        print(f"[INFO] Balanced sentiment labels: {len(balanced_entries)} entries ({n_per_label} per label)")
+    else:
+        balanced_entries = enriched_entries
     data_entries = [
         DataEntry(
             id=f"{args.task}-{i+1}",
             content=entry,
             metadata={"source": "DeepSeek-V3"}
         ).to_dict()
-        for i, entry in enumerate(all_entries)
+        for i, entry in enumerate(balanced_entries)
     ]
 
     # Export
@@ -176,6 +232,60 @@ def main():
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(data_entries, f, ensure_ascii=False, indent=2)
     print(f"Dataset saved to {output_path}")
+
+def deduplicate_entries(entries: list, key_fields=None) -> list:
+    """Remove duplicate entries by key fields (default: all fields)."""
+    seen = set()
+    result = []
+    for e in entries:
+        if key_fields:
+            key = tuple(e.get(k) for k in key_fields)
+        else:
+            key = json.dumps(e, sort_keys=True, ensure_ascii=False)
+        if key not in seen:
+            seen.add(key)
+            result.append(e)
+    return result
+
+def enrich_entries(entries: list, enrich_func=None) -> list:
+    """Enrich entries with word_count, created_at, lang (robust, ไม่ซ้อน field)."""
+    enriched = []
+    for e in entries:
+        entry = dict(e)
+        # enrich content
+        if "content" in entry and isinstance(entry["content"], dict):
+            content = dict(entry["content"])
+            text = content.get("text")
+            # Only add word_count if not present and text is str
+            if "word_count" not in content and isinstance(text, str):
+                content["word_count"] = len(text.split())
+            entry["content"] = content
+        # enrich metadata
+        if "metadata" in entry and isinstance(entry["metadata"], dict):
+            metadata = dict(entry["metadata"])
+        else:
+            metadata = {}
+        # Only add created_at/lang if not present
+        if "created_at" not in metadata:
+            metadata["created_at"] = datetime.now().isoformat()
+        if "lang" not in metadata:
+            metadata["lang"] = "th"
+        entry["metadata"] = metadata
+        enriched.append(entry)
+    return enriched
+
+def balance_label_entries(entries: list, label_field: str, labels: list, n_per_label: int) -> list:
+    """Balance dataset so each label has up to n_per_label entries."""
+    from collections import defaultdict
+    buckets = defaultdict(list)
+    for e in entries:
+        label = e.get(label_field)
+        if label in labels:
+            buckets[label].append(e)
+    balanced = []
+    for label in labels:
+        balanced.extend(buckets[label][:n_per_label])
+    return balanced
 
 if __name__ == "__main__":
     main()
