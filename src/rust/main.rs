@@ -1,7 +1,6 @@
 mod banner;
 mod models;
 mod generator;
-mod task_definitions;
 mod api_client;
 
 use dotenv::dotenv;
@@ -11,11 +10,12 @@ use std::fs;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
-use crate::task_definitions::get_task_definitions;
 use api_client::DeepseekClient;
 use crate::models::GeneratedData;
 use std::process::Command;
 use tokio;
+use serde_json::Value;
+use crate::models::TaskDefinition;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -29,7 +29,11 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or_else(|| vec!["sentiment_analysis"]);
     let count: usize = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(10);
 
-    let tasks = get_task_definitions();
+    // Instead, fetch from API only
+    let api_url = "http://localhost:8000/tasks";
+    let resp = reqwest::get(api_url).await?;
+    let text = resp.text().await?;
+    let tasks_json: std::collections::HashMap<String, Value> = serde_json::from_str(&text)?;
     let api_key = std::env::var("DEEPSEEK_API_KEY").expect("DEEPSEEK_API_KEY must be set in environment");
     let client = DeepseekClient::new(api_key);
     let output_dir = Path::new("data/output");
@@ -40,8 +44,10 @@ async fn main() -> anyhow::Result<()> {
     let parquet_enabled = !arrow_enabled || args.iter().any(|s| s == "--parquet" || s == "--both");
 
     for task_name in task_names {
-        let task = tasks.get(task_name)
-            .unwrap_or_else(|| panic!("Task '{}' not found. Available: {:?}", task_name, tasks.keys()));
+        let task_value = tasks_json.get(task_name)
+            .unwrap_or_else(|| panic!("Task '{}' not found. Available: {:?}", task_name, tasks_json.keys()));
+        let task: TaskDefinition = serde_json::from_value(task_value.clone())
+            .expect("Failed to parse task definition from API JSON");
         println!("Requesting Deepseek API to generate dataset for task: {} ({} samples)", task.name, count);
 
         // --- Progress bar ---
@@ -51,7 +57,7 @@ async fn main() -> anyhow::Result<()> {
         }
         println!();
 
-        let entries = client.generate_dataset_with_prompt(task, count).await?;
+        let entries = client.generate_dataset_with_prompt(&task, count).await?;
         let data = GeneratedData {
             task_name: task.name.clone(),
             format: task.format.clone(),

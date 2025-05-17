@@ -1,0 +1,189 @@
+{
+  "sentiment_analysis": {    "name": "Sentiment Analysis Dataset",
+    "description": "Generate text samples with sentiment labels for training sentiment analysis models",
+    "format": "Jsonl",
+    "schema": {
+      "fields": {
+        "text": {
+          "field_type": "Text",
+          "required": true,
+          "description": "The input text to analyze",
+          "constraints": [{"Length": {"min": 10, "max": 500}}]
+        },
+        "sentiment": {
+          "field_type": {"Enum": ["positive", "negative", "neutral"]},
+          "required": true,
+          "description": "The sentiment label"
+        },
+        "confidence": {
+          "field_type": "Number",
+          "required": true,
+          "description": "Confidence score for the sentiment",
+          "constraints": [{"Range": {"min": 0.0, "max": 1.0}}]
+        }
+      },
+      "relationships": []
+    },
+    "examples": [],
+    "parameters": {
+      "domain": {
+        "name": "domain",
+        "param_type": "enum",
+        "enum_values": ["product_reviews", "movie_reviews", "social_media"],
+        "description": "Domain of the text",
+        "default": "product_reviews",
+        "required": false
+      }
+    }
+  },
+  "text_classification": {
+    "name": "Text Classification Dataset",
+    "description": "Generate text samples with topic/category labels for training classification models",
+    "format": "json",
+    "schema": {
+      "fields": {
+        "text": {
+          "field_type": "Text",
+          "required": true,
+          "description": "The input text to classify",
+          "constraints": [{"Length": {"min": 20, "max": 1000}}]
+        },
+        "category": {
+          "field_type": {"Array": {"Text": {}}},
+          "required": true,
+          "description": "The category labels",
+          "constraints": [{"Length": {"min": 1, "max": 5}}]
+        },
+        "metadata": {
+          "field_type": {"Object": {}},
+          "required": false,
+          "description": "Additional metadata"
+        }
+      },
+      "relationships": []
+    },
+    "examples": [],
+    "parameters": {}
+  },
+  "question_answer": {
+    "name": "Question-Answer Dataset",
+    "description": "Generate question-answer pairs for training QA models",
+    "format": "json",
+    "schema": {
+      "fields": {
+        "context": {
+          "field_type": "Text",
+          "required": true,
+          "description": "The context paragraph",
+          "constraints": [{"Length": {"min": 50, "max": 2000}}]
+        },
+        "questions": {
+          "field_type": {"Array": {"Object": {
+            "question": {"field_type": "Text"},
+            "answer": {"field_type": "Text"}
+          }}},
+          "required": true,
+          "description": "List of question-answer pairs",
+          "constraints": [{"Length": {"min": 1, "max": 5}}]
+        }
+      },
+      "relationships": []
+    },
+    "examples": [],
+    "parameters": {
+      "topic": {
+        "name": "topic",
+        "param_type": "text",
+        "description": "Topic area for the QA pairs",
+        "required": true
+      }
+    }
+  },
+  "ner": {    "name": "Named Entity Recognition Dataset",
+    "description": "Generate text samples with entity spans and labels for NER training",
+    "format": "Jsonl",
+    "schema": {
+      "fields": {
+        "text": {
+          "field_type": "Text",
+          "required": true,
+          "description": "The input text",
+          "constraints": [{"Length": {"min": 10, "max": 500}}]
+        },
+        "entities": {
+          "field_type": {"Array": {"Object": {
+            "start": {"field_type": "Number"},
+            "end": {"field_type": "Number"},
+            "label": {"field_type": "Text"}
+          }}},
+          "required": true,
+          "description": "List of entities"
+        }
+      },
+      "relationships": []
+    },
+    "examples": [],
+    "parameters": {}
+  },
+  "summarization": {    "name": "Summarization Dataset",
+    "description": "Generate document-summary pairs for summarization training",
+    "format": "Jsonl",
+    "schema": {
+      "fields": {
+        "document": {
+          "field_type": "Text",
+          "required": true,
+          "description": "The input document",
+          "constraints": [{"Length": {"min": 100, "max": 5000}}]
+        },
+        "summary": {
+          "field_type": "Text",
+          "required": true,
+          "description": "The summary",
+          "constraints": [{"Length": {"min": 10, "max": 500}}]
+        }
+      },
+      "relationships": []
+    },
+    "examples": [],
+    "parameters": {}
+  },
+  "translation": {    "name": "Translation Dataset",
+    "description": "Generate sentence pairs for machine translation",
+    "format": "Jsonl",
+    "schema": {
+      "fields": {
+        "source": {
+          "field_type": "Text",
+          "required": true,
+          "description": "Source sentence",
+          "constraints": [{"Length": {"min": 5, "max": 500}}]
+        },
+        "target": {
+          "field_type": "Text",
+          "required": true,
+          "description": "Target sentence",
+          "constraints": [{"Length": {"min": 5, "max": 500}}]
+        }
+      },
+      "relationships": []
+    },
+    "examples": [],
+    "parameters": {
+      "source_lang": {
+        "name": "source_lang",
+        "param_type": "text",
+        "description": "Source language",
+        "default": "en",
+        "required": true
+      },
+      "target_lang": {
+        "name": "target_lang",
+        "param_type": "text",
+        "description": "Target language",
+        "default": "th",
+        "required": true
+      }
+    }
+  }
+}
