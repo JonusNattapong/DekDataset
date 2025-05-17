@@ -1,4 +1,4 @@
-# DekDataset 🇹🇭
+# DekDataset
 
 ![Rust](https://img.shields.io/badge/Rust-%23dea584?style=flat-square&logo=rust&logoColor=black)
 ![Python](https://img.shields.io/badge/Python-%233776AB?style=flat-square&logo=python&logoColor=white)
