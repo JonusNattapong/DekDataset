@@ -16,6 +16,7 @@ use std::process::Command;
 use tokio;
 use serde_json::Value;
 use crate::models::TaskDefinition;
+use num_cpus;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -44,6 +45,8 @@ async fn main() -> anyhow::Result<()> {
     let parquet_enabled = !arrow_enabled || args.iter().any(|s| s == "--parquet" || s == "--both");
 
     let batch_size: usize = args.iter().position(|s| s == "--batch-size").and_then(|i| args.get(i+1)).and_then(|s| s.parse().ok()).unwrap_or(500);
+    let default_parallel = std::cmp::min(8, num_cpus::get());
+    let parallel: usize = args.iter().position(|s| s == "--parallel").and_then(|i| args.get(i+1)).and_then(|s| s.parse().ok()).unwrap_or(default_parallel);
 
     for task_name in task_names {
         let task_value = tasks_json.get(task_name)
@@ -53,20 +56,27 @@ async fn main() -> anyhow::Result<()> {
         let total = count;
         let num_batches = (total + batch_size - 1) / batch_size;
         let mut all_entries = Vec::new();
+        use futures::stream::{FuturesUnordered, StreamExt};
+        let mut batches = FuturesUnordered::new();
         for batch_idx in 0..num_batches {
             let current_batch = if batch_idx == num_batches - 1 {
                 total - batch_idx * batch_size
             } else {
                 batch_size
             };
-            println!("Batch {}/{} : Generating {} samples...", batch_idx+1, num_batches, current_batch);
-            // --- Progress bar ---
-            for percent in (0..=100).step_by(10) {
-                banner::print_loading_bar(percent);
-                std::thread::sleep(std::time::Duration::from_millis(40));
+            batches.push(async {
+                println!("Batch {} : Generating {} samples...", batch_idx+1, current_batch);
+                client.generate_dataset_with_prompt(&task, current_batch).await
+            });
+            if batches.len() >= parallel {
+                if let Some(res) = batches.next().await {
+                    let entries = res?;
+                    all_entries.extend(entries);
+                }
             }
-            println!();
-            let entries = client.generate_dataset_with_prompt(&task, current_batch).await?;
+        }
+        while let Some(res) = batches.next().await {
+            let entries = res?;
             all_entries.extend(entries);
         }
         let data = GeneratedData {
