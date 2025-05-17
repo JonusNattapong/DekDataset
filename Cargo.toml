@@ -16,3 +16,7 @@ uuid = { version = "1.8", features = ["v4"] }
 rand = "0.8"
 sha2 = "0.10"
 csv = "1.3"
+
+[[bin]]
+name = "dataset-generator"
+path = "src/rust/main.rs"

@@ -1,9 +1,9 @@
+mod banner;
 mod models;
 mod generator;
 mod task_definitions;
 mod api_client;
 
-use anyhow::Result;
 use dotenv::dotenv;
 use models::{DataFormat};
 use std::env;
@@ -15,9 +15,11 @@ use crate::task_definitions::get_task_definitions;
 use api_client::DeepseekClient;
 use crate::models::GeneratedData;
 use std::process::Command;
+use tokio;
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> anyhow::Result<()> {
+    banner::print_ascii_banner();
     dotenv().ok();
 
     // รับ args: task1[,task2,...] count [--parquet|--arrow|--both]
@@ -26,7 +28,6 @@ async fn main() -> Result<()> {
         .map(|s| s.split(',').collect())
         .unwrap_or_else(|| vec!["sentiment_analysis"]);
     let count: usize = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(10);
-    let export_type = args.iter().find(|s| s.starts_with("--")).map(|s| s.trim_start_matches("--"));
 
     let tasks = get_task_definitions();
     let api_key = std::env::var("DEEPSEEK_API_KEY").expect("DEEPSEEK_API_KEY must be set in environment");
@@ -42,6 +43,14 @@ async fn main() -> Result<()> {
         let task = tasks.get(task_name)
             .unwrap_or_else(|| panic!("Task '{}' not found. Available: {:?}", task_name, tasks.keys()));
         println!("Requesting Deepseek API to generate dataset for task: {} ({} samples)", task.name, count);
+
+        // --- Progress bar ---
+        for percent in (0..=100).step_by(10) {
+            banner::print_loading_bar(percent);
+            std::thread::sleep(std::time::Duration::from_millis(60));
+        }
+        println!();
+
         let entries = client.generate_dataset_with_prompt(task, count).await?;
         let data = GeneratedData {
             task_name: task.name.clone(),
@@ -97,5 +106,6 @@ async fn main() -> Result<()> {
             }
         }
     }
+
     Ok(())
 }

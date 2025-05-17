@@ -1,79 +1,96 @@
-# Sleep Dataset Generator (Rust)
+# DekDataset: Thai AI/ML Dataset Generator (Rust + Python)
 
-โปรแกรมสร้างชุดข้อมูลการนอนหลับโดยใช้ DEEPSEEK API สำหรับสร้างข้อมูลที่สมจริง
+## Overview
 
-## ข้อมูลที่สร้าง
+DekDataset is a robust, modern toolkit for generating diverse, high-quality datasets for AI/ML tasks (NLP, classification, QA, NER, etc.) in Thai (with support for technical/English terms). It supports both Rust and Python, and can fetch task definitions from a shared API for maximum flexibility and maintainability.
 
-1. Sleep Patterns Dataset (8 รูปแบบ)
-   - รูปแบบการนอนปกติ, นอนไม่หลับ, ภาวะหยุดหายใจขณะหลับ, ฯลฯ
-   - ข้อมูลระยะเวลา คุณภาพ และสัดส่วนของการนอนแต่ละช่วง
+- **Supports:** Sentiment Analysis, Text Classification, QA, NER, Summarization, Translation, and more
+- **API:** FastAPI server for task definitions (Python)
+- **Batch Generation:** Generate multiple tasks in one run
+- **Export:** JSONL, JSON, Parquet, Arrow, CSV
+- **Metadata:** Every entry includes `{"source": "zombit"}`
+- **Beautiful CLI Banner & Progress Bar**
+- **Thai-centric, realistic, no placeholder/test**
 
-2. Sleep Stages Dataset (5 ตัวอย่าง)
-   - ข้อมูลการเปลี่ยนแปลงระหว่างช่วงการนอน
-   - แสดงลำดับของแต่ละช่วง (awake, light, deep, REM)
+## Quick Start
 
-3. Sleep Quality Dataset (10 ตัวอย่าง)
-   - ข้อมูลคุณภาพการนอนและปัจจัยที่เกี่ยวข้อง
-   - สภาพแวดล้อม พฤติกรรม และผลลัพธ์การนอน
+### 1. Clone & Install
 
-## การติดตั้ง
-
-1. ติดตั้ง Rust และ Cargo:
-   ```bash
-   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-   ```
-
-2. Clone repository:
-   ```bash
-   git clone <repository-url>
-   cd dataset-generator-rs
-   ```
-
-3. ตั้งค่า DEEPSEEK API:
-   - คัดลอกไฟล์ `.env.example` เป็น `.env`
-   - กำหนด DEEPSEEK API key ในไฟล์ `.env`:
-     ```
-     DEEPSEEK_API_KEY=your_api_key_here
-     ```
-
-## การใช้งาน
-
-1. Build โปรแกรม:
-   ```bash
-   cargo build --release
-   ```
-
-2. รันโปรแกรมเพื่อสร้างชุดข้อมูล:
-   ```bash
-   cargo run
-   ```
-
-ชุดข้อมูลที่สร้างขึ้นจะถูกบันทึกในโฟลเดอร์ `data/output/`:
-- sleep-patterns-dataset.json
-- sleep-stages-dataset.json
-- sleep-quality-dataset.json
-
-## โครงสร้างโปรเจค
-
-```
-src/
-├── main.rs          # Entry point และการจัดการไฟล์
-├── models.rs        # Data structures สำหรับชุดข้อมูล
-└── api_client.rs    # DEEPSEEK API client
+```bash
+# Clone repo
+cd DekDataset
+# Rust dependencies
+cargo build --release
+# Python dependencies
+pip install -r requirements.txt
 ```
 
-## Environment Variables
+### 2. Set up DeepSeek API
 
-- `DEEPSEEK_API_KEY`: API key สำหรับเชื่อมต่อกับ DEEPSEEK API (จำเป็นต้องกำหนด)
+- Copy `.env.example` to `.env` and set your `DEEPSEEK_API_KEY`
 
-## การพัฒนาเพิ่มเติม
+### 3. Run Task Definitions API (Python)
 
-1. Fork repository
-2. สร้าง feature branch
-3. Commit changes
-4. Push to branch
-5. สร้าง Pull Request
+```bash
+cd src/python
+python -m uvicorn task_definitions_api:app --reload --host 0.0.0.0 --port 8000
+```
+
+### 4. Generate Dataset (Rust)
+
+```bash
+cargo run -- sentiment_analysis,text_classification 10
+```
+
+### 5. Generate Dataset (Python)
+
+```bash
+python src/python/generate_dataset.py sentiment_analysis 10 --format jsonl
+```
+
+### 6. Export to Parquet/Arrow (auto or manual)
+
+```bash
+python data/output/export_parquet_arrow.py data/output/auto-dataset-sentiment_analysis-YYYYMMDD-HHMMSS.jsonl parquet
+```
+
+## Features
+
+- **Unified Task Schema:** Rust & Python fetch from the same API
+- **Batch & Flexible Output:** Generate multiple tasks, choose output format
+- **Progress Bar & Banner:** Beautiful CLI experience
+- **Robust Export:** Handles empty struct fields, nested metadata
+- **Metadata:** All data entries include `{"source": "zombit"}`
+- **Extensible:** Add new tasks easily in `task_definitions.py`/API
+
+## Project Structure
+
+```text
+DekDataset/
+├── src/
+│   ├── main.rs, models.rs, api_client.rs, generator.rs, banner.rs
+│   └── python/
+│       ├── generate_dataset.py, banner.py, task_definitions.py, task_definitions_api.py
+├── data/output/           # All generated datasets & exports
+├── docs/                  # Documentation, task.md
+├── README.md
+```
+
+## Credits
+
+- Developer: zombit | JonusNattapong
+- GitHub: [https://github.com/zombitx64](https://github.com/zombitx64)
+- Contact: [zombitx64@gmail.com](mailto:zombitx64@gmail.com)
 
 ## License
 
 MIT
+
+---
+
+**Tips:**
+
+- Set `DEEPSEEK_API_KEY` before use
+- API server must be running for Rust/Python to fetch tasks
+- All output includes metadata for provenance
+- See `docs/task.md` for task schema details
