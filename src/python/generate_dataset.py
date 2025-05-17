@@ -10,9 +10,6 @@ from banner import print_ascii_banner
 from colorama import Fore, Style
 import time
 import sys
-import asyncio
-import aiohttp
-from tqdm import tqdm
 
 # ----------------- Environment Setup -----------------
 load_dotenv()
@@ -83,22 +80,6 @@ class DeepseekClient:
             print("Error parsing Deepseek output:", e)
         return []
 
-async def fetch_batch(client, task, batch_size):
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, client.generate_dataset_with_prompt, task, batch_size)
-
-async def parallel_batches(client, task, batch_sizes, max_parallel=5):
-    results = []
-    sem = asyncio.Semaphore(max_parallel)
-    async def sem_fetch(batch_size):
-        async with sem:
-            return await fetch_batch(client, task, batch_size)
-    tasks = [sem_fetch(bs) for bs in batch_sizes]
-    for f in tqdm(asyncio.as_completed(tasks), total=len(tasks), desc="Parallel Batches"):
-        res = await f
-        results.extend(res)
-    return results
-
 # ----------------- Main Logic -----------------
 def main():
     print_ascii_banner()
@@ -106,8 +87,6 @@ def main():
     parser.add_argument("task", help="Task name (e.g. sentiment_analysis)")
     parser.add_argument("count", type=int, help="Number of samples")
     parser.add_argument("--format", choices=["json", "jsonl"], default="jsonl")
-    parser.add_argument("--batch-size", type=int, default=500, help="Batch size per API call (default: 500)")
-    parser.add_argument("--parallel", type=int, default=None, help="Number of parallel requests (default: auto)")
     args = parser.parse_args()
 
     api_key = os.getenv("DEEPSEEK_API_KEY")
@@ -130,21 +109,15 @@ def main():
         sys.stdout.flush()
         time.sleep(0.03)
     print()  # Newline after bar
+    entries = client.generate_dataset_with_prompt(task, args.count)
 
-    total = args.count
-    batch_size = args.batch_size
-    num_batches = (total + batch_size - 1) // batch_size
-    batch_sizes = [batch_size] * (num_batches - 1) + [total - batch_size * (num_batches - 1)]
-    parallel = args.parallel if args.parallel is not None else min(8, os.cpu_count() or 4)
-    loop = asyncio.get_event_loop()
-    all_entries = loop.run_until_complete(parallel_batches(client, task, batch_sizes, max_parallel=parallel))
     data_entries = [
         DataEntry(
             id=f"{args.task}-{i+1}",
             content=entry,
             metadata={"source": "DeepSeek-V3"}
         ).to_dict()
-        for i, entry in enumerate(all_entries)
+        for i, entry in enumerate(entries)
     ]
 
     # Export
@@ -160,7 +133,7 @@ def main():
     else:
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(data_entries, f, ensure_ascii=False, indent=2)
-    print(f"Dataset saved to {output_path} (total {len(data_entries)} samples)")
+    print(f"Dataset saved to {output_path}")
 
 if __name__ == "__main__":
     main()
