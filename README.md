@@ -1,18 +1,25 @@
 # DekDataset: Thai AI/ML Dataset Generator (Rust + Python)
 
-## Overview
+![Rust](https://img.shields.io/badge/Rust-%23dea584?style=flat-square&logo=rust&logoColor=black)
+![Python](https://img.shields.io/badge/Python-%233776AB?style=flat-square&logo=python&logoColor=white)
+![DeepSeek API](https://img.shields.io/badge/DeepSeek-API-blueviolet?style=flat-square)
+![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 
-DekDataset is a robust, modern toolkit for generating diverse, high-quality datasets for AI/ML tasks (NLP, classification, QA, NER, etc.) in Thai (with support for technical/English terms). It supports both Rust and Python, and can fetch task definitions from a shared API for maximum flexibility and maintainability.
+---
 
-- **Supports:** Sentiment Analysis, Text Classification, QA, NER, Summarization, Translation, and more
-- **API:** FastAPI server for task definitions (Python)
-- **Batch Generation:** Generate multiple tasks in one run
-- **Export:** JSONL, JSON, Parquet, Arrow, CSV
-- **Metadata:** Every entry includes `{"source": "zombit"}`
-- **Beautiful CLI Banner & Progress Bar**
-- **Thai-centric, realistic, no placeholder/test**
+## ✨ Overview
 
-## Quick Start
+DekDataset is a modern, robust toolkit for generating diverse, high-quality datasets for Thai AI/ML tasks (NLP, classification, QA, NER, etc.).
+
+- **Languages:** Rust & Python
+- **API:** Unified FastAPI task schema
+- **Export:** JSONL, Parquet, Arrow, CSV
+- **Metadata:** All outputs include `{ "source": "zombit" }`
+- **Beautiful CLI:** Banner, progress bar, and color
+
+---
+
+## 🚀 Quick Start
 
 ### 1. Clone & Install
 
@@ -48,22 +55,26 @@ cargo run -- sentiment_analysis,text_classification 10
 python src/python/generate_dataset.py sentiment_analysis 10 --format jsonl
 ```
 
-### 6. Export to Parquet/Arrow (auto or manual)
+### 6. Export to Parquet/Arrow
 
 ```bash
 python data/output/export_parquet_arrow.py data/output/auto-dataset-sentiment_analysis-YYYYMMDD-HHMMSS.jsonl parquet
 ```
 
-## Features
+---
+
+## 🛠️ Features
 
 - **Unified Task Schema:** Rust & Python fetch from the same API
 - **Batch & Flexible Output:** Generate multiple tasks, choose output format
 - **Progress Bar & Banner:** Beautiful CLI experience
 - **Robust Export:** Handles empty struct fields, nested metadata
-- **Metadata:** All data entries include `{"source": "zombit"}`
+- **Metadata:** All data entries include `{ "source": "zombit" }`
 - **Extensible:** Add new tasks easily in `task_definitions.py`/API
 
-## Project Structure
+---
+
+## 📁 Project Structure
 
 ```text
 DekDataset/
@@ -76,19 +87,21 @@ DekDataset/
 ├── README.md
 ```
 
-## Credits
+---
+
+## 👤 Credits
 
 - Developer: zombit | JonusNattapong
-- GitHub: [https://github.com/zombitx64](https://github.com/zombitx64)
+- GitHub: [zombitx64](https://github.com/zombitx64)
 - Contact: [zombitx64@gmail.com](mailto:zombitx64@gmail.com)
 
-## License
+## 📝 License
 
 MIT
 
 ---
 
-**Tips:**
+## 💡 Tips
 
 - Set `DEEPSEEK_API_KEY` before use
 - API server must be running for Rust/Python to fetch tasks
