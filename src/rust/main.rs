@@ -50,18 +50,49 @@ async fn main() -> anyhow::Result<()> {
             .expect("Failed to parse task definition from API JSON");
         println!("Requesting Deepseek API to generate dataset for task: {} ({} samples)", task.name, count);
 
-        // --- Progress bar ---
-        for percent in (0..=100).step_by(10) {
-            banner::print_loading_bar(percent);
-            std::thread::sleep(std::time::Duration::from_millis(60));
+        // --- Auto Batch Generation ---
+        let batch_size = if count <= 10 {
+            count
+        } else if count <= 100 {
+            10
+        } else {
+            5
+        };
+        let num_batches = (count + batch_size - 1) / batch_size;
+        let mut all_entries = Vec::new();
+        for batch_idx in 0..num_batches {
+            let batch_count = if batch_idx == num_batches - 1 {
+                count - batch_idx * batch_size
+            } else {
+                batch_size
+            };
+            println!("Batch {}/{} ({} samples)...", batch_idx + 1, num_batches, batch_count);
+            let entries = client.generate_dataset_with_prompt(&task, batch_count).await?;
+            if entries.is_empty() {
+                println!("[ERROR] No data generated in batch {}. Skipping this batch.", batch_idx + 1);
+                continue;
+            }
+            all_entries.extend(entries);
+            // Progress bar per batch
+            let bar_length = 30;
+            let percent = ((batch_idx + 1) * 100 / num_batches) as usize;
+            let filled = (bar_length * (batch_idx + 1) / num_batches) as usize;
+            let bar = format!("|{}{}|{:3}%", "█".repeat(filled), ".".repeat(bar_length - filled), percent);
+            print!("\r{}", bar);
+            std::io::Write::flush(&mut std::io::stdout()).unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(80));
         }
         println!();
 
-        let entries = client.generate_dataset_with_prompt(&task, count).await?;
+        if all_entries.is_empty() {
+            println!("[ERROR] No data generated. Deepseek output was empty or invalid. File will not be saved.");
+            continue;
+        }
+
         let data = GeneratedData {
             task_name: task.name.clone(),
             format: task.format.clone(),
-            data: entries.iter().enumerate().map(|(i, v)| models::DataEntry {
+            data: all_entries.iter().enumerate().map(|(i, v)| models::DataEntry {
                 id: format!("{}-{}", task_name, i+1),
                 content: v.clone(),
                 metadata: Some([
@@ -94,8 +125,8 @@ async fn main() -> anyhow::Result<()> {
                 .status();
             match status {
                 Ok(s) if s.success() => println!("[OK] Converted to parquet for {:?}", output_path),
-                Ok(s) => println!("[WARN] Python script exited with status: {s}"),
-                Err(e) => println!("[ERR] Could not run Python script: {e}"),
+                Ok(s) => println!("[WARN] Python script exited with status: {}", s),
+                Err(e) => println!("[ERR] Could not run Python script: {}", e),
             }
         }
         // Automate Arrow conversion (only if user requested)
@@ -107,8 +138,8 @@ async fn main() -> anyhow::Result<()> {
                 .status();
             match status {
                 Ok(s) if s.success() => println!("[OK] Converted to arrow for {:?}", output_path),
-                Ok(s) => println!("[WARN] Python script exited with status: {s}"),
-                Err(e) => println!("[ERR] Could not run Python script: {e}"),
+                Ok(s) => println!("[WARN] Python script exited with status: {}", s),
+                Err(e) => println!("[ERR] Could not run Python script: {}", e),
             }
         }
     }
