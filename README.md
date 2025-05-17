@@ -71,7 +71,7 @@ python data/output/export_parquet_arrow.py data/output/auto-dataset-summarizatio
 - **Batch & Flexible Output:** สร้างหลาย task, เลือก format ได้
 - **Progress Bar & Banner:** CLI สวยงาม
 - **Robust Export:** รองรับ field ซ้อน, metadata, empty struct
-- **Metadata:** ทุก entry มี `{ "source": "zombit" }`
+- **Metadata:** ทุก entry มี `{ "source": "DEEPSEEK-V3" }`
 - **Extensible:** เพิ่ม task ใหม่ได้ง่ายใน `tasks.json`/API
 
 ---
