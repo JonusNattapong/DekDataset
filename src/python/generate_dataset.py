@@ -10,6 +10,7 @@ from banner import print_ascii_banner
 from colorama import Fore, Style
 import time
 import sys
+import re
 
 # ----------------- Environment Setup -----------------
 load_dotenv()
@@ -81,7 +82,16 @@ class DeepseekClient:
         if not content:
             print("[ERROR] Deepseek output is empty!")
             return []
+        # --- Robust JSON extraction ---
         try:
+            # Find first JSON array in content
+            match = re.search(r'\[.*?\]', content, re.DOTALL)
+            if match:
+                array_str = match.group(0)
+                parsed = json.loads(array_str)
+                if isinstance(parsed, list):
+                    return parsed
+            # fallback: try normal parse (may error)
             parsed = json.loads(content)
             if isinstance(parsed, list):
                 return parsed
@@ -109,18 +119,37 @@ def main():
 
     client = DeepseekClient(api_key)
     print(f"\n{Fore.LIGHTCYAN_EX}Generating dataset for task: {args.task} ({args.count} samples)...{Style.RESET_ALL}")
-    # Loading bar
-    bar_length = 30
-    for i in range(bar_length+1):
-        percent = int((i/bar_length)*100)
-        bar = f"{Fore.YELLOW}|{'█'*i}{'.'*(bar_length-i)}|{percent:3d}%{Style.RESET_ALL}"
+
+    total = args.count
+    # --- Batch Generation ---
+    # ปรับ batch size อัตโนมัติ: ถ้า count <= 10 ให้ batch = count, ถ้า count <= 100 ให้ batch = 10, ถ้ามากกว่านั้น batch = 5
+    if total <= 10:
+        BATCH_SIZE = total
+    elif total <= 100:
+        BATCH_SIZE = 10
+    else:
+        BATCH_SIZE = 5
+    all_entries = []
+    num_batches = (total + BATCH_SIZE - 1) // BATCH_SIZE
+    for batch_idx in range(num_batches):
+        batch_start = batch_idx * BATCH_SIZE + 1
+        batch_count = min(BATCH_SIZE, total - batch_idx * BATCH_SIZE)
+        print(f"{Fore.YELLOW}Batch {batch_idx+1}/{num_batches} ({batch_count} samples)...{Style.RESET_ALL}")
+        entries = client.generate_dataset_with_prompt(task, batch_count)
+        if not entries:
+            print(f"[ERROR] No data generated in batch {batch_idx+1}. Skipping this batch.")
+            continue
+        all_entries.extend(entries)
+        # Progress bar per batch
+        bar_length = 30
+        percent = int(((batch_idx+1)/num_batches)*100)
+        bar = f"{Fore.YELLOW}|{'█'*((batch_idx+1)*bar_length//num_batches)}{'.'*(bar_length-((batch_idx+1)*bar_length//num_batches))}|{percent:3d}%{Style.RESET_ALL}"
         sys.stdout.write(f"\r{bar}")
         sys.stdout.flush()
-        time.sleep(0.03)
+        time.sleep(0.1)
     print()  # Newline after bar
-    entries = client.generate_dataset_with_prompt(task, args.count)
 
-    if not entries:
+    if not all_entries:
         print(f"[ERROR] No data generated. Deepseek output was empty or invalid. File will not be saved.")
         return
 
@@ -130,7 +159,7 @@ def main():
             content=entry,
             metadata={"source": "DeepSeek-V3"}
         ).to_dict()
-        for i, entry in enumerate(entries)
+        for i, entry in enumerate(all_entries)
     ]
 
     # Export
