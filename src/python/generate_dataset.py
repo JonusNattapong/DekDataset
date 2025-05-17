@@ -87,6 +87,7 @@ def main():
     parser.add_argument("task", help="Task name (e.g. sentiment_analysis)")
     parser.add_argument("count", type=int, help="Number of samples")
     parser.add_argument("--format", choices=["json", "jsonl"], default="jsonl")
+    parser.add_argument("--batch-size", type=int, default=500, help="Batch size per API call (default: 500)")
     args = parser.parse_args()
 
     api_key = os.getenv("DEEPSEEK_API_KEY")
@@ -109,15 +110,23 @@ def main():
         sys.stdout.flush()
         time.sleep(0.03)
     print()  # Newline after bar
-    entries = client.generate_dataset_with_prompt(task, args.count)
 
+    total = args.count
+    batch_size = args.batch_size
+    num_batches = (total + batch_size - 1) // batch_size
+    all_entries = []
+    for batch_idx in range(num_batches):
+        current_batch = min(batch_size, total - batch_idx * batch_size)
+        print(f"\nBatch {batch_idx+1}/{num_batches} : Generating {current_batch} samples...")
+        entries = client.generate_dataset_with_prompt(task, current_batch)
+        all_entries.extend(entries)
     data_entries = [
         DataEntry(
             id=f"{args.task}-{i+1}",
             content=entry,
             metadata={"source": "DeepSeek-V3"}
         ).to_dict()
-        for i, entry in enumerate(entries)
+        for i, entry in enumerate(all_entries)
     ]
 
     # Export
@@ -133,7 +142,7 @@ def main():
     else:
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(data_entries, f, ensure_ascii=False, indent=2)
-    print(f"Dataset saved to {output_path}")
+    print(f"Dataset saved to {output_path} (total {len(data_entries)} samples)")
 
 if __name__ == "__main__":
     main()
