@@ -72,8 +72,17 @@ class DeepseekClient:
         resp.raise_for_status()
         resp_json = resp.json()
         content = resp_json["choices"][0]["message"]["content"]
+        # Strip code block if present
+        if content.strip().startswith("```json"):
+            content = content.strip()[7:]
+            if content.endswith("```"):
+                content = content[:-3]
+        content = content.strip()
+        if not content:
+            print("[ERROR] Deepseek output is empty!")
+            return []
         try:
-            parsed = json.loads(content.strip())
+            parsed = json.loads(content)
             if isinstance(parsed, list):
                 return parsed
         except Exception as e:
@@ -110,6 +119,10 @@ def main():
         time.sleep(0.03)
     print()  # Newline after bar
     entries = client.generate_dataset_with_prompt(task, args.count)
+
+    if not entries:
+        print(f"[ERROR] No data generated. Deepseek output was empty or invalid. File will not be saved.")
+        return
 
     data_entries = [
         DataEntry(
