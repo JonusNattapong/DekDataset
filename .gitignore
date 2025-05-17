@@ -1,0 +1,24 @@
+# Rust
+/target/
+**/target/
+Cargo.lock
+**/*.rs.bk
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Generated data
+/data/output/
+dataset-generator-rs/data/output/
+
+# Operating System
+.DS_Store
+Thumbs.db
