@@ -100,12 +100,35 @@ class DeepseekClient:
         return []
 
 # ----------------- Main Logic -----------------
+def import_vision_jsonl(input_path, schema, output_path=None):
+    """Import vision-animals-dataset-*.jsonl, validate schema, export jsonl ใหม่ที่มีเฉพาะฟิลด์ schema"""
+    entries = []
+    with open(input_path, "r", encoding="utf-8") as f:
+        for line in f:
+            try:
+                entry = json.loads(line)
+                # รองรับทั้งแบบ {id, content, metadata} หรือ content ตรง schema เลย
+                content = entry.get("content", entry)
+                filtered = {k: content.get(k, None) for k in schema["fields"].keys()}
+                if validate_entry(filtered, schema):
+                    entries.append(filtered)
+            except Exception as e:
+                print(f"[WARN] Skipping line: {e}")
+    print(f"[INFO] Imported {len(entries)} valid entries from {input_path}")
+    if output_path:
+        with open(output_path, "w", encoding="utf-8") as f:
+            for entry in entries:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        print(f"[INFO] Exported {len(entries)} entries to {output_path}")
+    return entries
+
 def main():
     print_ascii_banner()
     parser = argparse.ArgumentParser()
     parser.add_argument("task", help="Task name (e.g. sentiment_analysis)")
     parser.add_argument("count", type=int, help="Number of samples")
     parser.add_argument("--format", choices=["json", "jsonl"], default="jsonl")
+    parser.add_argument("--import-vision", type=str, default=None, help="Path to vision-animals-dataset-*.jsonl to import/validate/export")
     args = parser.parse_args()
 
     api_key = os.getenv("DEEPSEEK_API_KEY")
@@ -116,6 +139,12 @@ def main():
     if args.task not in tasks:
         raise ValueError(f"Task '{args.task}' not found. Available: {list(tasks.keys())}")
     task = tasks[args.task]
+
+    # --- Import Vision Dataset Mode ---
+    if args.import_vision:
+        output_path = os.path.join("data/output", f"imported-vision-{datetime.now().strftime('%Y%m%d-%H%M%S')}.jsonl")
+        import_vision_jsonl(args.import_vision, task["schema"], output_path)
+        return
 
     client = DeepseekClient(api_key)
     print(f"\n{Fore.LIGHTCYAN_EX}Generating dataset for task: {args.task} ({args.count} samples)...{Style.RESET_ALL}")
