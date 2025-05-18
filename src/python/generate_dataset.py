@@ -270,7 +270,7 @@ def deduplicate_entries(entries: list, key_fields=None) -> list:
         if key_fields:
             key = tuple(e.get(k) for k in key_fields)
         else:
-            key = json.dumps(e, sort_keys=True, ensure_ascii=False)
+            key = tuple(sorted(e.items()))
         if key not in seen:
             seen.add(key)
             result.append(e)
