@@ -26,3 +26,4 @@ Thumbs.db
 .venv
 ./src/python/__pycache__
 photo
+scraped_images
