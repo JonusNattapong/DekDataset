@@ -185,5 +185,244 @@
         "required": true
       }
     }
+  },
+  "vision_animals": {
+    "name": "Vision Animal Classification Dataset",
+    "description": "Generate animal image dataset with English/Thai labels for computer vision tasks",
+    "format": "Jsonl",
+    "schema": {
+      "fields": {
+        "image_path": {
+          "field_type": "Text",
+          "required": true,
+          "description": "Path to the image file"
+        },
+        "label_en": {
+          "field_type": {"Enum": [
+            "cow", "pig", "chicken", "duck", "goat", "sheep", "buffalo",
+            "horse", "camel", "rabbit", "turkey", "goose", "quail", "deer", "ostrich", "fish", "shrimp", "crab", "frog", "bee"
+          ]},
+          "required": true,
+          "description": "Animal label in English"
+        },
+        "label_th": {
+          "field_type": {"Enum": [
+            "วัว", "หมู", "ไก่", "เป็ด", "แพะ", "แกะ", "ควาย",
+            "ม้า", "อูฐ", "กระต่าย", "ไก่งวง", "ห่าน", "นกกระทา", "กวาง", "นกกระจอกเทศ", "ปลา", "กุ้ง", "ปู", "กบ", "ผึ้ง"
+          ]},
+          "required": true,
+          "description": "Animal label in Thai"
+        },
+        "caption": {
+          "field_type": "Text",
+          "required": false,
+          "description": "Image caption in Thai"
+        }
+      },
+      "relationships": []
+    },
+    "examples": [],
+    "parameters": {
+      "labels": {
+        "name": "labels",
+        "param_type": "enum",
+        "enum_values": [
+          {"en": "cow", "th": "วัว"},
+          {"en": "pig", "th": "หมู"},
+          {"en": "chicken", "th": "ไก่"},
+          {"en": "duck", "th": "เป็ด"},
+          {"en": "goat", "th": "แพะ"},
+          {"en": "sheep", "th": "แกะ"},
+          {"en": "buffalo", "th": "ควาย"},
+          {"en": "horse", "th": "ม้า"},
+          {"en": "camel", "th": "อูฐ"},
+          {"en": "rabbit", "th": "กระต่าย"},
+          {"en": "turkey", "th": "ไก่งวง"},
+          {"en": "goose", "th": "ห่าน"},
+          {"en": "quail", "th": "นกกระทา"},
+          {"en": "deer", "th": "กวาง"},
+          {"en": "ostrich", "th": "นกกระจอกเทศ"},
+          {"en": "fish", "th": "ปลา"},
+          {"en": "shrimp", "th": "กุ้ง"},
+          {"en": "crab", "th": "ปู"},
+          {"en": "frog", "th": "กบ"},
+          {"en": "bee", "th": "ผึ้ง"}
+        ],
+        "description": "List of animal classes (en/th)",
+        "required": true
+      }
+    }
+  },
+  "token_classification": {
+    "name": "Token Classification Dataset",
+    "description": "Generate text samples with token-level labels for sequence labeling tasks (e.g. POS, chunking)",
+    "format": "Jsonl",
+    "schema": {
+      "fields": {
+        "text": {"field_type": "Text", "required": true, "description": "The input text"},
+        "tokens": {"field_type": {"Array": {"Text": {}}}, "required": true, "description": "Tokenized text"},
+        "labels": {"field_type": {"Array": {"Text": {}}}, "required": true, "description": "Token-level labels"}
+      },
+      "relationships": []
+    },
+    "examples": [],
+    "parameters": {}
+  },
+  "table_qa": {
+    "name": "Table Question Answering Dataset",
+    "description": "Generate table-based question-answer pairs for Table QA models",
+    "format": "Jsonl",
+    "schema": {
+      "fields": {
+        "table": {"field_type": "Text", "required": true, "description": "Table in CSV/TSV/Markdown format"},
+        "question": {"field_type": "Text", "required": true, "description": "Question about the table"},
+        "answer": {"field_type": "Text", "required": true, "description": "Answer to the question"}
+      },
+      "relationships": []
+    },
+    "examples": [],
+    "parameters": {}
+  },
+  "zero_shot_classification": {
+    "name": "Zero-Shot Classification Dataset",
+    "description": "Generate text samples with candidate labels for zero-shot classification",
+    "format": "Jsonl",
+    "schema": {
+      "fields": {
+        "text": {"field_type": "Text", "required": true, "description": "The input text"},
+        "candidate_labels": {"field_type": {"Array": {"Text": {}}}, "required": true, "description": "Candidate labels"},
+        "predicted_label": {"field_type": "Text", "required": true, "description": "Predicted label"}
+      },
+      "relationships": []
+    },
+    "examples": [],
+    "parameters": {}
+  },
+  "feature_extraction": {
+    "name": "Feature Extraction Dataset",
+    "description": "Generate text samples with extracted features (vector/embedding)",
+    "format": "Jsonl",
+    "schema": {
+      "fields": {
+        "text": {"field_type": "Text", "required": true, "description": "The input text"},
+        "features": {"field_type": {"Array": {"Number": {}}}, "required": true, "description": "Feature vector/embedding"}
+      },
+      "relationships": []
+    },
+    "examples": [],
+    "parameters": {}
+  },
+  "text_generation": {
+    "name": "Text Generation Dataset",
+    "description": "Generate prompt-completion pairs for text generation models",
+    "format": "Jsonl",
+    "schema": {
+      "fields": {
+        "prompt": {"field_type": "Text", "required": true, "description": "Prompt text"},
+        "completion": {"field_type": "Text", "required": true, "description": "Generated text"}
+      },
+      "relationships": []
+    },
+    "examples": [],
+    "parameters": {}
+  },
+  "text2text_generation": {
+    "name": "Text2Text Generation Dataset",
+    "description": "Generate input-output pairs for text2text models (e.g. T5, mT5)",
+    "format": "Jsonl",
+    "schema": {
+      "fields": {
+        "input": {"field_type": "Text", "required": true, "description": "Input text"},
+        "output": {"field_type": "Text", "required": true, "description": "Output text"}
+      },
+      "relationships": []
+    },
+    "examples": [],
+    "parameters": {}
+  },
+  "fill_mask": {
+    "name": "Fill-Mask Dataset",
+    "description": "Generate masked sentences and their possible fills for fill-mask models",
+    "format": "Jsonl",
+    "schema": {
+      "fields": {
+        "masked_text": {"field_type": "Text", "required": true, "description": "Masked input text (e.g. 'The capital of France is <mask>.')"},
+        "candidates": {"field_type": {"Array": {"Text": {}}}, "required": true, "description": "Candidate fills for the mask"}
+      },
+      "relationships": []
+    },
+    "examples": [],
+    "parameters": {}
+  },
+  "sentence_similarity": {
+    "name": "Sentence Similarity Dataset",
+    "description": "Generate sentence pairs with similarity scores",
+    "format": "Jsonl",
+    "schema": {
+      "fields": {
+        "sentence1": {"field_type": "Text", "required": true, "description": "First sentence"},
+        "sentence2": {"field_type": "Text", "required": true, "description": "Second sentence"},
+        "similarity": {"field_type": "Number", "required": true, "description": "Similarity score (0-1)", "constraints": [{"Range": {"min": 0.0, "max": 1.0}}]}
+      },
+      "relationships": []
+    },
+    "examples": [],
+    "parameters": {}
+  },
+  "text_ranking": {
+    "name": "Text Ranking Dataset",
+    "description": "Generate queries and ranked document lists for text ranking models",
+    "format": "Jsonl",
+    "schema": {
+      "fields": {
+        "query": {"field_type": "Text", "required": true, "description": "Query text"},
+        "documents": {"field_type": {"Array": {"Text": {}}}, "required": true, "description": "List of candidate documents"},
+        "relevance": {"field_type": {"Array": {"Number": {}}}, "required": true, "description": "Relevance scores for each document"}
+      },
+      "relationships": []
+    },
+    "examples": [],
+    "parameters": {}
+  },
+  "search_qa": {
+    "name": "Search-Augmented Question Answering",
+    "description": "QA with multi-turn search simulation. Each turn includes reasoning, search query, retrieved docs, and answer.",
+    "format": "Jsonl",
+    "schema": {
+      "fields": {
+        "question": {"field_type": "Text", "required": true, "description": "User question"},
+        "turns": {
+          "field_type": {"Array": {"Object": {
+            "reasoning": {"field_type": "Text"},
+            "search_query": {"field_type": "Text"},
+            "retrieved_docs": {"field_type": {"Array": {"Text": {}}}},
+            "answer": {"field_type": "Text"}
+          }}},
+          "required": true,
+          "description": "Multi-turn reasoning and search"
+        },
+        "final_answer": {"field_type": "Text", "required": true, "description": "Final answer after all turns"}
+      },
+      "relationships": []
+    },
+    "examples": [],
+    "parameters": {}
+  },
+  "simulated_search_doc": {
+    "name": "Simulated Search Document Generation",
+    "description": "Given a query, generate useful/noisy search documents for curriculum learning.",
+    "format": "Jsonl",
+    "schema": {
+      "fields": {
+        "query": {"field_type": "Text", "required": true, "description": "Search query"},
+        "question": {"field_type": "Text", "required": true, "description": "Original question"},
+        "ground_truth": {"field_type": "Text", "required": true, "description": "Ground-truth answer"},
+        "doc_type": {"field_type": {"Enum": ["useful", "noisy"]}, "required": true, "description": "Document type"},
+        "documents": {"field_type": {"Array": {"Text": {}}}, "required": true, "description": "Generated documents"}
+      },
+      "relationships": []
+    },
+    "examples": [],
+    "parameters": {}
   }
 }

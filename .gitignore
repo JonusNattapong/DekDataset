@@ -22,3 +22,8 @@ dataset-generator-rs/data/output/
 # Operating System
 .DS_Store
 Thumbs.db
+
+.venv
+./src/python/__pycache__
+photo
+scraped_images
