@@ -129,6 +129,9 @@ def main():
     parser.add_argument("count", type=int, help="Number of samples")
     parser.add_argument("--format", choices=["json", "jsonl"], default="jsonl")
     parser.add_argument("--import-vision", type=str, default=None, help="Path to vision-animals-dataset-*.jsonl to import/validate/export")
+    parser.add_argument("--source_lang", type=str, default=None, help="Source language (for translation task)")
+    parser.add_argument("--target_lang", type=str, default=None, help="Target language (for translation task)")
+    parser.add_argument("--lang", type=str, default=None, help="Language code (for multilingual tasks, e.g. th, en, zh, hi)")
     args = parser.parse_args()
 
     api_key = os.getenv("DEEPSEEK_API_KEY")
@@ -139,6 +142,13 @@ def main():
     if args.task not in tasks:
         raise ValueError(f"Task '{args.task}' not found. Available: {list(tasks.keys())}")
     task = tasks[args.task]
+
+    # --- Inject translation language params if needed ---
+    if args.task == "translation":
+        if args.source_lang:
+            task["parameters"]["source_lang"]["default"] = args.source_lang
+        if args.target_lang:
+            task["parameters"]["target_lang"]["default"] = args.target_lang
 
     # --- Import Vision Dataset Mode ---
     if args.import_vision:
