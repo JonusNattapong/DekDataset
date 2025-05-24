@@ -2,7 +2,25 @@
 
 ## 🚀 New Features
 
-### Data Cleaning & Normalization
+### Data Cleaning & Text Normalization
+
+สามารถทำความสะอาดและ normalize ข้อความภาษาไทยได้อัตโนมัติ:
+
+```bash
+# ใช้การทำความสะอาดข้อความแบบ default (เปิดใช้งานโดย default)
+python src/python/generate_dataset.py sentiment_analysis 100
+
+# ปิดการทำความสะอาดข้อความ
+python src/python/generate_dataset.py sentiment_analysis 100 --no-clean
+
+# ปิดการ normalize ภาษาไทย
+python src/python/generate_dataset.py sentiment_analysis 100 --disable-thai-norm
+
+# ลบ emoji และอักขระพิเศษ
+python src/python/generate_dataset.py sentiment_analysis 100 --remove-emojis --remove-special-chars
+```
+
+[ดูรายละเอียดเพิ่มเติมเกี่ยวกับ Data Cleaning](./DATA_CLEANING.md)
 
 DekDataset มีฟังก์ชันใหม่สำหรับทำความสะอาดและ normalize ข้อมูลอัตโนมัติ:
 - ลบแท็ก HTML
@@ -40,9 +58,37 @@ python src/python/generate_dataset.py summarization 50 --metadata '{"source": "n
 ### เพิ่มข้อมูลต่อจากไฟล์เดิม
 
 สามารถเพิ่มข้อมูลต่อจากไฟล์ที่มีอยู่แล้ว:
+
 ```bash
 python src/python/generate_dataset.py medical_benchmark 100 --append data/output/auto-dataset-medical_benchmark-20250524-120000.jsonl
 ```
+
+### วิเคราะห์และสร้างภาพแสดงผลข้อมูล
+
+สามารถวิเคราะห์คุณภาพของชุดข้อมูล และสร้างภาพแสดงผลได้:
+```bash
+# วิเคราะห์ข้อมูล
+python src/python/generate_dataset.py sentiment_analysis 100 --analyze
+
+# วิเคราะห์และสร้างภาพแสดงผล
+python src/python/generate_dataset.py sentiment_analysis 100 --analyze --visualize
+
+# กำหนดตำแหน่งผลการวิเคราะห์
+python src/python/generate_dataset.py sentiment_analysis 100 --analyze --analyze-output data/analysis/my-dataset
+```
+[ดูรายละเอียดเพิ่มเติมเกี่ยวกับ Dataset Analysis](./DATASET_ANALYSIS.md)
+
+### อัปโหลดไปยัง Hugging Face Hub
+
+สามารถอัปโหลดชุดข้อมูลไปยัง Hugging Face Hub ได้โดยตรง:
+```bash
+# อัปโหลดไปยัง Hugging Face Hub
+python src/python/generate_dataset.py sentiment_analysis 100 --export-huggingface --hf-repo-id username/my-dataset
+
+# อัปโหลดเป็น private repository
+python src/python/generate_dataset.py sentiment_analysis 100 --export-huggingface --hf-repo-id username/my-dataset --hf-private
+```
+[ดูรายละเอียดเพิ่มเติมเกี่ยวกับ Hugging Face Hub Integration](./HUGGINGFACE_HUB.md)
 
 ## 👨‍💻 Unit Tests
 

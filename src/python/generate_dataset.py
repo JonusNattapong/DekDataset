@@ -2,8 +2,12 @@ import os
 import json
 import requests
 import argparse
+import random
+import shutil
+import pandas as pd
+import csv
 from datetime import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Union, Optional
 from dotenv import load_dotenv
 from task_definitions import get_task_definitions
 from banner import print_ascii_banner
@@ -11,6 +15,13 @@ from colorama import Fore, Style
 import time
 import sys
 import re
+
+# Import data cleaning utilities
+from data_utils import (
+    clean_text, analyze_dataset, plot_word_cloud,
+    plot_category_distribution, plot_length_distribution,
+    plot_word_frequency, upload_to_huggingface
+)
 
 # ----------------- Environment Setup -----------------
 load_dotenv()
@@ -48,70 +59,523 @@ def get_task_definitions() -> Dict[str, dict]:
 
 # ----------------- Deepseek API Client -----------------
 class DeepseekClient:
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, model: str = "deepseek-chat", temperature: float = 1.0):
+        """
+        ตัวจัดการการเชื่อมต่อกับ Deepseek API มีฟังก์ชันสำหรับสร้าง dataset
+        
+        Args:
+            api_key: API key สำหรับ Deepseek
+            model: ชื่อโมเดลที่ต้องการใช้ (default: "deepseek-chat")
+            temperature: ค่า temperature ของการ generate (default: 1.0)
+        """
         self.api_key = api_key
         self.api_url = "https://api.deepseek.com/chat/completions"
+        self.model = model
+        self.temperature = temperature
+        self.max_retries = 3
+        self.retry_delay = 5
+        self.cache = {}  # Cache สำหรับเก็บ prompt templates
         
-    def generate_dataset_with_prompt(self, task: dict, count: int) -> List[dict]:
-        prompt = (
-            f"คุณคือ AI สำหรับสร้าง dataset โจทย์: {task['name']}\n"
-            f"รายละเอียด: {task['description']}\n"
-            f"Schema: {task['schema']['fields']}\n"
-            f"โปรดสร้างตัวอย่างข้อมูล JSON จำนวน {count} ตัวอย่างในรูปแบบ JSON array ตาม schema ข้างต้น\n\n"
-            f"เงื่อนไขสำคัญ:\n"
-            f"1. ผลลัพธ์ต้องเป็น JSON array ที่ถูกต้อง - ตัวอย่าง: [{{\n  \"field1\": \"value\",\n  \"field2\": 123\n}}]\n"
-            f"2. ไม่ต้องอธิบายเพิ่มเติม ส่งเฉพาะ JSON array เท่านั้น\n"
-            f"3. หลีกเลี่ยงค่า placeholder หรือคำว่า 'example'\n"
-            f"4. ใช้ภาษาไทยเป็นหลัก"
+    def create_optimized_prompt(self, task: dict, count: int, examples: List[dict] = None, 
+                               advanced_option: bool = True) -> str:
+        """
+        สร้าง prompt ที่เหมาะสมสำหรับการ generate dataset ตาม task ที่กำหนด
+        รองรับทั้ง prompt แบบปกติและแบบขั้นสูง
+        
+        Args:
+            task: ข้อมูล task จาก task_definitions
+            count: จำนวนตัวอย่างที่ต้องการ generate
+            examples: ตัวอย่างข้อมูลที่มีคุณภาพดี (ถ้ามี จะใช้เป็น few-shot examples)
+            advanced_option: ใช้ prompt แบบขั้นสูงหรือไม่ (default: True)
+            
+        Returns:
+            prompt ที่เหมาะสมสำหรับ Deepseek API
+        """
+        # ถ้ามี prompt ใน cache แล้ว ใช้จาก cache (แต่ยัง replace ตัวแปรอยู่)
+        cache_key = f"{task['name']}_{advanced_option}"
+        if cache_key in self.cache:
+            prompt_template = self.cache[cache_key]
+            # แทนที่ค่าตัวแปรใน prompt
+            prompt = prompt_template.replace("{count}", str(count))
+            prompt = prompt.replace("{schema}", json.dumps(task['schema']['fields'], indent=2, ensure_ascii=False))
+            prompt = prompt.replace("{task_name}", task['name'])
+            prompt = prompt.replace("{task_description}", task['description'])
+            
+            # ใส่ examples ถ้ามี
+            if examples and "{examples}" in prompt:
+                prompt = prompt.replace("{examples}", json.dumps(examples[:min(3, len(examples))], indent=2, ensure_ascii=False))
+            else:
+                prompt = prompt.replace("{examples}", "")
+            
+            return prompt
+        
+        # สร้างคำอธิบาย schema ที่ชัดเจน
+        schema_description = json.dumps(task['schema']['fields'], indent=2, ensure_ascii=False)
+        
+        if not advanced_option:
+            # ส่วนหลักของ prompt แบบพื้นฐาน
+            prompt = (
+                f"คุณคือ AI ผู้เชี่ยวชาญในการสร้าง dataset คุณภาพสูงสำหรับงาน NLP และ AI ในภาษาไทย\n\n"
+                f"โจทย์: {task['name']}\n"
+                f"รายละเอียด: {task['description']}\n"
+                f"Schema: {schema_description}\n\n"
+                f"กรุณาสร้างตัวอย่างข้อมูลที่มีคุณภาพสูง จำนวน {count} ตัวอย่าง ในรูปแบบ JSON array ตาม schema ข้างต้น\n\n"
+            )
+            
+            # เพิ่มรายละเอียดเกี่ยวกับคุณภาพข้อมูล
+            prompt += (
+                f"คุณสมบัติของข้อมูลที่ต้องการ:\n"
+                f"1. ข้อความต้องมีความหลากหลาย ไม่ซ้ำกัน และสมจริง\n"
+                f"2. ข้อความทุกรายการต้องเป็นภาษาไทยที่ถูกต้อง (ยกเว้นมีการระบุให้ใช้ภาษาอื่น)\n"
+                f"3. ความยาวของข้อความต้องมีความแตกต่างกัน และครอบคลุมหลากหลายหัวข้อ\n"
+                f"4. ข้อมูลต้องมีความสมดุลในทุกประเภท (ถ้ามีการแบ่งประเภท เช่น sentiment)\n"
+            )
+            
+            # Few-shot examples ถ้ามี
+            if examples and len(examples) > 0:
+                prompt += f"\nตัวอย่างข้อมูลที่ดี:\n{json.dumps(examples[:min(3, len(examples))], indent=2, ensure_ascii=False)}\n\n"
+            
+            # เงื่อนไขสำคัญ
+            prompt += (
+                f"เงื่อนไขสำคัญ:\n"
+                f"1. ผลลัพธ์ต้องเป็น JSON array ที่ถูกต้อง เช่น: [{{'field1': 'value', 'field2': 123}}]\n"
+                f"2. ไม่ต้องอธิบายเพิ่มเติม ส่งเฉพาะ JSON array เท่านั้น\n"
+                f"3. ห้ามใช้คำว่า 'example', 'ตัวอย่าง', หรือ placeholder อื่นๆ ในเนื้อหา\n"
+                f"4. ใช้ภาษาไทยเป็นหลัก\n"
+                f"5. ข้อมูลต้องเป็นไปตามเงื่อนไขของ Schema ที่กำหนด"
+            )
+            
+        else:
+            # สร้าง prompt ขั้นสูงที่ออกแบบมาสำหรับ dataset generation โดยเฉพาะ
+            prompt = f"""
+# Task: {task['name']} Dataset Generation
+
+## Description
+{task['description']}
+
+## Schema
+```json
+{schema_description}
+```
+
+## Example Format
+[{{
+    "field1": "value1",
+    "field2": "value2"
+}}]
+
+## Requirements
+สร้างชุดข้อมูล JSON จำนวน {count} รายการตาม Schema ข้างต้น โดยคำนึงถึงคุณภาพและความหลากหลาย:
+- ใช้ภาษาไทยเท่านั้น (100% Thai language only) ห้ามใช้ภาษาอื่นแม้แต่คำเดียว
+- ข้อความต้องสมจริง หลากหลาย และไม่ซ้ำซาก
+- ความยาวต้องหลากหลาย (ตั้งแต่สั้นถึงยาว) แต่มีความสมบูรณ์
+- เนื้อหาต้องกระจายตัวดี ครอบคลุมหลายบริบทและหัวข้อ
+- ใช้ภาษาไทยที่เป็นธรรมชาติ ถูกต้องตามหลักภาษาไทย
+- หลีกเลี่ยงข้อมูลซ้ำ คำซ้ำ และโครงสร้างประโยคซ้ำ
+- ไม่มีคำว่า "example", "ตัวอย่าง" หรือ placeholder ในเนื้อหา
+- เน้นความสมดุลระหว่าง category/label (ถ้ามี)
+- คำศัพท์เฉพาะทางหรือคำทับศัพท์ให้ใช้คำภาษาไทยที่เป็นที่ยอมรับ
+
+## Output Format
+JSON Array ที่มีโครงสร้างตาม Schema โดยไม่มีข้อความนำหรือสรุป เช่น:
+```json
+[
+  {{
+    "field1": "value1",
+    "field2": "value2"
+  }},
+  {{
+    "field1": "value3",
+    "field2": "value4"
+  }}
+]
+```
+"""
+
+            # เพิ่มคำแนะนำเฉพาะ task
+            if "sentiment_analysis" in task['name']:
+                prompt += """
+## เฉพาะสำหรับ Sentiment Analysis
+- ต้องมีความสมดุลระหว่างความรู้สึกเชิงบวก/เชิงลบ/กลาง
+- สร้างข้อความที่มีอารมณ์ชัดเจนสำหรับ positive/negative และกำกวมสำหรับ neutral
+- ใช้บริบทที่หลากหลาย (รีวิวสินค้า, บริการ, ร้านอาหาร, โรงแรม, ความคิดเห็นทั่วไป)
+- ความยาวของข้อความควรมีตั้งแต่สั้น กลาง ยาว
+"""
+            elif "translation" in task['name']:
+                prompt += """
+## เฉพาะสำหรับ Translation
+- คำแปลต้องมีความหมายตรงกับต้นฉบับ แต่ไม่จำเป็นต้องแปลคำต่อคำ
+- คงความหมายและอารมณ์ของต้นฉบับ รวมถึงสำนวนที่เหมาะสม
+- ใช้ภาษาที่เป็นธรรมชาติในภาษาปลายทาง
+- ครอบคลุมหัวข้อที่หลากหลาย (ข่าว, บทสนทนา, วิชาการ, บันเทิง)
+"""
+            elif "medical" in task['name']:
+                prompt += """
+## เฉพาะสำหรับงานด้านการแพทย์
+- ใช้คำศัพท์ทางการแพทย์ที่ถูกต้อง แต่ผสมคำศัพท์ทั่วไปเพื่อความเป็นธรรมชาติ
+- ครอบคลุมโรคและอาการที่หลากหลาย
+- รวมทั้งข้อมูลทั่วไป และข้อมูลเฉพาะทาง
+- คำนึงถึงความถูกต้องทางการแพทย์
+"""
+            elif "question_answering" in task['name']:
+                prompt += """
+## เฉพาะสำหรับ Question Answering
+- สร้างคำถามที่หลากหลาย (คำถาม What, When, Where, Why, How)
+- ความยาวของคำถามควรมีทั้งคำถามสั้น และคำถามยาว
+- คำตอบควรมีทั้งยาวและสั้น ขึ้นอยู่กับคำถาม
+- ครอบคลุมหัวข้อต่างๆ อย่างกว้างขวาง
+"""
+
+            # เพิ่ม examples ถ้ามี
+            if examples and len(examples) > 0:
+                examples_json = json.dumps(examples[:min(3, len(examples))], indent=2, ensure_ascii=False)
+                prompt += f"""
+## Examples
+ตัวอย่างข้อมูลที่ดี:
+```json
+{examples_json}
+```
+"""
+
+            # เพิ่มคำเตือนเกี่ยวกับการ validate
+            prompt += """
+## Validation
+ข้อมูลทุกรายการจะถูกตรวจสอบความถูกต้องตาม schema หลังจาก generation โดยอัตโนมัติ โปรดตรวจสอบว่าข้อมูลทุกรายการตรงตาม schema ที่กำหนด ไม่มี field ที่หายไป และค่าทุกค่ามีความหมาย
+
+โปรดส่งเฉพาะ JSON array เท่านั้น ไม่ต้องใส่คำอธิบายหรือข้อความอื่นๆ
+"""
+
+        # เก็บ prompt template ไว้ใน cache
+        self.cache[cache_key] = prompt
+        return prompt
+        
+    def generate_dataset_with_prompt(self, task: dict, count: int, examples: List[dict] = None,
+                                   advanced_prompt: bool = True) -> List[dict]:
+        """
+        สร้าง dataset โดยเรียกใช้ Deepseek API ด้วย prompt ที่กำหนด
+        
+        Args:
+            task: ข้อมูล task จาก task_definitions
+            count: จำนวนตัวอย่างที่ต้องการ generate
+            examples: ตัวอย่างข้อมูลที่มีคุณภาพดี (ถ้ามี)
+            advanced_prompt: ใช้ prompt แบบขั้นสูงหรือไม่ (default: True)
+            
+        Returns:
+            รายการข้อมูลที่ได้จาก API
+        """
+        prompt = self.create_optimized_prompt(task, count, examples, advanced_prompt)
+        
+        # ปรับปรุง system prompt ให้มีประสิทธิภาพมากขึ้น
+        system_prompt = (
+            "You are a highly skilled dataset generator specialized in creating high-quality Thai language datasets. "
+            "You must follow the schema exactly and only output valid JSON data. "
+            "Your outputs should be diverse in length, style and content while maintaining natural Thai language usage. "
+            "Only output the JSON array with no additional text, explanations or comments."
         )
-        system_prompt = "You are a helpful AI dataset generator. Your task is to generate valid JSON data according to a specified schema. Only output valid JSON, nothing else."
+        
+        # ปรับปรุงประสิทธิภาพของ API request
         req_body = {
-            "model": "deepseek-chat",
-            "temperature": 1.2,
-            "max_tokens": 4000,
+            "model": self.model,
+            "temperature": self.temperature,
+            "max_tokens": min(count * 200, 4000),  # ปรับขนาด token ตามจำนวนตัวอย่าง
             "response_format": {
-                "type": "json_object"
+                "type": "json_object" 
             },
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt}
             ]
         }
-        headers = {"Authorization": f"Bearer {self.api_key}"}
-        resp = requests.post(self.api_url, json=req_body, headers=headers)
-        resp.raise_for_status()
-        resp_json = resp.json()
-        content = resp_json["choices"][0]["message"]["content"]
         
-        # JSON Output format ควรคืนค่า JSON ที่สมบูรณ์อยู่แล้ว
-        try:
-            parsed = json.loads(content)
-            if isinstance(parsed, list):
-                return parsed
-            elif isinstance(parsed, dict) and "data" in parsed and isinstance(parsed["data"], list):
-                return parsed["data"]
-            else:
-                # ถ้า JSON ไม่ได้เป็น list โดยตรง แปลงเป็น list
-                return [parsed]
-                
-        except json.JSONDecodeError as e:
-            print(f"[ERROR] JSON parsing error: {e}")
-            print(f"Content: {content[:200]}...")
-            
-            # ถ้ายังคงมีปัญหา ลองใช้วิธีดึงส่วนที่เป็น JSON array ออกมา
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        
+        # ใช้ exponential backoff สำหรับการ retry
+        for attempt in range(self.max_retries):
             try:
-                # Find first JSON array in content
-                match = re.search(r'\[.*?\]', content, re.DOTALL)
-                if match:
-                    array_str = match.group(0)
+                # ทำ request พร้อมบันทึกเวลาที่ใช้
+                start_time = time.time()
+                resp = requests.post(self.api_url, json=req_body, headers=headers, timeout=60)
+                elapsed_time = time.time() - start_time
+                
+                resp.raise_for_status()
+                resp_json = resp.json()
+                content = resp_json["choices"][0]["message"]["content"]
+                
+                # พยายาม parse JSON
+                data = self.parse_response_content(content)
+                
+                # บันทึก log สำหรับการวิเคราะห์
+                print(f"[INFO] API request completed in {elapsed_time:.2f}s, generated {len(data)} entries")
+                
+                return data
+                
+            except requests.exceptions.RequestException as e:
+                if attempt == self.max_retries - 1:
+                    print(f"[ERROR] API request failed after {self.max_retries} attempts: {e}")
+                    return []
+                
+                # คำนวณเวลารอแบบ exponential backoff
+                wait_time = self.retry_delay * (2 ** attempt)
+                print(f"[WARN] API request failed: {e}, retrying in {wait_time}s...")
+                time.sleep(wait_time)
+                
+            except Exception as e:
+                if attempt == self.max_retries - 1:
+                    print(f"[ERROR] Unexpected error: {e}")
+                    return []
+                
+                wait_time = self.retry_delay * (2 ** attempt)
+                print(f"[WARN] Unexpected error: {e}, retrying in {wait_time}s...")
+                time.sleep(wait_time)
+        
+        return []
+    
+    def parse_response_content(self, content: str) -> List[dict]:
+        """แปลงข้อความตอบกลับจาก API เป็น list ของ dict"""
+        def clean_string(s: str) -> str:
+            return re.sub(r'\s+', ' ', s.strip())
+            
+        def clean_dict(d: dict) -> dict:
+            cleaned = {}
+            for k, v in d.items():
+                if isinstance(v, str):
+                    v = clean_string(v)
+                cleaned[k] = v
+            return cleaned
+            
+        def extract_array_from_text(text: str) -> List[dict]:
+            matches = list(re.finditer(r'\[(?:[^[\]]*|\[(?:[^[\]]*|\[[^[\]]*\])*\])*\]', text))
+            for match in matches:
+                try:
+                    array_str = clean_string(match.group(0))
                     parsed = json.loads(array_str)
                     if isinstance(parsed, list):
-                        return parsed
-            except Exception:
-                pass
+                        return [clean_dict(item) for item in parsed if isinstance(item, dict)]
+                except:
+                    continue
+            return []
+
+        # ทำความสะอาดข้อความก่อน parse
+        content = clean_string(content)
+        
+        try:
+            # พยายาม parse ทั้งข้อความ
+            parsed = json.loads(content)
+            
+            if isinstance(parsed, list):
+                items = [clean_dict(item) for item in parsed if isinstance(item, dict)]
+                if items:
+                    return items
+            elif isinstance(parsed, dict):
+                # ตรวจสอบ key ที่อาจเป็น array ของข้อมูล
+                for key in ["data", "results", "entries", "items"]:
+                    if key in parsed and isinstance(parsed[key], list):
+                        items = [clean_dict(item) for item in parsed[key] if isinstance(item, dict)]
+                        if items:
+                            return items
+                # ถ้าไม่เจอ array เลย แปลง dict เป็น list
+                return [clean_dict(parsed)]
+        except json.JSONDecodeError as e:
+            print(f"[WARN] Initial parsing failed: {e}, trying to extract JSON array...")
+            items = extract_array_from_text(content)
+            if items:
+                return items
+            print("[ERROR] Could not extract any valid JSON")
         except Exception as e:
-            print("Error parsing Deepseek output:", e)
+            print(f"[ERROR] Unexpected error while parsing: {e}")
+        
         return []
+        
+    def generate_dataset_batch(
+        self, 
+        task: dict, 
+        total_count: int, 
+        batch_size: int = 10, 
+        max_concurrent: int = 1, 
+        delay: int = 2, 
+        clean_data: bool = True,
+        clean_options: Dict = None,
+        advanced_prompt: bool = True,
+        post_process: bool = True
+    ) -> List[dict]:
+        """
+        สร้าง dataset โดยแบ่งเป็น batch และทำ concurrent requests (ถ้ากำหนด)
+        มีฟังก์ชันขั้นสูงเพิ่มเติม เช่น การทำ post-processing, การบันทึก log และ dynamic batch size
+        
+        Args:
+            task: ข้อมูล task จาก task_definitions
+            total_count: จำนวนตัวอย่างทั้งหมดที่ต้องการ
+            batch_size: จำนวนตัวอย่างต่อ batch
+            max_concurrent: จำนวน concurrent requests สูงสุด (ยังไม่รองรับ > 1)
+            delay: เวลารอระหว่าง batches (วินาที)
+            clean_data: ทำความสะอาดข้อมูลหรือไม่
+            clean_options: ตัวเลือกสำหรับการทำความสะอาดข้อมูล
+            advanced_prompt: ใช้ prompt แบบขั้นสูงหรือไม่
+            post_process: ทำ post-processing หรือไม่ (deduplication, validation, etc.)
+            
+        Returns:
+            รายการข้อมูลทั้งหมดที่สร้างได้
+        """
+        start_time = time.time()
+        all_entries = []
+        num_batches = (total_count + batch_size - 1) // batch_size
+        
+        # ใช้ tqdm หากมีเพื่อแสดงความคืบหน้าแบบ progress bar
+        try:
+            from tqdm import tqdm
+            batch_iterator = tqdm(range(num_batches), desc="Generating batches", 
+                                unit="batch", ncols=100)
+        except ImportError:
+            batch_iterator = range(num_batches)
+            print(f"{Fore.YELLOW}[INFO] เริ่มสร้างข้อมูล {num_batches} batches...{Style.RESET_ALL}")
+        
+        for batch_idx in batch_iterator:
+            # คำนวณจำนวนตัวอย่างสำหรับ batch นี้
+            batch_count = min(batch_size, total_count - batch_idx * batch_size)
+            
+            if not isinstance(batch_iterator, range):
+                batch_iterator.set_description(f"Batch {batch_idx+1}/{num_batches} ({batch_count} samples)")
+            else:
+                print(f"{Fore.YELLOW}Batch {batch_idx+1}/{num_batches} ({batch_count} samples)...{Style.RESET_ALL}")
+            
+            # ส่ง examples จาก batch ก่อนหน้าเพื่อเพิ่มคุณภาพ (เลือก examples ที่ดีที่สุด)
+            examples = None
+            if all_entries:
+                # เลือกตัวอย่างที่หลากหลายจาก batches ก่อนหน้า
+                if len(all_entries) > 3:
+                    # สุ่มเลือก 3 ตัวอย่างที่มีความยาวแตกต่างกัน (สั้น กลาง ยาว)
+                    text_field = next((key for key in all_entries[0].keys() if "text" in key.lower()), None)
+                    if text_field:
+                        # จัดเรียงตามความยาวข้อความ
+                        sorted_entries = sorted(all_entries, key=lambda x: len(str(x.get(text_field, ""))))
+                        short_idx = 0
+                        medium_idx = len(sorted_entries) // 2
+                        long_idx = len(sorted_entries) - 1
+                        examples = [sorted_entries[short_idx], sorted_entries[medium_idx], sorted_entries[long_idx]]
+                    else:
+                        # ถ้าไม่มี text field ให้สุ่มเลือก
+                        examples = random.sample(all_entries, min(3, len(all_entries)))
+                else:
+                    # ถ้ามีข้อมูลน้อยกว่า 3 ชิ้น ใช้ทั้งหมด
+                    examples = all_entries.copy()
+            
+            # ปรับ temperature ตามจำนวน batch ที่เหลือ (ความหลากหลายมากขึ้นเมื่อใกล้สร้างเสร็จ)
+            original_temp = self.temperature
+            if num_batches > 3:
+                # เพิ่ม temperature ในช่วงท้าย ๆ เพื่อเพิ่มความหลากหลาย
+                progress = batch_idx / num_batches
+                if progress > 0.7:
+                    self.temperature = min(original_temp * 1.2, 1.4)  # เพิ่มสูงสุด 20% แต่ไม่เกิน 1.4
+            
+            # สร้างชุดข้อมูล
+            entries = self.generate_dataset_with_prompt(
+                task, batch_count, examples, advanced_prompt=advanced_prompt
+            )
+            
+            # คืนค่า temperature กลับ
+            self.temperature = original_temp
+            
+            if not entries:
+                print(f"[ERROR] No data generated in batch {batch_idx+1}. Retrying one more time...")
+                # ลองอีกครั้งหนึ่ง (อาจจะด้วย prompt แบบพื้นฐาน)
+                entries = self.generate_dataset_with_prompt(
+                    task, batch_count, examples, advanced_prompt=False
+                )
+                if not entries:
+                    print(f"[ERROR] Still no data generated in batch {batch_idx+1}. Skipping this batch.")
+                    continue
+                
+            # ทำความสะอาดข้อมูล (ถ้าเปิดใช้งาน)
+            if clean_data and entries:
+                from data_utils import clean_text
+                cleaned_entries = []
+                for entry in entries:
+                    # ตรวจสอบว่า entry เป็น dict
+                    if not isinstance(entry, dict):
+                        try:
+                            # พยายามแปลง string เป็น dict
+                            entry = json.loads(entry)
+                        except:
+                            print(f"[WARN] Skipping invalid entry: {entry[:100]}...")
+                            continue
+                    
+                    cleaned_entry = {}
+                    for key, value in entry.items():
+                        if isinstance(value, str) and ("text" in key.lower() or "content" in key.lower()):
+                            # ลบช่องว่างที่ไม่จำเป็น
+                            value = re.sub(r'\s+', ' ', value).strip()
+                            cleaned_entry[key] = clean_text(value, clean_options)
+                        else:
+                            cleaned_entry[key] = value
+                    cleaned_entries.append(cleaned_entry)
+                entries = cleaned_entries or entries  # ถ้า cleaned_entries ว่างเปล่า ใช้ entries เดิม
+                
+            all_entries.extend(entries)
+            
+            # Progress bar สำหรับกรณีที่ไม่ได้ใช้ tqdm
+            if isinstance(batch_iterator, range):
+                bar_length = 30
+                percent = int(((batch_idx+1)/num_batches)*100)
+                bar = f"{Fore.YELLOW}|{'█'*((batch_idx+1)*bar_length//num_batches)}{'.'*(bar_length-((batch_idx+1)*bar_length//num_batches))}|{percent:3d}%{Style.RESET_ALL}"
+                sys.stdout.write(f"\r{bar}")
+                sys.stdout.flush()
+            
+            # หน่วงเวลาเพื่อป้องกัน rate limit (ยกเว้น batch สุดท้าย)
+            if batch_idx < num_batches - 1:
+                # ปรับ delay แบบ dynamic ตามขนาด batch
+                adjusted_delay = delay
+                if batch_size > 20:
+                    adjusted_delay = max(delay, 3)  # เพิ่ม delay สำหรับ batch ใหญ่
+                time.sleep(adjusted_delay)
+        
+        # จบ progress bar
+        if isinstance(batch_iterator, range):
+            print()  # Newline after progress bar
+        
+        # ทำ post-processing ถ้าเปิดใช้งาน
+        if post_process and all_entries:
+            # Validate และ deduplicate
+            from data_utils import deduplicate_entries
+            
+            print(f"[INFO] Running post-processing on {len(all_entries)} entries...")
+            
+            # นับจำนวน entry ก่อน post-processing
+            pre_count = len(all_entries)
+            
+            # Deduplicate
+            all_entries = deduplicate_entries(all_entries)
+            dedup_count = len(all_entries)
+            
+            if dedup_count < pre_count:
+                print(f"[INFO] Removed {pre_count - dedup_count} duplicate entries")
+            
+            # ถ้าได้ข้อมูลน้อยกว่าที่ต้องการ ลองสร้างเพิ่มอีก 1 batch
+            if len(all_entries) < total_count * 0.9:  # ถ้าได้น้อยกว่า 90% ของที่ต้องการ
+                missing_count = total_count - len(all_entries)
+                print(f"[INFO] Got only {len(all_entries)} entries. Generating additional {missing_count} entries...")
+                
+                # สร้างเพิ่มอีก 1 batch
+                extra_entries = self.generate_dataset_with_prompt(task, missing_count, all_entries[:3], True)
+                
+                # ทำความสะอาดข้อมูลเพิ่มเติม
+                if clean_data and extra_entries:
+                    from data_utils import clean_text
+                    for entry in extra_entries:
+                        for key, value in entry.items():
+                            if isinstance(value, str) and ("text" in key.lower() or "content" in key.lower()):
+                                entry[key] = clean_text(value, clean_options)
+                
+                # Deduplicate ระหว่างข้อมูลเก่าและข้อมูลใหม่
+                combined = all_entries + extra_entries
+                all_entries = deduplicate_entries(combined)
+                print(f"[INFO] Added {len(all_entries) - dedup_count} more unique entries")
+        
+        # สรุปเวลาที่ใช้ทั้งหมด
+        elapsed_time = time.time() - start_time
+        minutes, seconds = divmod(elapsed_time, 60)
+        print(f"[INFO] Dataset generation completed in {int(minutes)}m {int(seconds)}s. Generated {len(all_entries)} entries.")
+        
+        return all_entries
 
 # ----------------- Main Logic -----------------
 def import_vision_jsonl(input_path, schema, output_path=None):
@@ -319,8 +783,35 @@ def main():
     parser.add_argument("--valid-ratio", type=float, default=0.1, help="Validation set ratio when splitting (default: 0.1)")
     parser.add_argument("--test-ratio", type=float, default=0.1, help="Test set ratio when splitting (default: 0.1)")
     
+    # เพิ่ม argument สำหรับการทำความสะอาดข้อมูลและการ Normalize ข้อความ
+    parser.add_argument("--no-clean", action="store_true", help="Disable data cleaning (default: cleaning enabled)")
+    parser.add_argument("--disable-thai-norm", action="store_true", help="Disable Thai text normalization (default: enabled)")
+    parser.add_argument("--remove-emojis", action="store_true", help="Remove emojis from text (default: keep emojis)")
+    parser.add_argument("--remove-special-chars", action="store_true", help="Remove special characters (default: keep special chars)")
+    
+    # เพิ่ม argument สำหรับการวิเคราะห์ dataset
+    parser.add_argument("--analyze", action="store_true", help="Analyze dataset after generation (default: False)")
+    parser.add_argument("--visualize", action="store_true", help="Create visualizations for dataset (default: False)")
+    parser.add_argument("--analyze-output", type=str, default=None, help="Path to save analysis results (default: same as output dir)")
+    
+    # เพิ่ม argument สำหรับ DeepseekClient ที่ปรับปรุงแล้ว
+    parser.add_argument("--model", type=str, default="deepseek-chat", help="Deepseek model to use (default: deepseek-chat)")
+    parser.add_argument("--temperature", type=float, default=1.2, help="Temperature for generation (default: 1.2)")
+    parser.add_argument("--batch-size", type=int, default=None, help="Override automatic batch size")
+    parser.add_argument("--delay", type=int, default=2, help="Delay between API calls in seconds (default: 2)")
+      # เพิ่ม argument สำหรับ Hugging Face Hub
+    parser.add_argument("--export-huggingface", action="store_true", help="Export dataset to Hugging Face Hub")
+    parser.add_argument("--hf-repo-id", type=str, default=None, help="Hugging Face repository ID (username/repo-name)")
+    parser.add_argument("--hf-token", type=str, default=None, help="Hugging Face API token (or set HUGGINGFACE_TOKEN env)")
+    parser.add_argument("--hf-private", action="store_true", help="Create private repository (default: public)")
+    
+    # เพิ่ม argument สำหรับการเพิ่มข้อมูล metadata
+    parser.add_argument("--license", type=str, default="CC-BY 4.0", help="License for the dataset (default: CC-BY 4.0)")
+    parser.add_argument("--version", type=str, default="1.0.0", help="Version of the dataset (default: 1.0.0)")
+    parser.add_argument("--domain", type=str, default=None, help="Domain of the dataset (e.g. social, news, medical)")
+    
     args = parser.parse_args()
-
+    
     api_key = os.getenv("DEEPSEEK_API_KEY")
     if not api_key:
         raise RuntimeError("DEEPSEEK_API_KEY must be set in environment")
@@ -343,38 +834,47 @@ def main():
         import_vision_jsonl(args.import_vision, task["schema"], output_path)
         return
 
-    client = DeepseekClient(api_key)
+    # --- สร้าง DeepseekClient ด้วยค่า config ที่กำหนด ---
+    client = DeepseekClient(
+        api_key=api_key, 
+        model=args.model,
+        temperature=args.temperature
+    )
+    
     print(f"\n{Fore.LIGHTCYAN_EX}Generating dataset for task: {args.task} ({args.count} samples)...{Style.RESET_ALL}")
 
-    total = args.count
-    # --- Batch Generation ---
+    # --- กำหนดตัวเลือกสำหรับการทำความสะอาดข้อมูล ---
+    clean_options = {
+        "remove_html": not args.no_clean,
+        "remove_urls": not args.no_clean,
+        "remove_emojis": args.remove_emojis,
+        "remove_special_chars": args.remove_special_chars,
+        "normalize_thai": not args.disable_thai_norm,
+        "fix_spacing": not args.no_clean
+    }
+
+    total = args.count    # --- Batch Generation ---
     # ปรับ batch size อัตโนมัติ: ถ้า count <= 10 ให้ batch = count, ถ้า count <= 100 ให้ batch = 10, ถ้ามากกว่านั้น batch = 5
-    if total <= 10:
+    if args.batch_size:
+        BATCH_SIZE = args.batch_size
+    elif total <= 10:
         BATCH_SIZE = total
     elif total <= 100:
         BATCH_SIZE = 10
     else:
         BATCH_SIZE = 5
-    all_entries = []
-    num_batches = (total + BATCH_SIZE - 1) // BATCH_SIZE
-    for batch_idx in range(num_batches):
-        batch_start = batch_idx * BATCH_SIZE + 1
-        batch_count = min(BATCH_SIZE, total - batch_idx * BATCH_SIZE)
-        print(f"{Fore.YELLOW}Batch {batch_idx+1}/{num_batches} ({batch_count} samples)...{Style.RESET_ALL}")
-        entries = client.generate_dataset_with_prompt(task, batch_count)
-        if not entries:
-            print(f"[ERROR] No data generated in batch {batch_idx+1}. Skipping this batch.")
-            continue
-        all_entries.extend(entries)
-        # Progress bar per batch
-        bar_length = 30
-        percent = int(((batch_idx+1)/num_batches)*100)
-        bar = f"{Fore.YELLOW}|{'█'*((batch_idx+1)*bar_length//num_batches)}{'.'*(bar_length-((batch_idx+1)*bar_length//num_batches))}|{percent:3d}%{Style.RESET_ALL}"
-        sys.stdout.write(f"\r{bar}")
-        sys.stdout.flush()
-        time.sleep(0.1)
-    print()  # Newline after bar
-
+        
+    # --- ใช้ฟังก์ชัน batch generation แบบใหม่ ---
+    all_entries = client.generate_dataset_batch(
+        task=task,
+        total_count=total,
+        batch_size=BATCH_SIZE,
+        max_concurrent=1,  # ยังไม่รองรับ concurrent requests มากกว่า 1
+        delay=args.delay,
+        clean_data=not args.no_clean,
+        clean_options=clean_options
+    )
+    
     if not all_entries:
         print(f"[ERROR] No data generated. Deepseek output was empty or invalid. File will not be saved.")
         return
@@ -416,7 +916,7 @@ def main():
                     if maxv is not None and value > maxv:
                         return False
         return True
-
+        
     # Filter: schema validation
     valid_entries = [e for e in all_entries if validate_entry(e, task["schema"])]
     if len(valid_entries) < len(all_entries):
@@ -425,8 +925,20 @@ def main():
     deduped_entries = deduplicate_entries(valid_entries)
     if len(deduped_entries) < len(valid_entries):
         print(f"[INFO] Removed {len(valid_entries)-len(deduped_entries)} duplicate entries")
-    # Post-processing: enrich (placeholder, no-op)
+    # Post-processing: enrich with metadata
+    metadata = {
+        "source": "DeepSeek-V3",
+        "license": args.license,
+        "version": args.version,
+        "created_at": datetime.now().isoformat(),
+        "lang": args.lang or "th"
+    }
+    # Add domain if specified
+    if args.domain:
+        metadata["domain"] = args.domain
+        
     enriched_entries = enrich_entries(deduped_entries)
+    
     # Diversity/Balance (example: sentiment label)
     if args.task == "sentiment_analysis":
         labels = ["positive", "negative", "neutral"]
@@ -435,15 +947,20 @@ def main():
         print(f"[INFO] Balanced sentiment labels: {len(balanced_entries)} entries ({n_per_label} per label)")
     else:
         balanced_entries = enriched_entries
-    data_entries = [
-        DataEntry(
-            id=f"{args.task}-{i+1}",
-            content=entry,
-            metadata={"source": "DeepSeek-V3"}
-        ).to_dict()
-        for i, entry in enumerate(balanced_entries)
-    ]
+    data_entries = []
+    for i, entry in enumerate(balanced_entries):
+        # Remove metadata from content if it exists
+        entry_content = entry.copy()
+        if "metadata" in entry_content:
+            del entry_content["metadata"]
 
+        data_entry = DataEntry(
+            id=f"{args.task}-{i+1}",
+            content=entry_content,
+            metadata=metadata
+        ).to_dict()
+        data_entries.append(data_entry)
+    
     # Export
     now = datetime.now().strftime("%Y%m%d-%H%M%S")
     filename = f"auto-dataset-{args.task}-{now}.{args.format}"
@@ -505,6 +1022,7 @@ def main():
         )
     
     # ---- สร้างโครงสร้าง dataset มาตรฐานโดยอัตโนมัติ ----
+    standard_structure = None
     if args.create_standard:
         standard_structure = create_dataset_standard_structure(
             output_path, 
@@ -516,6 +1034,104 @@ def main():
         )
         print(f"{Fore.GREEN}[SUCCESS] สร้างโครงสร้าง dataset มาตรฐานเรียบร้อยที่: {standard_structure}{Style.RESET_ALL}")
         print(f"{Fore.YELLOW}พร้อมสำหรับการอัพโหลดเข้า Hugging Face Datasets Hub{Style.RESET_ALL}")
+    
+    # ---- วิเคราะห์ dataset ถ้าเปิดใช้งานตัวเลือก ----
+    if args.analyze or args.visualize:
+        print(f"{Fore.CYAN}[INFO] กำลังวิเคราะห์ข้อมูล Dataset...{Style.RESET_ALL}")
+        # กำหนด output path สำหรับการวิเคราะห์
+        analysis_dir = args.analyze_output
+        if not analysis_dir:
+            if standard_structure:
+                analysis_dir = os.path.join(standard_structure, "analysis")
+            else:
+                analysis_dir = os.path.join(output_dir, f"analysis-{args.task}-{now}")
+        
+        # สร้างโฟลเดอร์
+        os.makedirs(analysis_dir, exist_ok=True)
+        
+        # ทำการวิเคราะห์
+        analysis_results = analyze_dataset(data_entries, field_path="content.text")
+        
+        # บันทึกผลการวิเคราะห์เป็น JSON
+        with open(os.path.join(analysis_dir, "analysis_results.json"), "w", encoding="utf-8") as f:
+            json.dump(analysis_results, f, ensure_ascii=False, indent=2)
+            
+        print(f"{Fore.GREEN}[SUCCESS] บันทึกผลการวิเคราะห์ข้อมูลไปยัง {os.path.join(analysis_dir, 'analysis_results.json')}{Style.RESET_ALL}")
+        
+        # สร้างภาพแสดงผลถ้าเปิดใช้งาน
+        if args.visualize:
+            print(f"{Fore.CYAN}[INFO] กำลังสร้างภาพแสดงผลการวิเคราะห์...{Style.RESET_ALL}")
+            # สร้างและบันทึกการแสดงผลต่างๆ
+            base_viz_path = os.path.join(analysis_dir, "visualization")
+            
+            # Word Cloud
+            word_cloud_path = f"{base_viz_path}_wordcloud.png"
+            plot_word_cloud(" ".join([entry["content"]["text"] for entry in data_entries]), output_path=word_cloud_path)
+            
+            # Category Distribution (ถ้ามี field category)
+            if any("category" in entry["content"] for entry in data_entries):
+                category_path = f"{base_viz_path}_categories.png"
+                categories = {entry["content"]["category"]: 1 for entry in data_entries}
+                plot_category_distribution(categories, output_path=category_path)
+            
+            # Length Distribution
+            length_path = f"{base_viz_path}_lengths.png"
+            lengths = [len(entry["content"]["text"]) for entry in data_entries]
+            plot_length_distribution(lengths, output_path=length_path)
+            
+            # Word Frequency
+            freq_path = f"{base_viz_path}_word_freq.png"
+            all_text = " ".join([entry["content"]["text"] for entry in data_entries])
+            words = all_text.split()
+            from collections import Counter
+            word_counts = Counter(words).most_common(20)
+            plot_word_frequency(word_counts, output_path=freq_path)
+            
+            print(f"{Fore.GREEN}[SUCCESS] บันทึกภาพแสดงผลไปยังโฟลเดอร์ {analysis_dir}{Style.RESET_ALL}")
+    
+    # ---- อัปโหลดไปยัง Hugging Face Hub ถ้าเปิดใช้งานตัวเลือก ----
+    if args.export_huggingface:
+        print(f"{Fore.CYAN}[INFO] กำลังอัปโหลด Dataset ไปยัง Hugging Face Hub...{Style.RESET_ALL}")
+        
+        # ตรวจสอบ repo_id
+        repo_id = args.hf_repo_id
+        if not repo_id:
+            repo_id = f"dekdataset/{args.task}-{now}"
+            print(f"{Fore.YELLOW}[INFO] ไม่ได้ระบุ repo_id จะใช้ค่า default: {repo_id}{Style.RESET_ALL}")
+        
+        # ตรวจสอบ token
+        hf_token = args.hf_token or os.getenv("HUGGINGFACE_TOKEN")
+        if not hf_token:
+            print(f"{Fore.RED}[ERROR] ไม่พบ Hugging Face API token กรุณาระบุด้วย --hf-token หรือตั้งค่า HUGGINGFACE_TOKEN ใน environment{Style.RESET_ALL}")
+            print(f"{Fore.RED}[ERROR] การอัปโหลดไปยัง Hugging Face Hub ถูกข้าม{Style.RESET_ALL}")
+        else:
+            # กำหนด path ที่จะอัปโหลด (ใช้ standard structure ถ้ามี)
+            upload_path = standard_structure if standard_structure else output_dir
+            
+            # สร้าง README สำหรับ Hugging Face Hub (ถ้ายังไม่มี)
+            if standard_structure and not os.path.exists(os.path.join(standard_structure, "README.md")):
+                # สร้าง README.md ง่ายๆ
+                readme_content = f"# {args.task} Dataset\n\n{task['description']}\n\nCreated with DekDataset"
+                with open(os.path.join(standard_structure, "README.md"), "w", encoding="utf-8") as f:
+                    f.write(readme_content)
+            
+            # อัปโหลด
+            try:
+                hf_url = upload_to_huggingface(
+                    dataset_path=upload_path,
+                    repo_id=repo_id,
+                    token=hf_token,
+                    private=args.hf_private,
+                    metadata={
+                        "language": args.lang or "th",
+                        "license": args.license,
+                        "task": args.task,
+                        "source": "DekDataset/DeepSeek"
+                    }
+                )
+                print(f"{Fore.GREEN}[SUCCESS] อัปโหลด Dataset ไปยัง Hugging Face Hub สำเร็จ: {hf_url}{Style.RESET_ALL}")
+            except Exception as e:
+                print(f"{Fore.RED}[ERROR] เกิดข้อผิดพลาดในการอัปโหลดไปยัง Hugging Face Hub: {e}{Style.RESET_ALL}")
 
 def deduplicate_entries(entries: list, key_fields=None) -> list:
     """Remove duplicate entries by key fields (default: all fields)."""
@@ -547,24 +1163,20 @@ def enrich_entries(entries: list, enrich_func=None) -> list:
     for e in entries:
         entry = dict(e)
         # enrich content
+        # Copy content dictionary and enrich it
         if "content" in entry and isinstance(entry["content"], dict):
             content = dict(entry["content"])
             text = content.get("text")
             # Only add word_count if not present and text is str
             if "word_count" not in content and isinstance(text, str):
                 content["word_count"] = len(text.split())
+            # Remove metadata from content if it exists
+            if "metadata" in content:
+                del content["metadata"]
             entry["content"] = content
-        # enrich metadata
-        if "metadata" in entry and isinstance(entry["metadata"], dict):
-            metadata = dict(entry["metadata"])
-        else:
-            metadata = {}
-        # Only add created_at/lang if not present
-        if "created_at" not in metadata:
-            metadata["created_at"] = datetime.now().isoformat()
-        if "lang" not in metadata:
-            metadata["lang"] = "th"
-        entry["metadata"] = metadata
+        # Keep existing metadata or set empty dict
+        if "metadata" not in entry:
+            entry["metadata"] = {}
         enriched.append(entry)
     return enriched
 
