@@ -52,6 +52,7 @@ DekDataset คือระบบโอเพ่นซอร์สสำหรั
    - รองรับ batch mode (แบ่งรอบ, ข้าม batch ที่ error, สุ่มเติม quota)
    - Validate, deduplicate, enrich, balance label, และ export เป็น jsonl, parquet, arrow, csv
    - ทุก entry มี metadata (source, created_at, lang) เพื่อความโปร่งใสและ reproducibility
+   - ตัวอย่างเช่น medical_benchmark: ได้ 2,000 ข้อสอบ/โจทย์การแพทย์ (MCQ, QA, clinical case)
 
 3. **Vision & OCR Dataset**
    - รองรับการสร้าง dataset ภาพ (image classification, OCR, captioning) โดยดึง label/class อัตโนมัติจาก API/schema
@@ -195,109 +196,33 @@ PIXABAY_API_KEY=your_pixabay_api_key
 
 ### 2. Dataset Generation Pipeline
 
-- **Input:** เลือก task (เช่น summarization, sentiment_analysis, vision_animals) และจำนวนตัวอย่าง
+- **Input:** เลือก task (เช่น summarization, sentiment_analysis, vision_animals, medical_benchmark) และจำนวนตัวอย่าง
 - **Process:**
-  - ดึง schema/parameter จาก API
-  - สร้าง prompt สำหรับ LLM/DeepSeek
-  - Batch generate (แบ่งรอบ, robust ต่อ error)
+  - ดึง schema/parameter จาก API หรือไฟล์ tasks.json
+  - สร้าง prompt สำหรับ LLM/DeepSeek (รองรับ batch, robust ต่อ error)
+  - Batch generate (แบ่งรอบ, ข้าม batch ที่ error, สุ่มเติม quota)
   - Validate, deduplicate, enrich, balance label
   - Export เป็น jsonl, parquet, arrow, csv
 - **Output:**
   - โฟลเดอร์ data/output/auto-dataset-<task>-<timestamp>.<ext>
   - ทุก entry มี metadata (source, created_at, lang)
+  - ตัวอย่างเช่น medical_benchmark: ได้ 2,000 ข้อสอบ/โจทย์การแพทย์ (MCQ, QA, clinical case)
 
-### 3. Vision Dataset & Image Scraping
+---
 
-- **generate_vision_task.py:**
-  - ดึง label/class อัตโนมัติจาก API
-  - ดึงภาพจากหลายแหล่ง (Pexels, Pixabay, Bing, DuckDuckGo, AI generate)
-  - สร้าง caption อัตโนมัติ (BLIP/AI)
-  - แปล caption (DeepSeek API)
-  - สุ่มเติม quota, robust ต่อ error, assign id/filename
-  - Export jsonl + images/ (พร้อม metadata)
-- **web_scrape_images.py:**
-  - รวมภาพจาก Bing, DuckDuckGo (scraping), Pexels, Pixabay (API)
-  - สร้างโฟลเดอร์ output ตาม timestamp, เก็บภาพใน images/, metadata ใน scraped_metadata.jsonl
-  - Metadata: image_path, query, source
+## 🩺 Medical Benchmark Dataset (ใหม่)
 
-### 4. Task Schema & Customization
+- เพิ่ม task `medical_benchmark` ใน tasks.json สำหรับสร้างชุดข้อมูลข้อสอบ/โจทย์ประเมินความรู้ทางการแพทย์ (MCQ, QA, clinical case)
+- Schema รองรับ field: question, context, choices, answer, explanation, difficulty, source, tags
+- ตัวอย่างการรัน:
 
-- **tasks.json:** กำหนด schema, parameter, enum, constraints สำหรับแต่ละ task (NLP, Vision, OCR ฯลฯ)
-- **เพิ่ม/แก้ไข task:** แก้ tasks.json หรือ API แล้ว pipeline จะรองรับอัตโนมัติ
-- **รองรับ custom field, enum, constraints, example, parameter**
-
-### 5. Error Handling & Robustness
-
-- ทุกฟังก์ชันมี try/except, log error, retry, fallback
-- Batch mode: ข้าม batch ที่ error, ไม่หยุดทั้ง pipeline
-- Validate schema ก่อน export, enrich metadata อัตโนมัติ
-- Web scraping: shuffle url, remove duplicates, quota per source
-
-### 6. Integration & Best Practices
-
-- สามารถ merge vision dataset, text dataset, OCR dataset ได้ง่าย (schema compatible)
-- ใช้ .env สำหรับ API Key (DeepSeek, Pexels, Pixabay, HuggingFace)
-- แนะนำให้รัน task_definitions_api.py ก่อน เพื่อให้ Rust/Python fetch schema ได้
-- ใช้ CLI/Script ได้ทั้ง Windows, Linux, Bash, Command Prompt
-- Output พร้อมใช้งานกับ HuggingFace, PyArrow, Pandas, Parquet, ML pipeline
-
-### 7. Example Output Structure
-
-```text
-scraped_images/
-  scrape-ocr-20250518-104729/
-    images/
-      ป้ายประกาศราชการ_bing_1.jpg
-      ป้ายประกาศราชการ_pexels_2.jpg
-      ...
-    scraped_metadata.jsonl
-  ...
-data/output/
-  auto-dataset-sentiment_analysis-20250517-115115.jsonl
-  auto-dataset-sentiment_analysis-20250517-115115.parquet
-  ...
-photo/images/...
+```bash
+python src/python/generate_dataset.py medical_benchmark 2000 --format jsonl
 ```
 
-### 8. Limitations & Notes
-
-- Web scraping อาจถูก block หรือ quota จำกัด (แนะนำใช้หลายแหล่ง)
-- DuckDuckGo/Bing อาจเปลี่ยน HTML/vqd token บ่อย ต้องอัปเดต regex
-- ภาพจาก AI generate ควรตรวจสอบคุณภาพก่อนใช้งานจริง
-- หากต้องการเพิ่มแหล่งภาพ/โมเดลใหม่ สามารถเพิ่มฟังก์ชันใน pipeline ได้ทันที
+- Output: data/output/auto-dataset-medical_benchmark-<timestamp>.jsonl (2,000 แถว)
+- ใช้สำหรับเทรน/ประเมิน LLM ด้านการแพทย์, AI Medical QA, หรือสร้าง benchmark
 
 ---
 
-## 🏆 Best Practices
-
-- ตั้งค่า `.env` ให้ครบถ้วน (API Key ต่าง ๆ)
-- ตรวจสอบ schema และ metadata ก่อนนำไปเทรนจริง
-- ใช้หลายแหล่งข้อมูลเพื่อเพิ่ม diversity
-- ทดสอบ pipeline กับ sample dataset ก่อนรันจริงขนาดใหญ่
-- อัปเดต dependencies และตรวจสอบโค้ด scraping เป็นระยะ
-
----
-
-## 💡 Tips
-
-- ตั้งค่า `DEEPSEEK_API_KEY` ก่อนใช้งาน
-- ต้องรัน API server ก่อน Rust/Python จะ fetch task ได้
-- ทุก output มี metadata สำหรับตรวจสอบแหล่งที่มา
-- ดูตัวอย่าง schema เพิ่มเติมใน `docs/` หรือ README
-- ใช้ Bash หรือ Command Prompt ได้ (แต่ path ต้องถูกต้อง)
-
----
-
-## 👤 Credits
-
-- Developer: zombit | JonusNattapong
-- GitHub: [zombitx64](https://github.com/zombitx64)
-- Contact: [zombitx64@gmail.com](mailto:zombitx64@gmail.com)
-
-## 📝 License
-
-MIT
-
----
-
-> สร้าง AI ภาษาไทยได้ง่าย ๆ ด้วย DekDataset! 🇹🇭✨
+## 
