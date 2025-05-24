@@ -136,9 +136,172 @@ def import_vision_jsonl(input_path, schema, output_path=None):
         print(f"[INFO] Exported {len(entries)} entries to {output_path}")
     return entries
 
+def create_dataset_standard_structure(output_path: str, task: dict, format: str = "jsonl", split: bool = False, 
+                               split_paths: tuple = None, sample_count: int = None):
+    """
+    สร้างโครงสร้าง dataset มาตรฐานสำหรับ Hugging Face หรือเผยแพร่ จากไฟล์ที่สร้าง
+    
+    Args:
+        output_path: path ไปยังไฟล์ output หลัก (เช่น auto-dataset-task-date.jsonl) 
+        task: dictionary ของ task definition
+        format: รูปแบบไฟล์ ("jsonl", "json", "csv", "parquet")
+        split: เป็น True ถ้ามีการคัดลอกไฟล์ไปเป็น train/valid/test (ไม่ได้แบ่งข้อมูลจริง)
+        split_paths: tuple ของ (train_path, valid_path, test_path) ถ้า split=True
+        sample_count: จำนวนตัวอย่างทั้งหมดใน dataset (ถ้าระบุ)
+    
+    Returns:
+        path ไปยังโฟลเดอร์ที่สร้าง
+    """
+    # สร้างชื่อโฟลเดอร์
+    task_name = os.path.basename(output_path).split("-")[2]  # เช่น "auto-dataset-medical_benchmark-..."
+    output_dir = os.path.dirname(output_path)
+    dataset_folder_name = f"{task_name}-dataset"
+    dataset_folder_path = os.path.join(output_dir, dataset_folder_name)
+    
+    # สร้างโฟลเดอร์หลัก
+    os.makedirs(dataset_folder_path, exist_ok=True)
+    
+    # คัดลอกไฟล์ไปยังโครงสร้างใหม่ตามมาตรฐาน
+    import shutil
+    if split and split_paths:
+        train_path, valid_path, test_path = split_paths
+        # คัดลอกไฟล์ (ทุกไฟล์มีข้อมูลเหมือนกัน) ไปยังโครงสร้างใหม่
+        shutil.copy(train_path, os.path.join(dataset_folder_path, f"train.{format}"))
+        shutil.copy(valid_path, os.path.join(dataset_folder_path, f"validation.{format}"))
+        shutil.copy(test_path, os.path.join(dataset_folder_path, f"test.{format}"))
+    else:
+        # คัดลอกไฟล์หลักเข้าไปในโฟลเดอร์
+        shutil.copy(output_path, os.path.join(dataset_folder_path, f"data.{format}"))
+    
+    # สร้าง LICENSE
+    license_path = "LICENSE"  # หรือ path อื่น ๆ
+    if os.path.exists(license_path):
+        shutil.copy(license_path, os.path.join(dataset_folder_path, "LICENSE"))
+      # สร้างไฟล์ dataset_info.json
+    # คำนวณจำนวนตัวอย่างใน split (ถ้าทำได้)
+    total_examples = 0
+    try:
+        with open(output_path, "r", encoding="utf-8") as f:
+            total_examples = sum(1 for _ in f)
+    except:
+        if sample_count:
+            total_examples = sample_count
+    
+    # คำนวณจำนวนตัวอย่างตามสัดส่วน
+    if split:
+        # ใช้ค่า default หรือหาค่าสัดส่วนจากชื่อไฟล์ (ถ้าทำได้)
+        train_ratio, valid_ratio, test_ratio = 0.8, 0.1, 0.1  # default
+        train_examples = int(total_examples * train_ratio)
+        valid_examples = int(total_examples * valid_ratio)
+        test_examples = total_examples - train_examples - valid_examples
+    else:
+        train_examples = valid_examples = test_examples = total_examples
+      dataset_info = {
+        "name": task_name,
+        "version": "1.0.0",
+        "description": task.get("description", f"Dataset for {task_name}"),
+        "license": "CC-BY 4.0",
+        "creator": "DekDataset",
+        "language": ["th", "en"],  # Thai + English
+    }
+      # เพิ่ม splits ถ้ามี
+    if split:
+        dataset_info["splits"] = {
+            "train": {"num_examples": train_examples},
+            "validation": {"num_examples": valid_examples},
+            "test": {"num_examples": test_examples}
+        }
+        # เพิ่มข้อมูลเกี่ยวกับสัดส่วนการแบ่ง
+        dataset_info["split_info"] = {
+            "train_ratio": train_examples / total_examples,
+            "valid_ratio": valid_examples / total_examples,
+            "test_ratio": test_examples / total_examples
+        }
+    
+    # เขียนไฟล์ dataset_info.json
+    with open(os.path.join(dataset_folder_path, "dataset_info.json"), "w", encoding="utf-8") as f:
+        json.dump(dataset_info, f, ensure_ascii=False, indent=2)
+    
+    # สร้าง README.md จาก task definition
+    readme_content = f"""# {task.get('name', task_name)} Dataset
+
+{task.get('description', 'Dataset สำหรับงาน AI และ NLP')}
+
+## รูปแบบข้อมูล
+
+แต่ละแถวในไฟล์ {format.upper()} มีโครงสร้างดังนี้:
+```json
+{{
+  "id": "{task_name}-xxx",
+  "content": {{
+"""
+    
+    # เพิ่มฟิลด์จาก schema
+    fields = task.get("schema", {}).get("fields", {})
+    for field_name, field_def in fields.items():
+        field_type = field_def.get("field_type", "")
+        field_desc = field_def.get("description", "")
+        if isinstance(field_type, dict) and "Enum" in field_type:
+            enum_values = field_type["Enum"]
+            readme_content += f'    "{field_name}": "{field_desc} (หนึ่งใน {enum_values})",\n'
+        else:
+            readme_content += f'    "{field_name}": "{field_desc}",\n'
+    
+    # จบโครงสร้าง JSON
+    readme_content += """  },
+  "metadata": {
+    "license": "CC-BY 4.0",
+    "source": "DekDataset/DeepSeek-V3",
+    "created_at": "timestamp",
+    "lang": "th"
+  }
+}
+```
+"""    # เพิ่มข้อมูลสถิติ
+    readme_content += "\n## สถิติ\n"
+    if split:
+        readme_content += f"- จำนวนตัวอย่างทั้งหมด: {train_examples + valid_examples + test_examples} ตัวอย่าง\n"
+        readme_content += f"- Train: {train_examples} ตัวอย่าง ({train_examples/(train_examples + valid_examples + test_examples)*100:.1f}%)\n"
+        readme_content += f"- Validation: {valid_examples} ตัวอย่าง ({valid_examples/(train_examples + valid_examples + test_examples)*100:.1f}%)\n"
+        readme_content += f"- Test: {test_examples} ตัวอย่าง ({test_examples/(train_examples + valid_examples + test_examples)*100:.1f}%)\n"
+        readme_content += "\n**หมายเหตุ:** แต่ละไฟล์มีข้อมูลตามสัดส่วนที่กำหนด ขอบคุณที่ใช้ DekDataset\n"
+    else:
+        readme_content += f"- Total: {sample_count or 'N/A'} ตัวอย่าง\n"
+    
+    # เพิ่มตัวอย่างการใช้งาน
+    readme_content += """
+## การใช้งานกับ Hugging Face Datasets
+
+```python
+from datasets import load_dataset
+
+# โหลดจาก local
+dataset = load_dataset("path/to/""" + dataset_folder_name + """")
+
+# หรือโหลดจาก Hugging Face Hub หลังจาก push (ถ้ามี)
+# dataset = load_dataset("username/""" + dataset_folder_name + """")
+
+# ดูข้อมูล
+print(dataset["train"][0])  # ดูตัวอย่างแรก
+```
+"""
+    
+    # เขียน README.md
+    with open(os.path.join(dataset_folder_path, "README.md"), "w", encoding="utf-8") as f:
+        f.write(readme_content)
+    
+    print(f"[INFO] Created standard dataset structure at {dataset_folder_path}")
+    print(f"[INFO] - README.md: สรุปข้อมูล dataset")
+    print(f"[INFO] - dataset_info.json: metadata สำหรับ Hugging Face")
+    print(f"[INFO] - {'train.{format}, validation.{format}, test.{format}' if split else f'data.{format}'}: ข้อมูลหลัก")
+    if os.path.exists(os.path.join(dataset_folder_path, "LICENSE")):
+        print(f"[INFO] - LICENSE: ข้อมูลสิทธิ์การใช้งาน")
+    
+    return dataset_folder_path
+
 def main():
     print_ascii_banner()
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="DekDataset: สร้าง dataset คุณภาพสูงสำหรับงาน NLP และ AI")
     parser.add_argument("task", help="Task name (e.g. sentiment_analysis)")
     parser.add_argument("count", type=int, help="Number of samples")
     parser.add_argument("--format", choices=["json", "jsonl", "csv", "parquet"], default="jsonl", help="Output format: json, jsonl, csv, parquet")
@@ -146,6 +309,13 @@ def main():
     parser.add_argument("--source_lang", type=str, default=None, help="Source language (for translation task)")
     parser.add_argument("--target_lang", type=str, default=None, help="Target language (for translation task)")
     parser.add_argument("--lang", type=str, default=None, help="Language code (for multilingual tasks, e.g. th, en, zh, hi)")
+      # เพิ่ม argument สำหรับการสร้างโครงสร้างตามมาตรฐาน    parser.add_argument("--create-standard", action="store_true", default=True, help="Create standard dataset structure (default: True)")
+    parser.add_argument("--no-standard", dest="create_standard", action="store_false", help="Don't create standard dataset structure")
+    parser.add_argument("--split", action="store_true", help="Create train/valid/test copies according to specified ratios")
+    parser.add_argument("--train-ratio", type=float, default=0.8, help="Train set ratio when splitting (default: 0.8)")
+    parser.add_argument("--valid-ratio", type=float, default=0.1, help="Validation set ratio when splitting (default: 0.1)")
+    parser.add_argument("--test-ratio", type=float, default=0.1, help="Test set ratio when splitting (default: 0.1)")
+    
     args = parser.parse_args()
 
     api_key = os.getenv("DEEPSEEK_API_KEY")
@@ -313,7 +483,34 @@ def main():
         df.to_parquet(output_path, index=False)
     else:
         raise ValueError(f"Unknown format: {args.format}")
-    print(f"Dataset saved to {output_path}")
+    print(f"Dataset saved to {output_path}")    # ---- คัดลอกไฟล์เป็น train/valid/test ตามสัดส่วนที่กำหนด ----
+    split_paths = None
+    if args.split:
+        print(f"{Fore.YELLOW}[INFO] สร้างไฟล์สำเนาสำหรับ train/valid/test ตามสัดส่วน {args.train_ratio:.1f}/{args.valid_ratio:.1f}/{args.test_ratio:.1f}{Style.RESET_ALL}")
+        # แยกชื่อไฟล์และนามสกุล
+        filename_prefix = os.path.splitext(os.path.basename(output_path))[0]
+        split_paths = split_dataset(
+            data_entries, 
+            output_dir,
+            filename_prefix,
+            args.train_ratio, 
+            args.valid_ratio, 
+            args.test_ratio, 
+            args.format
+        )
+    
+    # ---- สร้างโครงสร้าง dataset มาตรฐานโดยอัตโนมัติ ----
+    if args.create_standard:
+        standard_structure = create_dataset_standard_structure(
+            output_path, 
+            task, 
+            args.format, 
+            args.split,
+            split_paths,
+            args.count
+        )
+        print(f"{Fore.GREEN}[SUCCESS] สร้างโครงสร้าง dataset มาตรฐานเรียบร้อยที่: {standard_structure}{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}พร้อมสำหรับการอัพโหลดเข้า Hugging Face Datasets Hub{Style.RESET_ALL}")
 
 def deduplicate_entries(entries: list, key_fields=None) -> list:
     """Remove duplicate entries by key fields (default: all fields)."""
@@ -378,6 +575,110 @@ def balance_label_entries(entries: list, label_field: str, labels: list, n_per_l
     for label in labels:
         balanced.extend(buckets[label][:n_per_label])
     return balanced
+
+def split_dataset(data_entries: list, output_dir: str, filename_prefix: str, 
+                train_ratio=0.8, valid_ratio=0.1, test_ratio=0.1, format="jsonl"):
+    """
+    สร้างไฟล์สำเนาสำหรับ train, validation และ test โดยสำเนาตามสัดส่วนที่กำหนด
+    
+    Args:
+        data_entries: รายการข้อมูลทั้งหมด
+        output_dir: โฟลเดอร์ที่จะเก็บไฟล์แบ่ง
+        filename_prefix: prefix ของชื่อไฟล์ (ไม่มีนามสกุล)
+        train_ratio: สัดส่วนของ training set (default: 0.8)
+        valid_ratio: สัดส่วนของ validation set (default: 0.1) 
+        test_ratio: สัดส่วนของ test set (default: 0.1)
+        format: รูปแบบไฟล์ ("jsonl", "json", "csv", "parquet")
+        
+    Returns:
+        tuple ของ (train_path, valid_path, test_path)
+    """
+    import shutil
+    
+    # Create filenames for copies
+    train_path = os.path.join(output_dir, f"{filename_prefix}-train.{format}")
+    valid_path = os.path.join(output_dir, f"{filename_prefix}-valid.{format}")
+    test_path = os.path.join(output_dir, f"{filename_prefix}-test.{format}")
+    
+    # Get original file path
+    orig_path = os.path.join(output_dir, f"{filename_prefix}.{format}")
+    
+    # Make copies of the original file
+    shutil.copy2(orig_path, train_path)
+    shutil.copy2(orig_path, valid_path)
+    shutil.copy2(orig_path, test_path)
+    
+    n = len(data_entries)
+    train_samples = int(n * train_ratio)
+    valid_samples = int(n * valid_ratio)
+    test_samples = n - train_samples - valid_samples
+    
+    print(f"[INFO] Created dataset copies for train/valid/test (according to specified ratios):")
+    print(f"       - Original: {n} entries -> {orig_path}")
+    print(f"       - Train: {train_samples} entries ({train_ratio*100:.1f}%) -> {train_path}")
+    print(f"       - Valid: {valid_samples} entries ({valid_ratio*100:.1f}%) -> {valid_path}")
+    print(f"       - Test: {test_samples} entries ({test_ratio*100:.1f}%) -> {test_path}")
+    print(f"       [NOTE] All files contain the full dataset. When using, sample according to the ratios.")
+    
+    return train_path, valid_path, test_path
+
+def export_jsonl(entries, output_path):
+    """Export data to JSONL format"""
+    with open(output_path, "w", encoding="utf-8") as f:
+        for entry in entries:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+def export_json(entries, output_path):
+    """Export data to JSON format"""
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(entries, f, ensure_ascii=False, indent=2)
+
+def export_csv(entries, output_path):
+    """Export data to CSV format"""
+    import csv
+    # Flatten content+metadata for CSV
+    if entries:
+        # ดึง field ทั้งหมดจาก entry แรก (หากมี content ก็ดึงจาก content)
+        if "content" in entries[0] and isinstance(entries[0]["content"], dict):
+            fieldnames = list(entries[0]["content"].keys())
+        else:
+            fieldnames = list(entries[0].keys())
+            fieldnames = [f for f in fieldnames if f not in ["id", "metadata"]]
+            
+        # เพิ่ม id และ metadata
+        fieldnames = ["id"] + fieldnames + ["metadata"]
+        
+        with open(output_path, "w", encoding="utf-8", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for entry in entries:
+                if "content" in entry and isinstance(entry["content"], dict):
+                    row = {**entry["content"]}
+                else:
+                    row = {k: v for k, v in entry.items() if k not in ["id", "metadata"]}
+                
+                row["id"] = entry.get("id", "")
+                row["metadata"] = json.dumps(entry.get("metadata", {}), ensure_ascii=False)
+                writer.writerow(row)
+
+def export_parquet(entries, output_path):
+    """Export data to Parquet format"""
+    import pandas as pd
+    
+    # Flatten content+metadata for DataFrame
+    rows = []
+    for entry in entries:
+        if "content" in entry and isinstance(entry["content"], dict):
+            row = {**entry["content"]}
+        else:
+            row = {k: v for k, v in entry.items() if k not in ["id", "metadata"]}
+            
+        row["id"] = entry.get("id", "")
+        row["metadata"] = json.dumps(entry.get("metadata", {}), ensure_ascii=False)
+        rows.append(row)
+        
+    df = pd.DataFrame(rows)
+    df.to_parquet(output_path, index=False)
 
 if __name__ == "__main__":
     main()

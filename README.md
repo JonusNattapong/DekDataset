@@ -1,6 +1,5 @@
 # DekDataset
 
-![Rust](https://img.shields.io/badge/Rust-%23dea584?style=flat-square&logo=rust&logoColor=black)
 ![Python](https://img.shields.io/badge/Python-%233776AB?style=flat-square&logo=python&logoColor=white)
 ![DeepSeek API](https://img.shields.io/badge/DeepSeek-API-blueviolet?style=flat-square)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green?style=flat-square)
@@ -44,7 +43,6 @@ DekDataset คือระบบโอเพ่นซอร์สสำหรั
 1. **Unified Task Schema**
    - ทุก task (เช่น summarization, sentiment_analysis, vision_animals, ocr_thai) จะมี schema กลางที่นิยามใน `tasks.json` หรือ API (FastAPI)
    - Schema กำหนด field, type, enum, constraints, ตัวอย่าง, parameter ฯลฯ
-   - Rust และ Python pipeline จะ fetch schema เดียวกัน ทำให้ output สอดคล้องกันเสมอ
 
 2. **Dataset Generation Pipeline**
    - ผู้ใช้เลือก task และจำนวนตัวอย่างที่ต้องการ (ผ่าน CLI หรือ script)
@@ -89,8 +87,7 @@ DekDataset คือเครื่องมือสร้าง dataset ภา
 ```bash
 # Clone repo
 cd DekDataset
-# Rust dependencies
-cargo build --release
+
 # Python dependencies
 pip install -r requirements.txt
 ```
@@ -107,12 +104,6 @@ DEEPSEEK_API_KEY=your_api_key
 
 ```bash
 python src/python/task_definitions_api.py
-```
-
-### 4. Generate Dataset (Rust)
-
-```bash
-cargo run -- summarization,ner 10 --parquet
 ```
 
 - รองรับหลาย task พร้อมกัน (คั่นด้วย ,)
@@ -140,7 +131,7 @@ python data/output/export_parquet_arrow.py data/output/auto-dataset-summarizatio
 
 ## 🛠️ Features
 
-- **Unified Task Schema:** Rust & Python fetch จาก API เดียวกัน
+- **Unified Task Schema:** Python fetch จาก API เดียวกัน
 - **Batch & Flexible Output:** สร้างหลาย task, เลือก format ได้
 - **Progress Bar & Banner:** CLI สวยงาม
 - **Robust Export:** รองรับ field ซ้อน, metadata, empty struct
@@ -189,7 +180,6 @@ PIXABAY_API_KEY=your_pixabay_api_key
 
 ### 1. System Architecture
 
-- **Rust Core:** สำหรับ batch dataset generation, export, schema validation, Parquet/Arrow, CLI
 - **Python Modules:** สำหรับ flexible pipeline, web scraping, vision dataset, API integration, caption, translation
 - **Task API:** FastAPI (Python) ให้บริการ task schema/definition (src/python/task_definitions_api.py)
 - **Unified Schema:** ทุกโมดูลใช้ schema กลางจาก tasks.json หรือ API

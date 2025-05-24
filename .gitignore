@@ -24,7 +24,7 @@ dataset-generator-rs/data/output/
 Thumbs.db
 
 .venv
-__pycache__
+src/python/__pycache__
 photo
 scraped_images
 pdf/
