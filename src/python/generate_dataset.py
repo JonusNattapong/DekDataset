@@ -186,8 +186,7 @@ def create_dataset_standard_structure(output_path: str, task: dict, format: str 
     except:
         if sample_count:
             total_examples = sample_count
-    
-    # คำนวณจำนวนตัวอย่างตามสัดส่วน
+      # คำนวณจำนวนตัวอย่างตามสัดส่วน
     if split:
         # ใช้ค่า default หรือหาค่าสัดส่วนจากชื่อไฟล์ (ถ้าทำได้)
         train_ratio, valid_ratio, test_ratio = 0.8, 0.1, 0.1  # default
@@ -196,15 +195,15 @@ def create_dataset_standard_structure(output_path: str, task: dict, format: str 
         test_examples = total_examples - train_examples - valid_examples
     else:
         train_examples = valid_examples = test_examples = total_examples
-      dataset_info = {
+    
+    dataset_info = {
         "name": task_name,
         "version": "1.0.0",
         "description": task.get("description", f"Dataset for {task_name}"),
         "license": "CC-BY 4.0",
         "creator": "DekDataset",
         "language": ["th", "en"],  # Thai + English
-    }
-      # เพิ่ม splits ถ้ามี
+    }    # เพิ่ม splits ถ้ามี
     if split:
         dataset_info["splits"] = {
             "train": {"num_examples": train_examples},
@@ -246,8 +245,7 @@ def create_dataset_standard_structure(output_path: str, task: dict, format: str 
             readme_content += f'    "{field_name}": "{field_desc} (หนึ่งใน {enum_values})",\n'
         else:
             readme_content += f'    "{field_name}": "{field_desc}",\n'
-    
-    # จบโครงสร้าง JSON
+      # จบโครงสร้าง JSON
     readme_content += """  },
   "metadata": {
     "license": "CC-BY 4.0",
@@ -257,7 +255,8 @@ def create_dataset_standard_structure(output_path: str, task: dict, format: str 
   }
 }
 ```
-"""    # เพิ่มข้อมูลสถิติ
+"""
+    # เพิ่มข้อมูลสถิติ
     readme_content += "\n## สถิติ\n"
     if split:
         readme_content += f"- จำนวนตัวอย่างทั้งหมด: {train_examples + valid_examples + test_examples} ตัวอย่าง\n"
@@ -304,12 +303,16 @@ def main():
     parser = argparse.ArgumentParser(description="DekDataset: สร้าง dataset คุณภาพสูงสำหรับงาน NLP และ AI")
     parser.add_argument("task", help="Task name (e.g. sentiment_analysis)")
     parser.add_argument("count", type=int, help="Number of samples")
-    parser.add_argument("--format", choices=["json", "jsonl", "csv", "parquet"], default="jsonl", help="Output format: json, jsonl, csv, parquet")
-    parser.add_argument("--import-vision", type=str, default=None, help="Path to vision-animals-dataset-*.jsonl to import/validate/export")
+    parser.add_argument("--format", choices=["json", "jsonl", "csv", "parquet"], default="jsonl",
+                      help="Output format: json, jsonl, csv, parquet")
+    parser.add_argument("--import-vision", type=str, default=None,
+                      help="Path to vision-animals-dataset-*.jsonl to import/validate/export")
     parser.add_argument("--source_lang", type=str, default=None, help="Source language (for translation task)")
     parser.add_argument("--target_lang", type=str, default=None, help="Target language (for translation task)")
     parser.add_argument("--lang", type=str, default=None, help="Language code (for multilingual tasks, e.g. th, en, zh, hi)")
-      # เพิ่ม argument สำหรับการสร้างโครงสร้างตามมาตรฐาน    parser.add_argument("--create-standard", action="store_true", default=True, help="Create standard dataset structure (default: True)")
+    
+    # เพิ่ม argument สำหรับการสร้างโครงสร้างตามมาตรฐาน
+    parser.add_argument("--create-standard", action="store_true", default=True, help="Create standard dataset structure (default: True)")
     parser.add_argument("--no-standard", dest="create_standard", action="store_false", help="Don't create standard dataset structure")
     parser.add_argument("--split", action="store_true", help="Create train/valid/test copies according to specified ratios")
     parser.add_argument("--train-ratio", type=float, default=0.8, help="Train set ratio when splitting (default: 0.8)")
@@ -483,7 +486,9 @@ def main():
         df.to_parquet(output_path, index=False)
     else:
         raise ValueError(f"Unknown format: {args.format}")
-    print(f"Dataset saved to {output_path}")    # ---- คัดลอกไฟล์เป็น train/valid/test ตามสัดส่วนที่กำหนด ----
+    print(f"Dataset saved to {output_path}")
+    
+    # ---- คัดลอกไฟล์เป็น train/valid/test ตามสัดส่วนที่กำหนด ----
     split_paths = None
     if args.split:
         print(f"{Fore.YELLOW}[INFO] สร้างไฟล์สำเนาสำหรับ train/valid/test ตามสัดส่วน {args.train_ratio:.1f}/{args.valid_ratio:.1f}/{args.test_ratio:.1f}{Style.RESET_ALL}")
