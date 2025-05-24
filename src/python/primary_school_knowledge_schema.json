@@ -1,0 +1,12 @@
+{
+  "grade": {"field_type": {"Enum": [1,2,3,4,5,6]}, "required": true, "description": "ระดับชั้น ป.1-ป.6"},
+  "subject": {"field_type": {"Enum": ["ภาษาไทย","คณิตศาสตร์","วิทยาศาสตร์","สังคมศึกษา","ศิลปะ","สุขศึกษาและพลศึกษา","การงานอาชีพและเทคโนโลยี","ภาษาอังกฤษ","ดนตรี","เทคโนโลยี","ภาษาจีน","ประวัติศาสตร์","ภูมิศาสตร์"]}, "required": true, "description": "กลุ่มสาระการเรียนรู้"},
+  "unit": {"field_type": "Text", "required": false, "description": "หน่วยการเรียนรู้/บท/หัวข้อย่อย"},
+  "topic": {"field_type": "Text", "required": false, "description": "หัวข้อย่อย/สาระสำคัญ"},
+  "content": {"field_type": "Text", "required": false, "description": "เนื้อหาหลัก/ข้อความประกอบ/ตัวอย่าง/โจทย์"},
+  "question": {"field_type": "Text", "required": false, "description": "คำถาม/โจทย์/แบบฝึกหัด"},
+  "difficulty": {"field_type": {"Enum": ["ง่าย", "กลาง", "ยาก"]}, "required": false, "description": "ระดับความยากของข้อสอบ/โจทย์"},
+  "source": {"field_type": "Text", "required": false, "description": "แหล่งที่มาของข้อมูล (เช่น หนังสือ, เว็บไซต์, ครูผู้สอน)"},
+  "year": {"field_type": "Number", "required": false, "description": "ปีการศึกษา/ปีที่ออกข้อสอบ"},
+  "tags": {"field_type": {"Array": {"Text": {}}}, "required": false, "description": "ป้ายกำกับเพิ่มเติม (เช่น STEM, soft skills)"}
+}

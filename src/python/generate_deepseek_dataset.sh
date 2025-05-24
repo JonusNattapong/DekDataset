@@ -1,0 +1,28 @@
+#!/bin/bash
+echo "===== DeepSeek Dataset Generator ====="
+echo "ตัวช่วยสร้าง Dataset จาก Deepseek API"
+
+read -p "กรุณาใส่ DeepSeek API Key: " API_KEY
+read -p "จำนวนคำถามต่อการเรียก API (แนะนำ 10): " QUESTIONS
+
+if [ -z "$QUESTIONS" ]; then
+  QUESTIONS=10
+fi
+
+echo
+echo "กำลังสร้าง Dataset จาก Deepseek API..."
+python src/python/deepseek_data_generation.py --api_key $API_KEY --questions_per_call $QUESTIONS --output data/output/deepseek-dataset-raw.jsonl
+
+echo
+echo "กำลังเตรียม Dataset..."
+python src/python/prepare_deepseek_dataset.py --input data/output/deepseek-dataset-raw.jsonl --output_dir data/output/deepseek-dataset
+
+echo
+echo "เสร็จสิ้น! Dataset ถูกสร้างและเตรียมเรียบร้อยแล้ว"
+echo "ไฟล์ dataset อยู่ที่ data/output/deepseek-dataset/"
+echo "- train.jsonl: สำหรับเทรนโมเดล"
+echo "- validation.jsonl: สำหรับตรวจสอบระหว่างเทรน"
+echo "- test.jsonl: สำหรับทดสอบโมเดล"
+echo "- analysis/: ผลการวิเคราะห์ข้อมูล"
+
+read -p "กดปุ่มใดๆ เพื่อปิด..."

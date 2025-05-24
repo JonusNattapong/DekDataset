@@ -424,5 +424,158 @@
     },
     "examples": [],
     "parameters": {}
+  },
+  "primary_school_knowledge": {
+    "name": "Primary School Knowledge Dataset (ป.1-ป.6)",
+    "description": "Dataset สำหรับเนื้อหาวิชาหลัก ป.1-ป.6 ตามหลักสูตรแกนกลางฯ พ.ศ. 2551 ครอบคลุม ภาษาไทย คณิตศาสตร์ วิทยาศาสตร์ สังคม ศิลปะ สุขศึกษา-พลศึกษา การงานอาชีพ และภาษาอังกฤษ",
+    "format": "jsonl",
+    "schema": {
+      "fields": {
+        "grade": {"field_type": {"Enum": [1,2,3,4,5,6]}, "required": true, "description": "ระดับชั้น ป.1-ป.6"},
+        "subject": {"field_type": {"Enum": ["ภาษาไทย","คณิตศาสตร์","วิทยาศาสตร์","สังคมศึกษา","ศิลปะ","สุขศึกษาและพลศึกษา","การงานอาชีพและเทคโนโลยี","ภาษาอังกฤษ","ดนตรี","เทคโนโลยี","ภาษาจีน","ประวัติศาสตร์","ภูมิศาสตร์"]}, "required": true, "description": "กลุ่มสาระการเรียนรู้"},
+        "unit": {"field_type": "Text", "required": false, "description": "หน่วยการเรียนรู้/บท/หัวข้อย่อย"},
+        "topic": {"field_type": "Text", "required": false, "description": "หัวข้อย่อย/สาระสำคัญ"},
+        "content": {"field_type": "Text", "required": false, "description": "เนื้อหาหลัก/ข้อความประกอบ/ตัวอย่าง/โจทย์"},
+        "question": {"field_type": "Text", "required": false, "description": "คำถาม/โจทย์/แบบฝึกหัด"},
+        "difficulty": {"field_type": {"Enum": ["ง่าย", "กลาง", "ยาก"]}, "required": false, "description": "ระดับความยากของข้อสอบ/โจทย์"},
+        "source": {"field_type": "Text", "required": false, "description": "แหล่งที่มาของข้อมูล (เช่น หนังสือ, เว็บไซต์, ครูผู้สอน)"},
+        "year": {"field_type": "Number", "required": false, "description": "ปีการศึกษา/ปีที่ออกข้อสอบ"},
+        "tags": {"field_type": {"Array": {"Text": {}}}, "required": false, "description": "ป้ายกำกับเพิ่มเติม (เช่น STEM, soft skills)"}
+      },
+      "relationships": []
+    },
+    "examples": [
+      {"grade": 1, "subject": "ภาษาไทย", "unit": "พยัญชนะไทย", "topic": "การอ่านพยัญชนะ ก-ฮ", "content": "ก ไก่ ข ไข่", "question": "ตัวอักษร 'ข' อ่านว่าอะไร"},
+      {"grade": 2, "subject": "คณิตศาสตร์", "unit": "การบวก", "topic": "บวกเลขสองหลัก", "content": "25 + 13 = ?", "question": "25 + 13 เท่ากับเท่าไร"},
+      {"grade": 3, "subject": "วิทยาศาสตร์", "unit": "สิ่งมีชีวิต", "topic": "วงจรชีวิตผีเสื้อ", "content": "ไข่ -> ตัวหนอน -> ดักแด้ -> ผีเสื้อ", "question": "ผีเสื้อเกิดจากอะไร"},
+      {"grade": 4, "subject": "สังคมศึกษา", "unit": "ประวัติศาสตร์", "topic": "เหตุการณ์สำคัญในชุมชน", "content": "วันสำคัญของหมู่บ้านคือวันสงกรานต์", "question": "วันสำคัญของหมู่บ้านคือวันอะไร"},
+      {"grade": 5, "subject": "ภาษาอังกฤษ", "unit": "Vocabulary", "topic": "คำศัพท์เกี่ยวกับครอบครัว", "content": "father, mother, sister, brother", "question": "What is the English word for 'พ่อ'?"},
+      {"grade": 6, "subject": "คณิตศาสตร์", "unit": "พีชคณิต", "topic": "สมการง่าย ๆ", "content": "x + 5 = 12", "question": "x เท่ากับเท่าไร ถ้า x + 5 = 12"},
+      {"grade": 4, "subject": "วิทยาศาสตร์", "unit": "การเปลี่ยนสถานะของน้ำ", "topic": "การระเหยและการควบแน่น", "content": "น้ำระเหยกลายเป็นไอเมื่อได้รับความร้อน และกลั่นตัวเป็นหยดน้ำเมื่อเย็นลง", "question": "การเปลี่ยนสถานะจากไอเป็นน้ำเรียกว่าอะไร"},
+      {"grade": 6, "subject": "ภาษาไทย", "unit": "การอ่านจับใจความ", "topic": "อ่านบทความสั้น", "content": "แมวกระโดดขึ้นโต๊ะเพื่อหลบฝน", "question": "สัตว์อะไรที่กระโดดขึ้นโต๊ะ?"}
+    ],
+    "parameters": {
+      "curriculum": {
+        "name": "curriculum",
+        "param_type": "enum",
+        "enum_values": ["ป.1-ป.6 หลักสูตรแกนกลาง 2551"],
+        "description": "เลือกหลักสูตรที่ต้องการสร้าง dataset",
+        "default": "ป.1-ป.6 หลักสูตรแกนกลาง 2551",
+        "required": false
+      }
+    }
+  },
+  "secondary_school_knowledge": {
+    "name": "Secondary School Knowledge Dataset (ม.1-ม.6)",
+    "description": "Dataset สำหรับเนื้อหาวิชาหลัก ม.1-ม.6 ตามหลักสูตรแกนกลางฯ พ.ศ. 2551 ครอบคลุม ภาษาไทย คณิตศาสตร์ วิทยาศาสตร์ สังคม ศิลปะ สุขศึกษา-พลศึกษา การงานอาชีพ และภาษาอังกฤษ",
+    "format": "jsonl",
+    "schema": {
+      "fields": {
+        "grade": {"field_type": {"Enum": [7,8,9,10,11,12]}, "required": true, "description": "ระดับชั้น ม.1-ม.6 (7-12)"},
+        "subject": {"field_type": {"Enum": ["ภาษาไทย","คณิตศาสตร์","วิทยาศาสตร์","สังคมศึกษา","ศิลปะ","สุขศึกษาและพลศึกษา","การงานอาชีพและเทคโนโลยี","ภาษาอังกฤษ","ดนตรี","เทคโนโลยี","ภาษาจีน","ประวัติศาสตร์","ภูมิศาสตร์"]}, "required": true, "description": "กลุ่มสาระการเรียนรู้"},
+        "unit": {"field_type": "Text", "required": false, "description": "หน่วยการเรียนรู้/บท/หัวข้อย่อย"},
+        "topic": {"field_type": "Text", "required": false, "description": "หัวข้อย่อย/สาระสำคัญ"},
+        "content": {"field_type": "Text", "required": false, "description": "เนื้อหาหลัก/ข้อความประกอบ/ตัวอย่าง/โจทย์"},
+        "question": {"field_type": "Text", "required": false, "description": "คำถาม/โจทย์/แบบฝึกหัด"},
+        "choices": {"field_type": {"Array": {"Text": {}}}, "required": false, "description": "ตัวเลือก (ถ้ามี)"},
+        "difficulty": {"field_type": {"Enum": ["ง่าย", "กลาง", "ยาก"]}, "required": false, "description": "ระดับความยากของข้อสอบ/โจทย์"},
+        "source": {"field_type": "Text", "required": false, "description": "แหล่งที่มาของข้อมูล (เช่น หนังสือ, เว็บไซต์, ครูผู้สอน)"},
+        "year": {"field_type": "Number", "required": false, "description": "ปีการศึกษา/ปีที่ออกข้อสอบ"},
+        "tags": {"field_type": {"Array": {"Text": {}}}, "required": false, "description": "ป้ายกำกับเพิ่มเติม (เช่น STEM, soft skills)"}
+      },
+      "relationships": []
+    },
+    "examples": [
+      {"grade": 7, "subject": "ภาษาไทย", "unit": "วรรณคดี", "topic": "นิทานพื้นบ้าน", "question": "ข้อใดคือจุดเด่นของนิทานพื้นบ้านไทย?", "choices": ["สอนใจ", "ตลกขบขัน", "เน้นเหตุการณ์จริง", "เกี่ยวกับวิทยาศาสตร์"]},
+      {"grade": 8, "subject": "คณิตศาสตร์", "unit": "สมการเชิงเส้นตัวแปรเดียว", "topic": "การแก้สมการ", "question": "ถ้า 2x + 3 = 11 แล้ว x เท่ากับข้อใด?", "choices": ["3", "4", "5", "6"]},
+      {"grade": 9, "subject": "วิทยาศาสตร์", "unit": "เซลล์และการดำรงชีวิต", "topic": "หน้าที่ของออร์แกเนลล์", "question": "ไมโทคอนเดรียในเซลล์มีหน้าที่อะไร?", "choices": ["สร้างพลังงาน", "สังเคราะห์โปรตีน", "ควบคุมการแบ่งเซลล์", "เก็บสารพันธุกรรม"]},
+      {"grade": 10, "subject": "สังคมศึกษา", "unit": "เศรษฐศาสตร์", "topic": "อุปสงค์และอุปทาน", "question": "ข้อใดเป็นปัจจัยที่มีผลต่ออุปสงค์?", "choices": ["รายได้", "อุณหภูมิ", "ความเร็วลม", "ความชื้น"]},
+      {"grade": 11, "subject": "ภาษาอังกฤษ", "unit": "Grammar", "topic": "Tenses", "question": "Which sentence is in the present perfect tense?", "choices": ["I have eaten.", "I eat.", "I will eat.", "I am eating."]},
+      {"grade": 12, "subject": "คณิตศาสตร์", "unit": "ตรีโกณมิติ", "topic": "ฟังก์ชันตรีโกณมิติ", "question": "ค่า sin 30 องศา เท่ากับข้อใด?", "choices": ["0.5", "0.866", "1", "0"]},
+      {"grade": 7, "subject": "วิทยาศาสตร์", "unit": "พันธุกรรม", "topic": "DNA และ RNA", "content": "DNA เป็นสารพันธุกรรมที่พบในนิวเคลียสของเซลล์", "question": "สารพันธุกรรมที่พบในนิวเคลียสของเซลล์คืออะไร"},
+      {"grade": 10, "subject": "ภาษาไทย", "unit": "การอ่านวิเคราะห์", "topic": "บทความวิเคราะห์", "content": "บทความนี้กล่าวถึงผลกระทบของเทคโนโลยีต่อสังคมไทย", "question": "บทความนี้กล่าวถึงเรื่องอะไร"}
+    ],
+    "parameters": {
+      "curriculum": {
+        "name": "curriculum",
+        "param_type": "enum",
+        "enum_values": ["ม.1-ม.6 หลักสูตรแกนกลาง 2551"],
+        "description": "เลือกหลักสูตรที่ต้องการสร้าง dataset",
+        "default": "ม.1-ม.6 หลักสูตรแกนกลาง 2551",
+        "required": false
+      }
+    }
+  },
+  "school_grade_promotion_exam": {
+    "name": "School Grade Promotion Exam Dataset",
+    "description": "Dataset สำหรับข้อสอบวัดผลเพื่อเลื่อนชั้น (สอบเลื่อนระดับ) เช่น ป.1 ขึ้น ป.2, ม.3 ขึ้น ม.4 ฯลฯ ครอบคลุมทุกกลุ่มสาระและรูปแบบข้อสอบ (ปรนัย/อัตนัย/QA)",
+    "format": "jsonl",
+    "schema": {
+      "fields": {
+        "from_grade": {"field_type": {"Enum": [1,2,3,4,5,6,7,8,9,10,11]}, "required": true, "description": "ชั้นเดิม (ก่อนเลื่อน)"},
+        "to_grade": {"field_type": {"Enum": [2,3,4,5,6,7,8,9,10,11,12]}, "required": true, "description": "ชั้นใหม่ (หลังเลื่อน)"},
+        "subject": {"field_type": {"Enum": ["ภาษาไทย","คณิตศาสตร์","วิทยาศาสตร์","สังคมศึกษา","ศิลปะ","สุขศึกษาและพลศึกษา","การงานอาชีพและเทคโนโลยี","ภาษาอังกฤษ","ดนตรี","เทคโนโลยี","ภาษาจีน","ประวัติศาสตร์","ภูมิศาสตร์"]}, "required": true, "description": "กลุ่มสาระการเรียนรู้"},
+        "unit": {"field_type": "Text", "required": false, "description": "หน่วยการเรียนรู้/บท/หัวข้อย่อย"},
+        "topic": {"field_type": "Text", "required": false, "description": "หัวข้อย่อย/สาระสำคัญ"},
+        "content": {"field_type": "Text", "required": false, "description": "เนื้อหาหลัก/ข้อความประกอบ/ตัวอย่าง/โจทย์"},
+        "question": {"field_type": "Text", "required": true, "description": "คำถาม/โจทย์/แบบฝึกหัด"},
+        "choices": {"field_type": {"Array": {"Text": {}}}, "required": false, "description": "ตัวเลือก (ถ้ามี)"},
+        "difficulty": {"field_type": {"Enum": ["ง่าย", "กลาง", "ยาก"]}, "required": false, "description": "ระดับความยากของข้อสอบ/โจทย์"},
+        "source": {"field_type": "Text", "required": false, "description": "แหล่งที่มาของข้อมูล (เช่น หนังสือ, เว็บไซต์, ครูผู้สอน)"},
+        "year": {"field_type": "Number", "required": false, "description": "ปีการศึกษา/ปีที่ออกข้อสอบ"},
+        "tags": {"field_type": {"Array": {"Text": {}}}, "required": false, "description": "ป้ายกำกับเพิ่มเติม (เช่น STEM, soft skills)"}
+      },
+      "relationships": []
+    },
+    "examples": [
+      {"from_grade": 3, "to_grade": 4, "subject": "คณิตศาสตร์", "unit": "การคูณ", "topic": "สูตรคูณแม่ 7", "question": "7 x 8 = ?", "choices": ["54", "56", "58", "60"]},
+      {"from_grade": 6, "to_grade": 7, "subject": "ภาษาอังกฤษ", "unit": "Grammar", "topic": "Tenses", "question": "Which sentence is in the past simple tense?", "choices": ["I eat.", "I am eating.", "I ate.", "I will eat."]},
+      {"from_grade": 9, "to_grade": 10, "subject": "วิทยาศาสตร์", "unit": "ชีววิทยา", "topic": "เซลล์", "question": "ออร์แกเนลล์ใดในเซลล์ที่ทำหน้าที่สังเคราะห์โปรตีน?", "choices": ["ไมโทคอนเดรีย", "ไรโบโซม", "นิวเคลียส", "โกลจิบอดี้"]},
+      {"from_grade": 5, "to_grade": 6, "subject": "สังคมศึกษา", "unit": "ประวัติศาสตร์", "topic": "วันสำคัญของชาติไทย", "question": "วันใดเป็นวันเฉลิมพระชนมพรรษาของในหลวงรัชกาลที่ 9?", "choices": ["5 ธันวาคม", "12 สิงหาคม", "6 เมษายน", "13 ตุลาคม"]},
+      {"from_grade": 2, "to_grade": 3, "subject": "ภาษาไทย", "unit": "การอ่านจับใจความ", "topic": "อ่านบทความสั้น", "content": "แมวกระโดดขึ้นโต๊ะเพื่อหลบฝน", "question": "สัตว์อะไรที่กระโดดขึ้นโต๊ะ?"}
+    ],
+    "parameters": {
+      "promotion_type": {
+        "name": "promotion_type",
+        "param_type": "enum",
+        "enum_values": ["สอบเลื่อนชั้นประถม", "สอบเลื่อนชั้นมัธยม", "สอบเลื่อนชั้นรวมทุกระดับ"],
+        "description": "เลือกประเภทการสอบเลื่อนชั้น",
+        "default": "สอบเลื่อนชั้นรวมทุกระดับ",
+        "required": false
+      }
+    }
+  },
+  "medical_benchmark": {
+    "name": "Medical Benchmark/Evaluation Dataset",
+    "description": "Dataset สำหรับข้อสอบ/โจทย์ประเมินความรู้ทางการแพทย์ (Medical Benchmark) เช่น ข้อสอบปรนัย อัตนัย พร้อมเฉลยและคำอธิบาย เหมาะสำหรับการประเมิน LLM หรือ AI ด้านการแพทย์",
+    "format": "jsonl",
+    "schema": {
+      "fields": {
+        "question": {"field_type": "Text", "required": true, "description": "คำถาม/โจทย์ทางการแพทย์ (ภาษาไทยหรืออังกฤษ)"},
+        "context": {"field_type": "Text", "required": false, "description": "บริบท/ข้อความประกอบ/กรณีศึกษา (ถ้ามี)"},
+        "choices": {"field_type": {"Array": {"Text": {}}}, "required": false, "description": "ตัวเลือก (ถ้าเป็นข้อสอบปรนัย)"},
+        "answer": {"field_type": "Text", "required": true, "description": "คำตอบที่ถูกต้อง (หรือเฉลย)"},
+        "explanation": {"field_type": "Text", "required": false, "description": "คำอธิบาย/เหตุผลประกอบคำตอบ (ถ้ามี)"},
+        "difficulty": {"field_type": {"Enum": ["ง่าย", "กลาง", "ยาก"]}, "required": false, "description": "ระดับความยากของข้อสอบ/โจทย์"},
+        "source": {"field_type": "Text", "required": false, "description": "แหล่งที่มาของข้อมูล (เช่น หนังสือ, เว็บไซต์, อาจารย์แพทย์)"},
+        "tags": {"field_type": {"Array": {"Text": {}}}, "required": false, "description": "ป้ายกำกับเพิ่มเติม (เช่น โรค, ระบบอวัยวะ, clinical reasoning)"}
+      },
+      "relationships": []
+    },
+    "examples": [
+      {"question": "ผู้ป่วยชายอายุ 60 ปี มีอาการแน่นหน้าอกขณะออกกำลังกาย ควรสงสัยโรคใดมากที่สุด?", "choices": ["กล้ามเนื้อหัวใจขาดเลือดเฉียบพลัน", "โรคหอบหืด", "โรคปอดอุดกั้นเรื้อรัง", "กรดไหลย้อน"], "answer": "กล้ามเนื้อหัวใจขาดเลือดเฉียบพลัน", "difficulty": "กลาง"},
+      {"question": "What is the first-line treatment for hypertension in adults?", "choices": ["ACE inhibitors", "Beta-blockers", "Calcium channel blockers", "Diuretics"], "answer": "ACE inhibitors", "explanation": "ACE inhibitors are recommended as first-line therapy in many guidelines.", "difficulty": "กลาง"},
+      {"question": "อาการใดเป็นอาการหลักของโรคเบาหวาน?", "choices": ["กระหายน้ำบ่อย", "น้ำหนักขึ้น", "นอนหลับมากขึ้น", "ปวดข้อ"], "answer": "กระหายน้ำบ่อย"}
+    ],
+    "parameters": {
+      "benchmark_type": {
+        "name": "benchmark_type",
+        "param_type": "enum",
+        "enum_values": ["MCQ", "QA", "clinical_case", "mix"],
+        "description": "เลือกประเภทโจทย์ (MCQ, QA, clinical case, หรือผสม)",
+        "default": "mix",
+        "required": false
+      }
+    }
   }
 }

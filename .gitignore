@@ -27,3 +27,5 @@ Thumbs.db
 ./src/python/__pycache__
 photo
 scraped_images
+pdf/
+ocr_test/

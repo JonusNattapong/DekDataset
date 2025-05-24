@@ -51,20 +51,29 @@ class DeepseekClient:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.api_url = "https://api.deepseek.com/chat/completions"
-
+        
     def generate_dataset_with_prompt(self, task: dict, count: int) -> List[dict]:
         prompt = (
             f"คุณคือ AI สำหรับสร้าง dataset โจทย์: {task['name']}\n"
             f"รายละเอียด: {task['description']}\n"
             f"Schema: {task['schema']['fields']}\n"
-            f"โปรดสร้างตัวอย่างข้อมูล {count} ตัวอย่างในรูปแบบ JSON array ตาม schema ข้างต้น "
-            f"(ไม่ต้องอธิบายเพิ่ม, หลีกเลี่ยง placeholder, ใช้ภาษาไทยเป็นหลัก)"
+            f"โปรดสร้างตัวอย่างข้อมูล JSON จำนวน {count} ตัวอย่างในรูปแบบ JSON array ตาม schema ข้างต้น\n\n"
+            f"เงื่อนไขสำคัญ:\n"
+            f"1. ผลลัพธ์ต้องเป็น JSON array ที่ถูกต้อง - ตัวอย่าง: [{{\n  \"field1\": \"value\",\n  \"field2\": 123\n}}]\n"
+            f"2. ไม่ต้องอธิบายเพิ่มเติม ส่งเฉพาะ JSON array เท่านั้น\n"
+            f"3. หลีกเลี่ยงค่า placeholder หรือคำว่า 'example'\n"
+            f"4. ใช้ภาษาไทยเป็นหลัก"
         )
+        system_prompt = "You are a helpful AI dataset generator. Your task is to generate valid JSON data according to a specified schema. Only output valid JSON, nothing else."
         req_body = {
             "model": "deepseek-chat",
-            "temperature": 1.5,
+            "temperature": 1.2,
+            "max_tokens": 4000,
+            "response_format": {
+                "type": "json_object"
+            },
             "messages": [
-                {"role": "system", "content": "You are a helpful AI dataset generator."},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt}
             ]
         }
@@ -73,28 +82,33 @@ class DeepseekClient:
         resp.raise_for_status()
         resp_json = resp.json()
         content = resp_json["choices"][0]["message"]["content"]
-        # Strip code block if present
-        if content.strip().startswith("```json"):
-            content = content.strip()[7:]
-            if content.endswith("```"):
-                content = content[:-3]
-        content = content.strip()
-        if not content:
-            print("[ERROR] Deepseek output is empty!")
-            return []
-        # --- Robust JSON extraction ---
+        
+        # JSON Output format ควรคืนค่า JSON ที่สมบูรณ์อยู่แล้ว
         try:
-            # Find first JSON array in content
-            match = re.search(r'\[.*?\]', content, re.DOTALL)
-            if match:
-                array_str = match.group(0)
-                parsed = json.loads(array_str)
-                if isinstance(parsed, list):
-                    return parsed
-            # fallback: try normal parse (may error)
             parsed = json.loads(content)
             if isinstance(parsed, list):
                 return parsed
+            elif isinstance(parsed, dict) and "data" in parsed and isinstance(parsed["data"], list):
+                return parsed["data"]
+            else:
+                # ถ้า JSON ไม่ได้เป็น list โดยตรง แปลงเป็น list
+                return [parsed]
+                
+        except json.JSONDecodeError as e:
+            print(f"[ERROR] JSON parsing error: {e}")
+            print(f"Content: {content[:200]}...")
+            
+            # ถ้ายังคงมีปัญหา ลองใช้วิธีดึงส่วนที่เป็น JSON array ออกมา
+            try:
+                # Find first JSON array in content
+                match = re.search(r'\[.*?\]', content, re.DOTALL)
+                if match:
+                    array_str = match.group(0)
+                    parsed = json.loads(array_str)
+                    if isinstance(parsed, list):
+                        return parsed
+            except Exception:
+                pass
         except Exception as e:
             print("Error parsing Deepseek output:", e)
         return []
@@ -127,7 +141,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("task", help="Task name (e.g. sentiment_analysis)")
     parser.add_argument("count", type=int, help="Number of samples")
-    parser.add_argument("--format", choices=["json", "jsonl"], default="jsonl")
+    parser.add_argument("--format", choices=["json", "jsonl", "csv", "parquet"], default="jsonl", help="Output format: json, jsonl, csv, parquet")
     parser.add_argument("--import-vision", type=str, default=None, help="Path to vision-animals-dataset-*.jsonl to import/validate/export")
     parser.add_argument("--source_lang", type=str, default=None, help="Source language (for translation task)")
     parser.add_argument("--target_lang", type=str, default=None, help="Target language (for translation task)")
@@ -263,24 +277,63 @@ def main():
     output_dir = "data/output"
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, filename)
+
     if args.format == "jsonl":
         with open(output_path, "w", encoding="utf-8") as f:
             for entry in data_entries:
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-    else:
+    elif args.format == "json":
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(data_entries, f, ensure_ascii=False, indent=2)
+    elif args.format == "csv":
+        import csv
+        # Flatten content+metadata for CSV
+        if data_entries:
+            fieldnames = list(data_entries[0]["content"].keys())
+            # Optionally add id, metadata fields
+            fieldnames = ["id"] + fieldnames + ["metadata"]
+            with open(output_path, "w", encoding="utf-8", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                for entry in data_entries:
+                    row = {**entry["content"]}
+                    row["id"] = entry["id"]
+                    row["metadata"] = json.dumps(entry.get("metadata", {}), ensure_ascii=False)
+                    writer.writerow(row)
+    elif args.format == "parquet":
+        import pandas as pd
+        # Flatten content+metadata for DataFrame
+        rows = []
+        for entry in data_entries:
+            row = {**entry["content"]}
+            row["id"] = entry["id"]
+            row["metadata"] = json.dumps(entry.get("metadata", {}), ensure_ascii=False)
+            rows.append(row)
+        df = pd.DataFrame(rows)
+        df.to_parquet(output_path, index=False)
+    else:
+        raise ValueError(f"Unknown format: {args.format}")
     print(f"Dataset saved to {output_path}")
 
 def deduplicate_entries(entries: list, key_fields=None) -> list:
     """Remove duplicate entries by key fields (default: all fields)."""
+    def make_hashable(obj):
+        if isinstance(obj, (tuple, str, int, float, bool, type(None))):
+            return obj
+        elif isinstance(obj, list):
+            return tuple(make_hashable(x) for x in obj)
+        elif isinstance(obj, dict):
+            return tuple(sorted((k, make_hashable(v)) for k, v in obj.items()))
+        else:
+            return str(obj)
+
     seen = set()
     result = []
     for e in entries:
         if key_fields:
-            key = tuple(e.get(k) for k in key_fields)
+            key = tuple(make_hashable(e.get(k)) for k in key_fields)
         else:
-            key = tuple(sorted(e.items()))
+            key = tuple(sorted((k, make_hashable(v)) for k, v in e.items()))
         if key not in seen:
             seen.add(key)
             result.append(e)
