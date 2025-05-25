@@ -334,7 +334,7 @@ python src/python/generate_dataset.py business_analysis 75 --input-file quarterl
 ### Project Information
 
 - **👨‍💻 Developed by**: ZOMBIT Team
-- **🌐 Repository**: [github.com/zombitx64/DekDataset](https://github.com/JonusNattapong/DekDataset)
+- **🌐 Repository**: [github.com/JonusNattapong/DekDataset](https://github.com/JonusNattapong/DekDataset)
 - **📧 Contact**: zombitx64@gmail.com
 - **🎯 Version**: 2025.05 - Production Ready
 - **🏷️ Tags**: AI, ML, Dataset, Thai NLP, OCR, Synthetic Data, DeepSeek, Python
