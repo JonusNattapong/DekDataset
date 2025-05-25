@@ -334,7 +334,7 @@ python src/python/generate_dataset.py business_analysis 75 --input-file quarterl
 ### Project Information
 
 - **👨‍💻 Developed by**: ZOMBIT Team
-- **🌐 Repository**: [github.com/zombitx64/DekDataset](https://github.com/zombitx64/DekDataset)
+- **🌐 Repository**: [github.com/zombitx64/DekDataset](https://github.com/JonusNattapong/DekDataset)
 - **📧 Contact**: zombitx64@gmail.com
 - **🎯 Version**: 2025.05 - Production Ready
 - **🏷️ Tags**: AI, ML, Dataset, Thai NLP, OCR, Synthetic Data, DeepSeek, Python
@@ -345,8 +345,8 @@ python src/python/generate_dataset.py business_analysis 75 --input-file quarterl
 
 **⭐ Star this repository if you find it useful!**
 
-[![GitHub stars](https://img.shields.io/github/stars/zombitx64/DekDataset?style=social)](https://github.com/zombitx64/DekDataset/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/zombitx64/DekDataset?style=social)](https://github.com/zombitx64/DekDataset/network/members)
-[![GitHub issues](https://img.shields.io/github/issues/zombitx64/DekDataset)](https://github.com/zombitx64/DekDataset/issues)
+[![GitHub stars](https://img.shields.io/github/stars/JonusNattapong/DekDataset?style=social)](https://github.com/JonusNattapong/DekDataset/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/JonusNattapong/DekDataset?style=social)](https://github.com/JonusNattapong/DekDataset/network/members)
+[![GitHub issues](https://img.shields.io/github/issues/JonusNattapong/DekDataset)](https://github.com/JonusNattapong/DekDataset/issues)
 
 </div>
