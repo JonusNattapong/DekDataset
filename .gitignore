@@ -29,3 +29,5 @@ photo
 scraped_images
 pdf/
 ocr_test/
+poppler-local/
+test/
