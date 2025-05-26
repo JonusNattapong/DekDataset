@@ -95,6 +95,28 @@ pip install playwright bs4 nest-asyncio crawl4ai pandas
 playwright install
 ```
 
+3. Install Poppler for PDF processing:
+```bash
+# Windows
+# Download and extract poppler-windows.zip from the repository
+unzip poppler-windows.zip -d ./poppler-local
+
+# Linux
+sudo apt-get update && sudo apt-get install -y poppler-utils
+
+# Mac
+brew install poppler
+```
+
+4. Verify OCR Installation:
+```bash
+# Test OCR setup
+python src/python/ocr_utils.py --test
+
+# Test PDF processing
+python src/python/ocr_utils.py --test-pdf sample.pdf
+```
+
 ## ⚡ Quick Start Examples
 
 ### Social Media Comment Extraction
@@ -227,6 +249,19 @@ python src/python/generate_dataset.py primary_school_knowledge 50 --input-file d
 
 # Generate with custom settings
 python src/python/generate_dataset.py medical_text_summarization 25 --delay 2 --format parquet
+
+# Generate with DeepSeek API
+python src/python/generate_dataset.py --model deepseek-chat --temperature 0.7 --task custom_task 100
+
+# Process large PDF documents
+python src/python/ocr_utils.py --input large_document.pdf --batch-size 10 --output extracted_text.txt
+
+# Generate dataset with specific language
+python src/python/generate_dataset.py sentiment_analysis 100 --language th --format jsonl
+
+# Export and merge datasets
+python src/python/data_utils.py merge dataset1.jsonl dataset2.jsonl --output merged.jsonl
+python src/python/data_utils.py convert input.jsonl --format parquet --output final.parquet
 ```
 
 ### 4. Advanced Usage
@@ -235,8 +270,51 @@ python src/python/generate_dataset.py medical_text_summarization 25 --delay 2 --
 # Start task definitions API server
 python src/python/task_definitions_api.py
 
-# Export to different formats
-python data/output/export_parquet_arrow.py data/output/dataset.jsonl parquet
+# DeepSeek API Advanced Usage
+# Generate with specific model parameters
+python src/python/generate_dataset.py custom_task 100 \
+  --model deepseek-chat \
+  --temperature 0.7 \
+  --top-p 0.9 \
+  --frequency-penalty 0.3
+
+# Batch generation with error recovery
+python src/python/generate_dataset.py sentiment_analysis 1000 \
+  --batch-size 50 \
+  --retry-attempts 3 \
+  --delay 2
+
+# Dataset Management
+# Convert between formats
+python src/python/data_utils.py convert dataset.jsonl \
+  --format parquet \
+  --compression snappy \
+  --output processed.parquet
+
+# Filter and clean dataset
+python src/python/data_utils.py clean dataset.jsonl \
+  --remove-duplicates \
+  --min-length 10 \
+  --language th \
+  --output cleaned.jsonl
+
+# Merge multiple datasets
+python src/python/data_utils.py merge \
+  dataset1.jsonl dataset2.jsonl dataset3.jsonl \
+  --output merged.jsonl \
+  --format parquet
+
+# Split dataset
+python src/python/data_utils.py split dataset.jsonl \
+  --train 0.8 \
+  --val 0.1 \
+  --test 0.1
+
+# Dataset Analysis
+python src/python/data_utils.py analyze dataset.jsonl \
+  --show-stats \
+  --plot-distributions \
+  --export-report report.pdf
 ```
 
 ---
