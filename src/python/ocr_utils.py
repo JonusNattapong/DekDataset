@@ -1,187 +1,192 @@
-def extract_text_from_file(file_path_or_url, MISTRAL_API_KEY, max_pages=None, max_workers=3):
+from typing import Dict, Any
+import easyocr
+
+def extract_text_with_easyocr(image, langs=['th', 'en']):
+    """Extract text from image using EasyOCR"""
+    try:
+        import easyocr
+        import numpy as np
+        from PIL import Image
+        
+        # Create reader instance
+        reader = easyocr.Reader(langs)
+        
+        # Convert PIL Image to numpy array if needed
+        if isinstance(image, Image.Image):
+            image_np = np.array(image)
+        else:
+            image_np = image
+            
+        # Perform OCR
+        results = reader.readtext(image_np)
+        
+        # Extract and join text
+        extracted_text = "\n".join([result[1] for result in results])
+        return extracted_text
+        
+    except Exception as e:
+        print(f"[ERROR] EasyOCR processing failed: {e}")
+        return ""
+
+import os
+import concurrent.futures
+import time
+import requests
+import numpy as np
+from PIL import Image
+import io
+
+# Add new imports
+try:
+    import fitz  # PyMuPDF
+    PYMUPDF_AVAILABLE = True
+except ImportError:
+    PYMUPDF_AVAILABLE = False
+
+def extract_text_with_pymupdf_easyocr(pdf_path: str, confidence_threshold: float = 0.5) -> str:
     """
-    Extract text from PDF/image file or document_url using Mistral OCR API.
-    Supports: PDF, JPG, PNG, and remote URLs (e.g. arXiv PDF).
+    Extract text from PDF using PyMuPDF for rendering and EasyOCR for text detection
     
     Args:
-        file_path_or_url: Path to file or URL
-        MISTRAL_API_KEY: API key for Mistral
-        max_pages: Limit number of pages to process (None = all pages)
-        max_workers: Number of concurrent workers for processing (default: 3)
-    """
-    import requests
-    import os
-    import concurrent.futures
-    import time
-    
-    try:
-        from pdf2image import convert_from_path
-        from PIL import Image
-    except ImportError as e:
-        raise ImportError(f"Required dependencies missing: {e}. Please install with: pip install pdf2image pillow")    # If input is a URL (http/https), use document_url mode
-    if file_path_or_url.startswith("http://") or file_path_or_url.startswith("https://"):
-        print(f"[DEBUG] Processing URL: {file_path_or_url}")
-        payload = {
-            "model": "mistral-ocr-2505",
-            "id": "doc-ocr-001",
-            "document": {
-                "document_url": file_path_or_url,
-                "document_name": os.path.basename(file_path_or_url),
-                "type": "document_url",
-            },
-            "pages": list(range(max_pages)) if max_pages else [0],  # Use max_pages limit
-            "include_image_base64": True,
-            "image_limit": 0,
-            "image_min_size": 0,        }
-        print(f"[DEBUG] Sending request to Mistral OCR API...")
-        response = requests.post(
-            "https://api.mistral.ai/v1/ocr",
-            headers={
-                "Authorization": f"Bearer {MISTRAL_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
-        )
-        print(f"[DEBUG] Response status: {response.status_code}")
-        if response.status_code == 200:
-            ocr_result = response.json()
-            text_result = ocr_result.get("text", "")
-            print(f"[DEBUG] Extracted text length: {len(text_result)} characters")
-            return text_result
-        else:
-            print(f"[OCR] Failed for URL: {response.status_code} - {response.text}")
-            return ""
-    else:
-        # Local file (PDF/image)
-        print(f"[DEBUG] Processing local file: {file_path_or_url}")
-        images = []
+        pdf_path: Path to PDF file
+        confidence_threshold: Minimum confidence score for OCR results (0-1)
         
-        if file_path_or_url.lower().endswith(".pdf"):
+    Returns:
+        Extracted text with page markers
+    """
+    if not PYMUPDF_AVAILABLE:
+        raise ImportError("PyMuPDF (fitz) not installed. Install with: pip install PyMuPDF")
+
+    try:
+        doc = fitz.open(pdf_path)
+        reader = easyocr.Reader(['th', 'en'])
+        full_text = ""
+        
+        print(f"[INFO] Processing PDF with {doc.page_count} pages")
+        
+        for page_num in range(doc.page_count):
             try:
-                # Set poppler path for Windows
-                poppler_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "poppler-local", "Library", "bin")
-                print(f"[DEBUG] Using poppler path: {poppler_path}")
+                page = doc[page_num]
+                print(f"[INFO] Processing page {page_num + 1}/{doc.page_count}")
                 
-                if os.path.exists(poppler_path):
-                    images = convert_from_path(file_path_or_url, poppler_path=poppler_path)
-                else:
-                    # Fallback to system poppler
-                    images = convert_from_path(file_path_or_url)
+                # Render page at higher resolution
+                mat = fitz.Matrix(3, 3)  # 3x scale
+                pix = page.get_pixmap(matrix=mat)
+                img_data = pix.tobytes("png")
                 
-                # Limit pages if specified
-                if max_pages and len(images) > max_pages:
-                    images = images[:max_pages]
-                    print(f"[DEBUG] Limited to first {max_pages} pages")
+                # Perform OCR
+                results = reader.readtext(img_data)
+                
+                # Extract text with confidence filtering
+                page_text = ""
+                for (bbox, text, confidence) in results:
+                    if confidence > confidence_threshold:
+                        page_text += text + " "
+                
+                full_text += f"\n--- Page {page_num + 1} ---\n{page_text.strip()}\n"
+                
+            except Exception as e:
+                print(f"[ERROR] Failed to process page {page_num + 1}: {e}")
+                full_text += f"\n--- Page {page_num + 1} ---\n[ERROR] Page processing failed\n"
+        
+        doc.close()
+        return full_text.strip()
+        
+    except Exception as e:
+        print(f"[ERROR] PDF processing failed: {e}")
+        return ""
+
+def extract_educational_content(pdf_path: str, lang: str = 'th') -> Dict[str, Any]:
+    """
+    Extract educational content from PDF with enhanced Thai language support
+    
+    Args:
+        pdf_path: Path to PDF file
+        lang: Primary language ('th' or 'en')
+    """
+    if not PYMUPDF_AVAILABLE:
+        raise ImportError("PyMuPDF (fitz) not installed. Install with: pip install PyMuPDF")
+
+    try:
+        doc = fitz.open(pdf_path)
+        reader = easyocr.Reader(['th', 'en'])
+        content = {
+            'title': '',
+            'sections': [],
+            'topics': [],
+            'examples': [],
+            'exercises': []
+        }
+        
+        current_section = ""
+        current_text = ""
+        
+        for page_num in range(doc.page_count):
+            try:
+                page = doc[page_num]
+                print(f"[INFO] Processing page {page_num + 1}/{doc.page_count}")
+                
+                # Get high-resolution render
+                mat = fitz.Matrix(3, 3)
+                pix = page.get_pixmap(matrix=mat)
+                img_data = pix.tobytes("png")
+                
+                # Perform OCR with layout analysis
+                results = reader.readtext(
+                    img_data,
+                    detail=1,
+                    paragraph=True
+                )
+                
+                # Process each text block
+                for block in results:
+                    text = block[1].strip()
+                    if not text:
+                        continue
+                        
+                    # Detect section headers
+                    if len(text) < 100 and any(x in text for x in ['บทที่', 'หัวข้อ', 'เรื่อง']):
+                        if current_section and current_text:
+                            content['sections'].append({
+                                'title': current_section,
+                                'content': current_text.strip()
+                            })
+                        current_section = text
+                        current_text = ""
+                        continue
                     
-                print(f"[DEBUG] Converted PDF to {len(images)} images")
+                    # Detect examples
+                    if any(x in text for x in ['ตัวอย่าง', 'เช่น', 'ยกตัวอย่าง']):
+                        content['examples'].append(text)
+                        continue
+                        
+                    # Detect exercises
+                    if any(x in text for x in ['แบบฝึกหัด', 'คำถาม', 'จงตอบ']):
+                        content['exercises'].append(text)
+                        continue
+                        
+                    # Add to current section
+                    current_text += text + "\n"
+                    
+                    # Extract key topics
+                    if len(text) < 200:
+                        for line in text.split('\n'):
+                            if any(x in line for x in ['•', '-', '๑', '๒', '๓']):
+                                content['topics'].append(line.strip())
+                
             except Exception as e:
-                if "poppler" in str(e).lower():
-                    raise Exception(
-                        "Poppler is required for PDF processing. "
-                        "Install it from: https://github.com/oschwartz10612/poppler-windows/releases "
-                        "or use: conda install -c conda-forge poppler"
-                    )
-                else:
-                    raise e
-        else:
-            images = [Image.open(file_path_or_url)]
-            print(f"[DEBUG] Loaded single image file")
-
-        def process_single_image(img_data):
-            """Process a single image with OCR"""
-            idx, img = img_data
-            try:
-                print(f"[DEBUG] Processing image {idx+1}/{len(images)}")
-                temp_img_path = f"temp_ocr_{idx}_{time.time()}.png"
-                img.save(temp_img_path, format='PNG')
-                  # Convert image to base64 for Vision API
-                import base64
-                with open(temp_img_path, "rb") as f:
-                    img_base64 = base64.b64encode(f.read()).decode()
+                print(f"[WARN] Error processing page {page_num + 1}: {e}")
                 
-                # Use Vision API for OCR instead of non-existent OCR API
-                payload = {
-                    "model": "pixtral-12b-2409",
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "text",
-                                    "text": "Extract all Thai and English text from this image. Return only the text content, no explanations."
-                                },
-                                {
-                                    "type": "image_url",
-                                    "image_url": f"data:image/png;base64,{img_base64}"
-                                }
-                            ]
-                        }
-                    ],
-                    "max_tokens": 2000,
-                    "temperature": 0
-                }
-                
-                response = requests.post(
-                    "https://api.mistral.ai/v1/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {MISTRAL_API_KEY}",
-                        "Content-Type": "application/json"
-                    },
-                    json=payload,
-                        timeout=30  # Add timeout
-                    )
-                  # Clean up temp file
-                if os.path.exists(temp_img_path):
-                    os.remove(temp_img_path)
-                
-                if response.status_code == 200:
-                    ocr_result = response.json()
-                    page_text = ocr_result["choices"][0]["message"]["content"]
-                    print(f"[DEBUG] Page {idx+1} extracted {len(page_text)} characters")
-                    return page_text
-                else:
-                    print(f"[OCR] Failed for page {idx+1}: {response.status_code} - {response.text}")
-                    return ""
-            except Exception as e:
-                print(f"[OCR] Error processing page {idx+1}: {e}")
-                # Clean up temp file on error
-                temp_img_path = f"temp_ocr_{idx}_{time.time()}.png"
-                if os.path.exists(temp_img_path):
-                    os.remove(temp_img_path)
-                return ""
-
-        # Process images concurrently
-        all_text = []
-        if len(images) <= 3 or max_workers == 1:
-            # Sequential processing for small number of images
-            for idx, img in enumerate(images):
-                page_text = process_single_image((idx, img))
-                all_text.append(page_text)
-        else:
-            # Concurrent processing for many images
-            print(f"[DEBUG] Using {max_workers} workers for concurrent processing")
-            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-                # Submit all tasks
-                future_to_idx = {}
-                for idx, img in enumerate(images):
-                    future = executor.submit(process_single_image, (idx, img))
-                    future_to_idx[future] = idx
-                
-                # Collect results in order
-                results = {}
-                for future in concurrent.futures.as_completed(future_to_idx):
-                    idx = future_to_idx[future]
-                    try:
-                        page_text = future.result()
-                        results[idx] = page_text
-                    except Exception as e:
-                        print(f"[OCR] Error in concurrent processing for page {idx+1}: {e}")
-                        results[idx] = ""
-                
-                # Sort results by page index
-                for idx in sorted(results.keys()):
-                    all_text.append(results[idx])
-
-        total_chars = sum(len(text) for text in all_text)
-        print(f"[INFO] Total extracted text: {total_chars} characters from {len(images)} pages")
-        return "\n".join(all_text)
+        # Add final section
+        if current_section and current_text:
+            content['sections'].append({
+                'title': current_section,
+                'content': current_text.strip()
+            })
+            
+        doc.close()
+        return content
+        
+    except Exception as e:
+        print(f"[ERROR] Failed to process educational PDF: {e}")
+        return None

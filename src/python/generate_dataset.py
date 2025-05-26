@@ -27,13 +27,17 @@ from data_utils import (
     upload_to_huggingface,
 )
 from ocr_utils import extract_text_from_file
+from social_media_utils import extract_social_media_comments, extract_twitter_comments, extract_reddit_comments, extract_youtube_comments
 
 # ----------------- Environment Setup -----------------
 load_dotenv()
 
 # Environment variables
 api_key = os.getenv("DEEPSEEK_API_KEY")
-
+twitter_api_key = os.getenv("TWITTER_BEARER_TOKEN")
+reddit_client_id = os.getenv("REDDIT_CLIENT_ID")
+reddit_client_secret = os.getenv("REDDIT_CLIENT_SECRET")
+youtube_api_key = os.getenv("YOUTUBE_API_KEY")
 
 # ----------------- Models -----------------
 class DataEntry:
@@ -1084,7 +1088,59 @@ def main():
         default=3,
         help="Number of concurrent workers for OCR processing (default: 3)",
     )
-    args = parser.parse_args()    # --- OCR extraction mode: extract text and optionally generate dataset ---
+
+    # Add social media extraction arguments
+    social_media_group = parser.add_argument_group('Social Media Extraction')
+    social_media_group.add_argument(
+        "--social-platform",
+        type=str,
+        choices=["twitter", "x", "reddit", "youtube", "pantip", "file"],
+        help="Social media platform to extract comments from"
+    )
+    social_media_group.add_argument(
+        "--social-query",
+        type=str,
+        help="Query for social media extraction (topic ID, video ID, subreddit, hashtag, etc.)"
+    )
+    social_media_group.add_argument(
+        "--social-max",
+        type=int,
+        default=100,
+        help="Maximum number of comments to extract"
+    )
+    social_media_group.add_argument(
+        "--social-include-sentiment",
+        action="store_true",
+        help="Include basic sentiment analysis for extracted comments"
+    )
+    social_media_group.add_argument(
+        "--social-lang",
+        type=str,
+        default="th",
+        help="Language filter for platforms that support it (e.g. 'th', 'en')"
+    )
+    social_media_group.add_argument(
+        "--social-time-filter",
+        type=str,
+        default="week",
+        choices=["hour", "day", "week", "month", "year", "all"],
+        help="Time filter for Reddit extraction"
+    )
+    social_media_group.add_argument(
+        "--social-text-column",
+        type=str,
+        default="text",
+        help="Column name containing text for file import"
+    )
+    social_media_group.add_argument(
+        "--social-platform-column",
+        type=str,
+        default="platform",
+        help="Column name containing platform for file import"
+    )
+    # ...continue with existing arguments...
+
+    # --- OCR extraction mode: extract text and optionally generate dataset ---
     if args.input_file:
         print(f"[DEBUG] OCR mode activated for file: {args.input_file}")
         mistral_api_key = os.getenv("MISTRAL_API_KEY")
@@ -1585,58 +1641,6 @@ def balance_label_entries(
 def split_dataset(
     data_entries: list,
     output_dir: str,
-    filename_prefix: str,
-    train_ratio=0.8,
-    valid_ratio=0.1,
-    test_ratio=0.1,
-    format="jsonl",
-):
-    """
-    สร้างไฟล์สำเนาสำหรับ train, validation และ test โดยสำเนาตามสัดส่วนที่กำหนด
-
-    Args:
-        data_entries: รายการข้อมูลทั้งหมด
-        output_dir: โฟลเดอร์ที่จะเก็บไฟล์แบ่ง
-        filename_prefix: prefix ของชื่อไฟล์ (ไม่มีนามสกุล)
-        train_ratio: สัดส่วนของ training set (default: 0.8)
-        valid_ratio: สัดส่วนของ validation set (default: 0.1)
-        test_ratio: สัดส่วนของ test set (default: 0.1)
-        format: รูปแบบไฟล์ ("jsonl", "json", "csv", "parquet")
-
-    Returns:
-        tuple ของ (train_path, valid_path, test_path)
-    """
-    import shutil
-
-    # Create filenames for copies
-    train_path = os.path.join(output_dir, f"{filename_prefix}-train.{format}")
-    valid_path = os.path.join(output_dir, f"{filename_prefix}-valid.{format}")
-    test_path = os.path.join(output_dir, f"{filename_prefix}-test.{format}")
-
-    # Get original file path
-    orig_path = os.path.join(output_dir, f"{filename_prefix}.{format}")
-
-    # Make copies of the original file
-    shutil.copy2(orig_path, train_path)
-    shutil.copy2(orig_path, valid_path)
-    shutil.copy2(orig_path, test_path)
-
-    n = len(data_entries)
-    train_samples = int(n * train_ratio)
-    valid_samples = int(n * valid_ratio)
-    test_samples = n - train_samples - valid_samples
-
-    print(
-        f"[INFO] Created dataset copies for train/valid/test (according to specified ratios):"
-    )
-    print(f"       - Original: {n} entries -> {orig_path}")
-    print(
-        f"       - Train: {train_samples} entries ({train_ratio*100:.1f}%) -> {train_path}"
-    )
-    print(
-        f"       - Valid: {valid_samples} entries ({valid_ratio*100:.1f}%) -> {valid_path}"
-    )
-    print(
         f"       - Test: {test_samples} entries ({test_ratio*100:.1f}%) -> {test_path}"
     )
     print(

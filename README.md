@@ -80,7 +80,108 @@
 
 ---
 
-## ⚡ Quick Start
+## 📦 Installation
+
+1. Install Python dependencies:
+```bash
+pip install -r requirements.txt
+
+# Install additional required packages
+pip install playwright bs4 nest-asyncio crawl4ai pandas
+```
+
+2. Install Playwright browsers:
+```bash
+playwright install
+```
+
+## ⚡ Quick Start Examples
+
+### Social Media Comment Extraction
+
+Extract comments from various social media platforms:
+
+```bash
+# Extract Twitter/X comments
+python src/python/get_comments.py x https://x.com/username/status/123456 --max_results 100
+
+# Extract Facebook comments
+python src/python/get_comments.py facebook https://facebook.com/post/123456 --max_results 50
+
+# Extract YouTube comments
+python src/python/get_comments.py youtube https://youtube.com/watch?v=videoId --max_results 200
+```
+
+### Save & Export Options
+
+Save extracted comments in different formats:
+
+```bash
+# Save as JSONL (default)
+python src/python/get_comments.py x https://x.com/post/123 --output comments.jsonl
+
+# Save as CSV
+python src/python/get_comments.py x https://x.com/post/123 --format csv --output comments.csv
+
+# Save with sentiment analysis
+python src/python/get_comments.py x https://x.com/post/123 --sentiment
+```
+
+### Advanced Features
+
+```bash
+# Extract with spam filtering
+python src/python/get_comments.py x https://x.com/post/123 --filter-spam
+
+# Extract with both sentiment and spam filtering
+python src/python/get_comments.py x https://x.com/post/123 --sentiment --filter-spam
+
+# Extract from local file
+python src/python/get_comments.py file path/to/comments.jsonl
+```
+
+## 🔍 Troubleshooting
+
+### Common Issues
+
+1. Playwright Installation
+```bash
+# If you see browser-related errors, try:
+playwright install
+playwright install chromium
+```
+
+2. SSL Certificate Errors
+```bash
+# Set environment variable to ignore SSL
+set PYTHONHTTPSVERIFY=0  # Windows
+export PYTHONHTTPSVERIFY=0  # Linux/Mac
+```
+
+3. Rate Limiting
+```bash
+# Use delay between requests
+python src/python/get_comments.py x https://x.com/post/123 --delay 5
+```
+
+### Platform-Specific Notes
+
+#### Twitter/X
+- Uses Playwright for extraction with fallback to Crawl4AI
+- Handles both old twitter.com and new x.com URLs
+- Supports thread extraction
+
+#### Facebook
+- Requires public posts
+- May need longer delays between requests
+- Supports post and comment extraction
+
+#### YouTube
+- Requires yt-dlp package
+- Supports both video IDs and full URLs
+- Can extract comments and replies
+
+## 🌟 Usage
 
 ### 1. Installation & Setup
 
@@ -91,6 +192,12 @@ cd DekDataset
 
 # Install dependencies
 pip install -r requirements.txt
+
+# Install additional required packages
+pip install playwright bs4 nest-asyncio crawl4ai pandas
+
+# Install Playwright browsers
+playwright install
 ```
 
 ### 2. Configure API Keys

@@ -1045,5 +1045,2006 @@
         "required": false
       }
     ]
+  },
+  "thai_social_historical_cultural_language_learning": {
+    "name": "ชุดข้อมูลการเรียนรู้ภาษาไทยผ่านสังคม ประวัติศาสตร์ และวัฒนธรรม (TSHCLL)",
+    "description": "ชุดข้อมูลสำหรับการเรียนรู้ภาษาไทยที่เน้นบริบททางสังคม ประวัติศาสตร์ และวัฒนธรรมไทย จัดเรียงตามระดับความยากจากง่ายไปยาก รวมถึงงาน เช่น การเรียนรู้คำศัพท์ การเติมประโยค การตอบคำถาม การสร้างข้อความ และการให้เหตุผลเกี่ยวกับวัฒนธรรม เพื่อพัฒนาทักษะภาษาไทยและความเข้าใจบริบทไทยอย่างลึกซึ้ง",
+    "format": "Jsonl",
+    "schema": {
+      "fields": {
+        "input": {
+          "field_type": "Text",
+          "required": true,
+          "description": "ข้อความนำเข้าหรือโจทย์สำหรับงาน เช่น คำศัพท์ คำถาม หรือบริบทสำหรับการสร้างข้อความ",
+          "constraints": [{"Length": {"min": 5, "max": 2000}}]
+        },
+        "task_type": {
+          "field_type": {"Enum": ["vocabulary", "sentence_completion", "question_answering", "text_generation", "cultural_reasoning"]},
+          "required": true,
+          "description": "ประเภทของงาน (การเรียนรู้คำศัพท์, การเติมประโยค, การตอบคำถาม, การสร้างข้อความ, การให้เหตุผลเกี่ยวกับวัฒนธรรม)"
+        },
+        "output": {
+          "field_type": "Text",
+          "required": true,
+          "description": "ผลลัพธ์ที่คาดหวัง เช่น คำแปล คำตอบ หรือข้อความที่สร้างขึ้น",
+          "constraints": [{"Length": {"min": 1, "max": 1000}}]
+        },
+        "context": {
+          "field_type": "Text",
+          "required": false,
+          "description": "บริบทเพิ่มเติม เช่น ข้อมูลประวัติศาสตร์หรือวัฒนธรรมสำหรับงาน",
+          "constraints": [{"Length": {"min": 10, "max": 5000}}]
+        },
+        "domain": {
+          "field_type": {"Enum": ["สังคม", "ประวัติศาสตร์", "วัฒนธรรม"]},
+          "required": true,
+          "description": "หมวดหมู่ของเนื้อหา (สังคม, ประวัติศาสตร์, วัฒนธรรม)"
+        },
+        "difficulty": {
+          "field_type": {"Enum": ["ง่าย", "ปานกลาง", "ยาก"]},
+          "required": true,
+          "description": "ระดับความยากของงาน"
+        }
+      },
+      "relationships": []
+    },
+    "examples": [
+      {
+        "input": "คำว่า 'สวัสดี' หมายถึงอะไร?",
+        "task_type": "vocabulary",
+        "output": "คำทักทายที่ใช้กล่าวสวัสดีตอนเช้า กลางวัน หรือเย็น",
+        "context": "เป็นคำที่ใช้ในชีวิตประจำวันของคนไทย",
+        "domain": "สังคม",
+        "difficulty": "ง่าย"
+      },
+      {
+        "input": "เติมคำในช่องว่าง: วันสงกรานต์คือเทศกาลที่คนไทย _____ น้ำเพื่อความสนุกและแสดงความเคารพ",
+        "task_type": "sentence_completion",
+        "output": "สาด",
+        "context": "วันสงกรานต์เป็นเทศกาลปีใหม่ไทยในเดือนเมษายน",
+        "domain": "วัฒนธรรม",
+        "difficulty": "ง่าย"
+      },
+      {
+        "input": "กรุงศรีอยุธยาเป็นราชธานีของไทยในช่วงใด?",
+        "task_type": "question_answering",
+        "output": "พ.ศ. 1893 - พ.ศ. 2310",
+        "context": "กรุงศรีอยุธยาเป็นราชธานีที่สำคัญของไทยนานกว่า 400 ปี",
+        "domain": "ประวัติศาสตร์",
+        "difficulty": "ปานกลาง"
+      },
+      {
+        "input": "เขียนย่อหน้าเกี่ยวกับความสำคัญของวัดพระแก้วในกรุงเทพฯ",
+        "task_type": "text_generation",
+        "output": "วัดพระแก้ว หรือวัดพระศรีรัตนศาสดาราม เป็นวัดที่สำคัญที่สุดในประเทศไทย ตั้งอยู่ในพระบรมมหาราชวัง กรุงเทพฯ เป็นที่ประดิษฐานพระแก้วมรกต พระพุทธรูปศักดิ์สิทธิ์ที่เป็นสัญลักษณ์ของชาติ วัดนี้ไม่เพียงแต่เป็นสถานที่ประกอบพิธีกรรมทางศาสนา แต่ยังเป็นแหล่งท่องเที่ยวที่สะท้อนศิลปะและวัฒนธรรมไทยอันงดงาม",
+        "context": "วัดพระแก้วเป็นมรดกทางวัฒนธรรมและศาสนาของไทย",
+        "domain": "วัฒนธรรม",
+        "difficulty": "ปานกลาง"
+      },
+      {
+        "input": "ทำไมคนไทยถึงให้ความสำคัญกับการไหว้พระในวันพระ?",
+        "task_type": "cultural_reasoning",
+        "output": "คนไทยให้ความสำคัญกับการไหว้พระในวันพระเพราะเป็นส่วนหนึ่งของพุทธศาสนา ซึ่งเป็นศาสนาหลักของประเทศ วันพระเป็นวันที่ชาวพุทธถือศีล ทำบุญ และปฏิบัติธรรมเพื่อชำระจิตใจและสะสมบุญ การไหว้พระแสดงถึงความเคารพต่อพระพุทธเจ้าและเป็นโอกาสในการขอพรเพื่อความเป็นสิริมงคลในชีวิต",
+        "context": "วันพระเป็นวันที่กำหนดตามปฏิทินจันทรคติของไทย",
+        "domain": "วัฒนธรรม",
+        "difficulty": "ยาก"
+      },
+      {
+        "input": "คำว่า 'ลอยกระทง' หมายถึงอะไร?",
+        "task_type": "vocabulary",
+        "output": "การปล่อยกระทงลงในแม่น้ำเพื่อขอขมาพระแม่คงคาและเฉลิมฉลอง",
+        "context": "ลอยกระทงเป็นประเพณีไทยที่จัดขึ้นในวันเพ็ญเดือนสิบสอง",
+        "domain": "วัฒนธรรม",
+        "difficulty": "ง่าย"
+      },
+      {
+        "input": "เติมคำในช่องว่าง: สมเด็จพระนเรศวรมหาราชทรงชนะศึก _____ ด้วยช้างศึก",
+        "task_type": "sentence_completion",
+        "output": "ยุทธหัตถี",
+        "context": "สมเด็จพระนเรศวรเป็นกษัตริย์แห่งกรุงศรีอยุธยาที่มีชัยชนะในสงคราม",
+        "domain": "ประวัติศาสตร์",
+        "difficulty": "ปานกลาง"
+      },
+      {
+        "input": "สมเด็จพระเจ้าตากสินมหาราชมีบทบาทอย่างไรในประวัติศาสตร์ไทย?",
+        "task_type": "question_answering",
+        "output": "สมเด็จพระเจ้าตากสินมหาราชทรงกอบกู้เอกราชของไทยหลังการเสียกรุงศรีอยุธยาครั้งที่สองใน พ.ศ. 2310 และทรงสถาปนากรุงธนบุรีเป็นราชธานี",
+        "context": "สมเด็จพระเจ้าตากสินเป็นกษัตริย์แห่งกรุงธนบุรี",
+        "domain": "ประวัติศาสตร์",
+        "difficulty": "ปานกลาง"
+      },
+      {
+        "input": "เขียนโพสต์โซเชียลมีเดียเชิญชวนให้คนมาร่วมงานบุญบั้งไฟที่ยโสธร",
+        "task_type": "text_generation",
+        "output": "มาเที่ยวงานบุญบั้งไฟที่ยโสธรกันเถอะ! เทศกาลสุดยิ่งใหญ่แห่งภาคอีสาน ชมการจุดบั้งไฟสุดอลังการ ร่วมขบวนแห่ และลิ้มรสอาหารอีสานแซ่บ ๆ บรรยากาศสนุกสุด ๆ มาสัมผัสวัฒนธรรมไทยแท้ ๆ กันนะ! #บุญบั้งไฟ #ยโสธร",
+        "context": "งานบุญบั้งไฟเป็นประเพณีขอฝนของภาคอีสาน",
+        "domain": "วัฒนธรรม",
+        "difficulty": "ปานกลาง"
+      },
+      {
+        "input": "อธิบายว่าทำไมการรำไทยเป็นศิลปะที่สำคัญในวัฒนธรรมไทย",
+        "task_type": "cultural_reasoning",
+        "output": "การรำไทยเป็นศิลปะที่สำคัญในวัฒนธรรมไทยเพราะเป็นการแสดงที่ผสมผสานความงามของท่าทาง ดนตรี และเครื่องแต่งกาย สะท้อนถึงประวัติศาสตร์และค่านิยมของสังคมไทย การรำไทยมักใช้ในพิธีกรรมสำคัญ เช่น การแสดงโขนหรือรำถวายพระในงานศาสนา และยังเป็นสื่อที่ถ่ายทอดเรื่องราวจากวรรณคดีไทย เช่น รามเกียรติ์ ซึ่งช่วยรักษามรดกทางวัฒนธรรมและสร้างความภาคภูมิใจในอัตลักษณ์ไทย",
+        "context": "การรำไทยเป็นศิลปะที่มีรากฐานจากสมัยอยุธยา",
+        "domain": "วัฒนธรรม",
+        "difficulty": "ยาก"
+      }
+    ],
+    "parameters": {
+      "domain": {
+        "name": "domain",
+        "param_type": "enum",
+        "enum_values": ["สังคม", "ประวัติศาสตร์", "วัฒนธรรม"],
+        "description": "เลือกหมวดหมู่ของเนื้อหา",
+        "default": "วัฒนธรรม",
+        "required": true
+      },
+      "task_type": {
+        "name": "task_type",
+        "param_type": "enum",
+        "enum_values": ["vocabulary", "sentence_completion", "question_answering", "text_generation", "cultural_reasoning"],
+        "description": "เลือกประเภทของงาน",
+        "default": "vocabulary",
+        "required": true
+      },
+      "difficulty_level": {
+        "name": "difficulty_level",
+        "param_type": "enum",
+        "enum_values": ["ง่าย", "ปานกลาง", "ยาก"],
+        "description": "เลือกระดับความยากของงาน",
+        "default": "ง่าย",
+        "required": true
+      }
+    },
+    "metrics": [
+      {
+        "name": "accuracy",
+        "description": "ความแม่นยำสำหรับงานตอบคำถามและเติมประโยค",
+        "type": "percentage",
+        "required": false
+      },
+      {
+        "name": "completeness",
+        "description": "ระดับความสมบูรณ์ของข้อความที่สร้างขึ้นหรือการให้เหตุผล",
+        "type": "percentage",
+        "required": false
+      },
+      {
+        "name": "cultural_accuracy",
+        "description": "ความถูกต้องของเนื้อหาที่เกี่ยวข้องกับบริบทวัฒนธรรม",
+        "type": "percentage",
+        "required": false
+      }
+    ]
+  },
+  "bias_detection": {
+    "name": "ชุดข้อมูลการตรวจจับความลำเอียงในภาษาไทย",
+    "description": "ชุดข้อมูลข้อความภาษาไทยพร้อมการระบุความลำเอียง (เช่น อคติทางเพศ ชาติพันธุ์ หรือวัฒนธรรม) สำหรับฝึกและประเมินโมเดลในการตรวจจับภาษาที่มีความลำเอียงและส่งเสริมการสื่อสารที่เป็นกลางและมีจริยธรรม",
+    "format": "Jsonl",
+    "schema": {
+      "fields": {
+        "text": {
+          "field_type": "Text",
+          "required": true,
+          "description": "ข้อความภาษาไทยที่อาจมีความลำเอียง",
+          "constraints": [{"Length": {"min": 10, "max": 500}}]
+        },
+        "bias_type": {
+          "field_type": {"Enum": ["เพศ", "ชาติพันธุ์", "วัฒนธรรม", "ศาสนา", "อายุ", "อื่นๆ"]},
+          "required": true,
+          "description": "ประเภทของความลำเอียงที่พบในข้อความ"
+        },
+        "annotation": {
+          "field_type": {"Object": {
+            "is_biased": {"field_type": "Boolean", "description": "ระบุว่าข้อความมีความลำเอียงหรือไม่"},
+            "explanation": {"field_type": "Text", "description": "คำอธิบายว่าทำไมข้อความถึงมีความลำเอียงหรือไม่"},
+            "neutral_alternative": {"field_type": "Text", "required": false, "description": "ข้อความทางเลือกที่เป็นกลาง (ถ้ามี)"}
+          }},
+          "required": true,
+          "description": "การวิเคราะห์และคำอธิบายเกี่ยวกับความลำเอียงในข้อความ"
+        },
+        "context": {
+          "field_type": "Text",
+          "required": false,
+          "description": "บริบทเพิ่มเติม เช่น ที่มาของข้อความหรือสถานการณ์ที่ใช้",
+          "constraints": [{"Length": {"min": 10, "max": 1000}}]
+        }
+      },
+      "relationships": []
+    },
+    "examples": [
+      {
+        "text": "ผู้หญิงทุกคนต้องเก่งเรื่องงานบ้าน",
+        "bias_type": "เพศ",
+        "annotation": {
+          "is_biased": true,
+          "explanation": "ข้อความนี้มีอคติทางเพศ โดยเหมารวมว่าผู้หญิงทุกคนต้องเก่งงานบ้าน ซึ่งเป็นการตีกรอบบทบาททางเพศ",
+          "neutral_alternative": "ทุกคนสามารถพัฒนาทักษะงานบ้านได้ตามความสนใจ"
+        },
+        "context": "พบในบทความเกี่ยวกับบทบาทครอบครัวในสื่อออนไลน์"
+      },
+      {
+        "text": "คนอีสานมักจะทำงานหนักและอดทน",
+        "bias_type": "ชาติพันธุ์",
+        "annotation": {
+          "is_biased": true,
+          "explanation": "ข้อความนี้มีอคติทางชาติพันธุ์ โดยเหมารวมลักษณะนิสัยของคนอีสาน ซึ่งอาจนำไปสู่การตีตราหรือ stereotype",
+          "neutral_alternative": "คนทุกภูมิภาคมีคุณสมบัติที่หลากหลายและสามารถทำงานหนักได้"
+        },
+        "context": "พบในโพสต์โซเชียลมีเดียเกี่ยวกับแรงงานในประเทศไทย"
+      },
+      {
+        "text": "ทุกคนในทีมทำงานอย่างมืออาชีพและมีประสิทธิภาพ",
+        "bias_type": "อื่นๆ",
+        "annotation": {
+          "is_biased": false,
+          "explanation": "ข้อความนี้ไม่มีอคติ เนื่องจากไม่มีการเหมารวมหรือตีตราตามเพศ ชาติพันธุ์ หรือกลุ่มใดๆ",
+          "neutral_alternative": null
+        },
+        "context": "พบในรายงานประจำปีของบริษัท"
+      },
+      {
+        "text": "คนรุ่นเก่ามักไม่เข้าใจเทคโนโลยีสมัยใหม่",
+        "bias_type": "อายุ",
+        "annotation": {
+          "is_biased": true,
+          "explanation": "ข้อความนี้มีอคติทางอายุ โดยเหมารวมว่าคนรุ่นเก่าขาดความสามารถในการใช้เทคโนโลยี ซึ่งไม่เป็นความจริงเสมอไป",
+          "neutral_alternative": "การเรียนรู้เทคโนโลยีขึ้นอยู่กับความสนใจและโอกาสของแต่ละบุคคล"
+        },
+        "context": "พบในบทความเกี่ยวกับการเปลี่ยนแปลงทางดิจิทัล"
+      },
+      {
+        "text": "ชาวมุสลิมในประเทศไทยมักประกอบอาชีพค้าขาย",
+        "bias_type": "ศาสนา",
+        "annotation": {
+          "is_biased": true,
+          "explanation": "ข้อความนี้มีอคติทางศาสนา โดยเหมารวมว่าชาวมุสลิมส่วนใหญ่ทำอาชีพค้าขาย ซึ่งเป็นการตีกรอบที่ไม่ครอบคลุมความหลากหลายของอาชีพ",
+          "neutral_alternative": "ชาวมุสลิมในประเทศไทยประกอบอาชีพที่หลากหลาย เช่นเดียวกับกลุ่มอื่นๆ"
+        },
+        "context": "พบในบทความเกี่ยวกับชุมชนในภาคใต้ของประเทศไทย"
+      },
+      {
+        "text": "การศึกษาในโรงเรียนควรเน้นความหลากหลายทางวัฒนธรรม",
+        "bias_type": "วัฒนธรรม",
+        "annotation": {
+          "is_biased": false,
+          "explanation": "ข้อความนี้ไม่มีอคติ เนื่องจากส่งเสริมความหลากหลายและความเท่าเทียมทางวัฒนธรรม",
+          "neutral_alternative": null
+        },
+        "context": "พบในนโยบายการศึกษาของโรงเรียน"
+      },
+      {
+        "text": "คนใต้พูดจาตรงไปตรงมาเกินไป บางครั้งดูหยาบคาย",
+        "bias_type": "ชาติพันธุ์",
+        "annotation": {
+          "is_biased": true,
+          "explanation": "ข้อความนี้มีอคติทางชาติพันธุ์ โดยตีตราว่าคนใต้มีลักษณะการพูดที่หยาบคาย ซึ่งเป็นการเหมารวมที่ไม่เหมาะสม",
+          "neutral_alternative": "สไตล์การสื่อสารของแต่ละคนแตกต่างกันขึ้นอยู่กับบุคลิกและบริบท"
+        },
+        "context": "พบในฟอรัมออนไลน์เกี่ยวกับวัฒนธรรมการสื่อสาร"
+      }
+    ],
+    "parameters": {
+      "bias_type": {
+        "name": "bias_type",
+        "param_type": "enum",
+        "enum_values": ["เพศ", "ชาติพันธุ์", "วัฒนธรรม", "ศาสนา", "อายุ", "อื่นๆ"],
+        "description": "เลือกประเภทของความลำเอียงที่ต้องการวิเคราะห์",
+        "default": "อื่นๆ",
+        "required": false
+      },
+      "domain": {
+        "name": "domain",
+        "param_type": "enum",
+        "enum_values": ["โซเชียลมีเดีย", "สื่อสิ่งพิมพ์", "การศึกษา", "การทำงาน", "ทั่วไป"],
+        "description": "บริบทหรือแหล่งที่มาของข้อความ",
+        "default": "ทั่วไป",
+        "required": false
+      }
+    },
+    "metrics": [
+      {
+        "name": "accuracy",
+        "description": "ความแม่นยำในการตรวจจับว่าข้อความมีความลำเอียงหรือไม่",
+        "type": "percentage",
+        "required": true
+      },
+      {
+        "name": "neutrality_score",
+        "description": "คะแนนความเป็นกลางของข้อความทางเลือกที่เสนอ",
+        "type": "percentage",
+        "required": false
+      },
+      {
+        "name": "cultural_sensitivity",
+        "description": "ระดับความเหมาะสมของคำอธิบายในบริบทวัฒนธรรมไทย",
+        "type": "percentage",
+        "required": false
+      }
+    ]
+  },
+  "comprehensive_agriculture": {
+    "name": "ชุดข้อมูลเกษตรกรรมไทยแบบครบวงจร",
+    "description": "ชุดข้อมูลมัลติโมดัลที่รวบรวมข้อมูลด้านเกษตรกรรมของไทย รวมถึงข้อมูลการผลิตพืช คุณสมบัติดิน ข้อมูลเกษตรกร การใช้ที่ดิน และปัจจัยทางเศรษฐกิจ เพื่อสนับสนุนการวิเคราะห์และแนะนำแนวทางสำหรับเกษตรกร นักวางนโยบาย และนักวางแผนเกษตร",
+    "format": "Jsonl",
+    "schema": {
+      "fields": {
+        "record_id": {
+          "field_type": "Text",
+          "required": true,
+          "description": "รหัสประจำบันทึกข้อมูล",
+          "constraints": [{"Format": "UUID"}]
+        },
+        "data_category": {
+          "field_type": {"Enum": ["การผลิตพืช", "คุณสมบัติดิน", "ข้อมูลเกษตรกร", "การใช้ที่ดิน", "เศรษฐกิจเกษตร"]},
+          "required": true,
+          "description": "หมวดหมู่ของข้อมูล"
+        },
+        "data_content": {
+          "field_type": {"Object": {
+            "crop_data": {
+              "field_type": {"Object": {
+                "crop_type": {"field_type": "Text", "description": "ประเภทพืช เช่น ข้าว ยางพารา"},
+                "yield": {"field_type": "Float", "description": "ผลผลิต (ตัน/ไร่)"},
+                "planting_date": {"field_type": "Date", "description": "วันที่ปลูก"},
+                "harvest_date": {"field_type": "Date", "description": "วันที่เก็บเกี่ยว"}
+              }},
+              "required": false,
+              "description": "ข้อมูลเกี่ยวกับการผลิตพืช"
+            },
+            "soil_data": {
+              "field_type": {"Object": {
+                "soil_type": {"field_type": "Text", "description": "ประเภทดิน เช่น ดินเหนียว ดินร่วน"},
+                "ph_level": {"field_type": "Float", "description": "ค่า pH ของดิน"},
+                "nutrient_levels": {"field_type": "Text", "description": "ระดับสารอาหาร เช่น ไนโตรเจน ฟอสฟอรัส"}
+              }},
+              "required": false,
+              "description": "ข้อมูลคุณสมบัติดิน"
+            },
+            "farmer_data": {
+              "field_type": {"Object": {
+                "age": {"field_type": "Integer", "description": "อายุของเกษตรกร"},
+                "gender": {"field_type": {"Enum": ["ชาย", "หญิง", "อื่นๆ"]}, "description": "เพศ"},
+                "income": {"field_type": "Float", "description": "รายได้ต่อปี (บาท)"},
+                "education_level": {"field_type": "Text", "description": "ระดับการศึกษา"}
+              }},
+              "required": false,
+              "description": "ข้อมูลเกษตรกร"
+            },
+            "land_use": {
+              "field_type": {"Object": {
+                "area": {"field_type": "Float", "description": "พื้นที่เพาะปลูก (ไร่)"},
+                "land_ownership": {"field_type": {"Enum": ["เป็นเจ้าของ", "เช่า", "อื่นๆ"]}, "description": "สถานะการถือครองที่ดิน"}
+              }},
+              "required": false,
+              "description": "ข้อมูลการใช้ที่ดิน"
+            },
+            "economic_data": {
+              "field_type": {"Object": {
+                "market_price": {"field_type": "Float", "description": "ราคาตลาดของผลผลิต (บาท/กิโลกรัม)"},
+                "production_cost": {"field_type": "Float", "description": "ต้นทุนการผลิต (บาท/ไร่)"}
+              }},
+              "required": false,
+              "description": "ข้อมูลเศรษฐกิจเกษตร"
+            }
+          }},
+          "required": true,
+          "description": "เนื้อหาข้อมูลตามหมวดหมู่"
+        },
+        "geolocation": {
+          "field_type": {"Object": {
+            "latitude": {"field_type": "Float", "description": "ละติจูด"},
+            "longitude": {"field_type": "Float", "description": "ลองจิจูด"},
+            "province": {"field_type": "Text", "description": "จังหวัด"}
+          }},
+          "required": false,
+          "description": "ข้อมูลพิกัดภูมิศาสตร์"
+        },
+        "task": {
+          "field_type": {"Object": {
+            "task_type": {"field_type": {"Enum": ["การคาดการณ์ผลผลิต", "แนะนำการจัดการดิน", "วิเคราะห์รายได้", "แนะนำพืชที่เหมาะสม"]}, "description": "ประเภทงานที่ต้องการ"},
+            "expected_output": {"field_type": "Text", "description": "ผลลัพธ์ที่คาดหวัง เช่น การคาดการณ์ หรือคำแนะนำ"}
+          }},
+          "required": true,
+          "description": "งานที่ต้องวิเคราะห์จากข้อมูล"
+        }
+      },
+      "relationships": []
+    },
+    "examples": [
+      {
+        "record_id": "a123e456-789b-012c-def3-456789abcdef",
+        "data_category": "การผลิตพืช",
+        "data_content": {
+          "crop_data": {
+            "crop_type": "ข้าวหอมมะลิ",
+            "yield": 0.8,
+            "planting_date": "2024-06-01",
+            "harvest_date": "2024-11-15"
+          }
+        },
+        "geolocation": {
+          "latitude": 16.8211,
+          "longitude": 103.2973,
+          "province": "ร้อยเอ็ด"
+        },
+        "task": {
+          "task_type": "การคาดการณ์ผลผลิต",
+          "expected_output": "คาดการณ์ผลผลิตข้าวหอมมะลิในฤดูกาลหน้า: ประมาณ 0.85 ตัน/ไร่ เนื่องจากสภาพอากาศดีขึ้น"
+        }
+      },
+      {
+        "record_id": "b456f789-012d-345e-ghi6-789012ghijkl",
+        "data_category": "คุณสมบัติดิน",
+        "data_content": {
+          "soil_data": {
+            "soil_type": "ดินร่วนปนทราย",
+            "ph_level": 5.8,
+            "nutrient_levels": "ไนโตรเจนต่ำ, ฟอสฟอรัสปานกลาง"
+          }
+        },
+        "geolocation": {
+          "latitude": 17.6307,
+          "longitude": 100.0991,
+          "province": "อุตรดิตถ์"
+        },
+        "task": {
+          "task_type": "แนะนำการจัดการดิน",
+          "expected_output": "แนะนำให้ปรับค่า pH ด้วยปูนขาวและเพิ่มปุ๋ยไนโตรเจนเพื่อเหมาะสมกับการปลูกมะม่วง"
+        }
+      },
+      {
+        "record_id": "c789g012-345f-678h-jkl9-012345klmnop",
+        "data_category": "ข้อมูลเกษตรกร",
+        "data_content": {
+          "farmer_data": {
+            "age": 45,
+            "gender": "ชาย",
+            "income": 150000,
+            "education_level": "มัธยมศึกษาปีที่ 6"
+          }
+        },
+        "geolocation": {
+          "latitude": 13.7367,
+          "longitude": 100.5331,
+          "province": "สมุทรปราการ"
+        },
+        "task": {
+          "task_type": "วิเคราะห์รายได้",
+          "expected_output": "รายได้ต่ำกว่าค่าเฉลี่ยของเกษตรกรในพื้นที่ แนะนำเข้าร่วมโครงการฝึกอบรมเกษตรแม่นยำ"
+        }
+      },
+      {
+        "record_id": "d012h345-678i-901j-mno0-123456mnopqr",
+        "data_category": "การใช้ที่ดิน",
+        "data_content": {
+          "land_use": {
+            "area": 10,
+            "land_ownership": "เป็นเจ้าของ"
+          }
+        },
+        "geolocation": {
+          "latitude": 19.9037,
+          "longitude": 99.8322,
+          "province": "เชียงราย"
+        },
+        "task": {
+          "task_type": "แนะนำพืชที่เหมาะสม",
+          "expected_output": "แนะนำปลูกกาแฟอาราบิก้า เนื่องจากพื้นที่สูงและดินเหมาะสม"
+        }
+      },
+      {
+        "record_id": "e345i678-901k-234l-pqr1-234567pqrstu",
+        "data_category": "เศรษฐกิจเกษตร",
+        "data_content": {
+          "economic_data": {
+            "market_price": 15,
+            "production_cost": 8000
+          }
+        },
+        "geolocation": {
+          "latitude": 14.9799,
+          "longitude": 102.0971,
+          "province": "นครราชสีมา"
+        },
+        "task": {
+          "task_type": "วิเคราะห์รายได้",
+          "expected_output": "กำไรสุทธิจากการปลูกมันสำปะหลังประมาณ 5000 บาท/ไร่ แนะนำลดต้นทุนด้วยปุ๋ยอินทรีย์"
+        }
+      }
+    ],
+    "parameters": {
+      "region": {
+        "name": "region",
+        "param_type": "enum",
+        "enum_values": ["เหนือ", "กลาง", "ตะวันออกเฉียงเหนือ", "ใต้", "ตะวันออก", "ตะวันตก"],
+        "description": "เลือกภูมิภาคของข้อมูล",
+        "default": "ทั้งหมด",
+        "required": false
+      },
+      "crop_type": {
+        "name": "crop_type",
+        "param_type": "text",
+        "description": "เลือกประเภทพืช เช่น ข้าว มันสำปะหลัง",
+        "default": null,
+        "required": false
+      },
+      "data_category": {
+        "name": "data_category",
+        "param_type": "enum",
+        "enum_values": ["การผลิตพืช", "คุณสมบัติดิน", "ข้อมูลเกษตรกร", "การใช้ที่ดิน", "เศรษฐกิจเกษตร"],
+        "description": "เลือกหมวดหมู่ของข้อมูล",
+        "default": "ทั้งหมด",
+        "required": false
+      }
+    },
+    "metrics": [
+      {
+        "name": "prediction_accuracy",
+        "description": "ความแม่นยำในการคาดการณ์ผลผลิตหรือผลลัพธ์อื่นๆ",
+        "type": "percentage",
+        "required": true
+      },
+      {
+        "name": "recommendation_relevance",
+        "description": "ความเหมาะสมของคำแนะนำตามบริบทเกษตรกรรม",
+        "type": "percentage",
+        "required": false
+      },
+      {
+        "name": "data_integration_score",
+        "description": "ประสิทธิภาพในการรวมข้อมูลจากหลายแหล่ง",
+        "type": "percentage",
+        "required": false
+      }
+    ]
+  },
+  "environmental_sustainability": {
+    "name": "ชุดข้อมูลสิ่งแวดล้อมและความยั่งยืนของไทย",
+    "description": "ชุดข้อมูลมัลติโมดัลที่รวบรวมข้อมูลด้านสิ่งแวดล้อมและความยั่งยืนของไทย รวมถึงข้อมูลสภาพภูมิอากาศ ทรัพยากรน้ำ ผืนป่า ความหลากหลายทางชีวภาพ และแนวปฏิบัติที่ยั่งยืน เพื่อสนับสนุนการวิเคราะห์ คาดการณ์ และแนะนำแนวทางสำหรับการจัดการสิ่งแวดล้อมและการพัฒนาที่ยั่งยืน",
+    "format": "Jsonl",
+    "schema": {
+      "fields": {
+        "record_id": {
+          "field_type": "Text",
+          "required": true,
+          "description": "รหัสประจำบันทึกข้อมูล",
+          "constraints": [{"Format": "UUID"}]
+        },
+        "data_category": {
+          "field_type": {"Enum": ["สภาพภูมิอากาศ", "ทรัพยากรน้ำ", "ผืนป่า", "ความหลากหลายทางชีวภาพ", "แนวปฏิบัติที่ยั่งยืน"]},
+          "required": true,
+          "description": "หมวดหมู่ของข้อมูลสิ่งแวดล้อม"
+        },
+        "data_content": {
+          "field_type": {"Object": {
+            "climate_data": {
+              "field_type": {"Object": {
+                "temperature": {"field_type": "Float", "description": "อุณหภูมิเฉลี่ย (°C)"},
+                "precipitation": {"field_type": "Float", "description": "ปริมาณน้ำฝน (มม.)"},
+                "date": {"field_type": "Date", "description": "วันที่บันทึกข้อมูล"}
+              }},
+              "required": false,
+              "description": "ข้อมูลสภาพภูมิอากาศ"
+            },
+            "water_data": {
+              "field_type": {"Object": {
+                "water_source": {"field_type": "Text", "description": "แหล่งน้ำ เช่น แม่น้ำ อ่างเก็บน้ำ"},
+                "water_quality": {"field_type": "Text", "description": "คุณภาพน้ำ เช่น pH ความขุ่น"},
+                "usage_volume": {"field_type": "Float", "description": "ปริมาณการใช้น้ำ (ลบ.ม.)"}
+              }},
+              "required": false,
+              "description": "ข้อมูลทรัพยากรน้ำ"
+            },
+            "forest_data": {
+              "field_type": {"Object": {
+                "forest_area": {"field_type": "Float", "description": "พื้นที่ป่า (ตารางกิโลเมตร)"},
+                "deforestation_rate": {"field_type": "Float", "description": "อัตราการตัดไม้ทำลายป่า (%)"},
+                "carbon_sequestration": {"field_type": "Float", "description": "การกักเก็บคาร์บอน (ตัน/ปี)"}
+              }},
+              "required": false,
+              "description": "ข้อมูลผืนป่า"
+            },
+            "biodiversity_data": {
+              "field_type": {"Object": {
+                "species_name": {"field_type": "Text", "description": "ชื่อสายพันธุ์ เช่น นกเงือก"},
+                "population_status": {"field_type": {"Enum": ["ใกล้สูญพันธุ์", "มีจำนวนมาก", "ลดลง"]}, "description": "สถานะประชากร"},
+                "habitat": {"field_type": "Text", "description": "ถิ่นที่อยู่อาศัย"}
+              }},
+              "required": false,
+              "description": "ข้อมูลความหลากหลายทางชีวภาพ"
+            },
+            "sustainability_data": {
+              "field_type": {"Object": {
+                "practice_type": {"field_type": "Text", "description": "แนวปฏิบัติ เช่น เกษตรอินทรีย์ การปลูกป่า"},
+                "impact_score": {"field_type": "Float", "description": "คะแนนผลกระทบต่อความยั่งยืน (0-100)"},
+                "adoption_rate": {"field_type": "Float", "description": "อัตราการนำไปใช้ (%)"}
+              }},
+              "required": false,
+              "description": "ข้อมูลแนวปฏิบัติที่ยั่งยืน"
+            }
+          }},
+          "required": true,
+          "description": "เนื้อหาข้อมูลตามหมวดหมู่"
+        },
+        "geolocation": {
+          "field_type": {"Object": {
+            "latitude": {"field_type": "Float", "description": "ละติจูด"},
+            "longitude": {"field_type": "Float", "description": "ลองจิจูด"},
+            "province": {"field_type": "Text", "description": "จังหวัด"}
+          }},
+          "required": false,
+          "description": "ข้อมูลพิกัดภูมิศาสตร์"
+        },
+        "task": {
+          "field_type": {"Object": {
+            "task_type": {"field_type": {"Enum": ["คาดการณ์สภาพภูมิอากาศ", "จัดการทรัพยากรน้ำ", "ประเมินการตัดไม้ทำลายป่า", "อนุรักษ์ความหลากหลายทางชีวภาพ", "แนะนำแนวปฏิบัติที่ยั่งยืน"]}, "description": "ประเภทงานที่ต้องการ"},
+            "expected_output": {"field_type": "Text", "description": "ผลลัพธ์ที่คาดหวัง เช่น การคาดการณ์ หรือคำแนะนำ"}
+          }},
+          "required": true,
+          "description": "งานที่ต้องวิเคราะห์จากข้อมูล"
+        }
+      },
+      "relationships": []
+    },
+    "examples": [
+      {
+        "record_id": "f1a2b3c4-d5e6-7f8a-9b0c-1d2e3f4a5b6c",
+        "data_category": "สภาพภูมิอากาศ",
+        "data_content": {
+          "climate_data": {
+            "temperature": 28.5,
+            "precipitation": 150.2,
+            "date": "2025-04-01"
+          }
+        },
+        "geolocation": {
+          "latitude": 18.7890,
+          "longitude": 98.9853,
+          "province": "เชียงใหม่"
+        },
+        "task": {
+          "task_type": "คาดการณ์สภาพภูมิอากาศ",
+          "expected_output": "คาดการณ์ปริมาณน้ำฝนในเดือนพฤษภาคม 2025: 180-200 มม. แนะนำเตรียมระบบระบายน้ำสำหรับเกษตรกร"
+        }
+      },
+      {
+        "record_id": "g2b3c4d5-e6f7-8a9b-0c1d-2e3f4b5c6d7e",
+        "data_category": "ทรัพยากรน้ำ",
+        "data_content": {
+          "water_data": {
+            "water_source": "แม่น้ำเจ้าพระยา",
+            "water_quality": "pH 7.2, ความขุ่นสูง",
+            "usage_volume": 12000
+          }
+        },
+        "geolocation": {
+          "latitude": 14.4667,
+          "longitude": 100.1167,
+          "province": "อยุธยา"
+        },
+        "task": {
+          "task_type": "จัดการทรัพยากรน้ำ",
+          "expected_output": "แนะนำติดตั้งระบบกรองน้ำและลดการใช้ในช่วงหน้าแล้งเพื่อรักษาคุณภาพน้ำ"
+        }
+      },
+      {
+        "record_id": "h3c4d5e6-f7a8-9b0c-1d2e-3f4a5c6d7e8f",
+        "data_category": "ผืนป่า",
+        "data_content": {
+          "forest_data": {
+            "forest_area": 50.5,
+            "deforestation_rate": 1.2,
+            "carbon_sequestration": 2000
+          }
+        },
+        "geolocation": {
+          "latitude": 14.4167,
+          "longitude": 99.9667,
+          "province": "กาญจนบุรี"
+        },
+        "task": {
+          "task_type": "ประเมินการตัดไม้ทำลายป่า",
+          "expected_output": "อัตราการตัดไม้ทำลายป่าสูงในพื้นที่ แนะนำเพิ่มการลาดตระเวนและโครงการปลูกป่า"
+        }
+      },
+      {
+        "record_id": "i4d5e6f7-a8b9-0c1d-2e3f-4a5b6c7d8e9a",
+        "data_category": "ความหลากหลายทางชีวภาพ",
+        "data_content": {
+          "biodiversity_data": {
+            "species_name": "นกเงือก",
+            "population_status": "ลดลง",
+            "habitat": "ป่าเขตร้อน"
+          }
+        },
+        "geolocation": {
+          "latitude": 6.5397,
+          "longitude": 101.2800,
+          "province": "นราธิวาส"
+        },
+        "task": {
+          "task_type": "อนุรักษ์ความหลากหลายทางชีวภาพ",
+          "expected_output": "แนะนำสร้างพื้นที่อนุรักษ์และลดการรบกวนถิ่นที่อยู่นกเงือก"
+        }
+      },
+      {
+        "record_id": "j5e6f7a8-b9c0-1d2e-3f4a-5b6c7d8e9f0b",
+        "data_category": "แนวปฏิบัติที่ยั่งยืน",
+        "data_content": {
+          "sustainability_data": {
+            "practice_type": "เกษตรอินทรีย์",
+            "impact_score": 85,
+            "adoption_rate": 30
+          }
+        },
+        "geolocation": {
+          "latitude": 16.8211,
+          "longitude": 103.2973,
+          "province": "ร้อยเอ็ด"
+        },
+        "task": {
+          "task_type": "แนะนำแนวปฏิบัติที่ยั่งยืน",
+          "expected_output": "แนะนำขยายการอบรมเกษตรอินทรีย์เพื่อเพิ่มอัตราการนำไปใช้ในชุมชน"
+        }
+      }
+    ],
+    "parameters": {
+      "region": {
+        "name": "region",
+        "param_type": "enum",
+        "enum_values": ["เหนือ", "กลาง", "ตะวันออกเฉียงเหนือ", "ใต้", "ตะวันออก", "ตะวันตก"],
+        "description": "เลือกภูมิภาคของข้อมูล",
+        "default": "ทั้งหมด",
+        "required": false
+      },
+      "data_category": {
+        "name": "data_category",
+        "param_type": "enum",
+        "enum_values": ["สภาพภูมิอากาศ", "ทรัพยากรน้ำ", "ผืนป่า", "ความหลากหลายทางชีวภาพ", "แนวปฏิบัติที่ยั่งยืน"],
+        "description": "เลือกหมวดหมู่ของข้อมูล",
+        "default": "ทั้งหมด",
+        "required": false
+      },
+      "time_period": {
+        "name": "time_period",
+        "param_type": "text",
+        "description": "เลือกช่วงเวลาของข้อมูล เช่น 2024-2025",
+        "default": null,
+        "required": false
+      }
+    },
+    "metrics": [
+      {
+        "name": "prediction_accuracy",
+        "description": "ความแม่นยำในการคาดการณ์ข้อมูลสิ่งแวดล้อม เช่น ปริมาณน้ำฝนหรืออัตราการตัดไม้",
+        "type": "percentage",
+        "required": true
+      },
+      {
+        "name": "recommendation_relevance",
+        "description": "ความเหมาะสมของคำแนะนำตามบริบทสิ่งแวดล้อม",
+        "type": "percentage",
+        "required": false
+      },
+      {
+        "name": "sustainability_impact",
+        "description": "ผลกระทบของคำแนะนำต่อความยั่งยืน",
+        "type": "percentage",
+        "required": false
+      }
+    ]
+  },
+  "medical_healthcare": {
+    "name": "ชุดข้อมูลสุขภาพและการแพทย์ของไทย",
+    "description": "ชุดข้อมูลมัลติโมดัลที่รวบรวมข้อมูลด้านสุขภาพและการแพทย์ของไทย รวมถึงบันทึกผู้ป่วย การแพร่ระบาดของโรค ตัวชี้วัดสุขภาพสาธารณะ และแนวปฏิบัติการแพทย์แผนไทย เพื่อสนับสนุนการวิเคราะห์วินิจฉัย การวางแผนสาธารณสุข และการแนะนำการรักษา",
+    "format": "Jsonl",
+    "schema": {
+      "fields": {
+        "record_id": {
+          "field_type": "Text",
+          "required": true,
+          "description": "รหัสประจำบันทึกข้อมูล",
+          "constraints": [{"Format": "UUID"}]
+        },
+        "data_category": {
+          "field_type": {"Enum": ["บันทึกผู้ป่วย", "การแพร่ระบาดของโรค", "สุขภาพสาธารณะ", "การแพทย์แผนไทย"]},
+          "required": true,
+          "description": "หมวดหมู่ของข้อมูลสุขภาพ"
+        },
+        "data_content": {
+          "field_type": {"Object": {
+            "patient_record": {
+              "field_type": {"Object": {
+                "age": {"field_type": "Integer", "description": "อายุของผู้ป่วย"},
+                "gender": {"field_type": {"Enum": ["ชาย", "หญิง", "อื่นๆ"]}, "description": "เพศ"},
+                "symptoms": {"field_type": "Text", "description": "อาการที่รายงาน"},
+                "diagnosis": {"field_type": "Text", "description": "การวินิจฉัย"},
+                "treatment": {"field_type": "Text", "description": "การรักษาที่ให้"}
+              }},
+              "required": false,
+              "description": "ข้อมูลบันทึกผู้ป่วย"
+            },
+            "disease_data": {
+              "field_type": {"Object": {
+                "disease_name": {"field_type": "Text", "description": "ชื่อโรค เช่น ไข้เลือดออก เบาหวาน"},
+                "case_count": {"field_type": "Integer", "description": "จำนวนผู้ป่วย"},
+                "date_reported": {"field_type": "Date", "description": "วันที่รายงาน"}
+              }},
+              "required": false,
+              "description": "ข้อมูลการแพร่ระบาดของโรค"
+            },
+            "public_health_data": {
+              "field_type": {"Object": {
+                "metric_name": {"field_type": "Text", "description": "ตัวชี้วัด เช่น อัตราการสูบบุหรี่"},
+                "value": {"field_type": "Float", "description": "ค่าตัวชี้วัด"},
+                "year": {"field_type": "Integer", "description": "ปีที่บันทึก"}
+              }},
+              "required": false,
+              "description": "ข้อมูลสุขภาพสาธารณะ"
+            },
+            "traditional_medicine_data": {
+              "field_type": {"Object": {
+                "remedy_name": {"field_type": "Text", "description": "ชื่อยาหรือวิธีการรักษา เช่น ขมิ้นชัน"},
+                "indication": {"field_type": "Text", "description": "ข้อบ่งใช้ เช่น รักษาอาการปวดท้อง"},
+                "preparation": {"field_type": "Text", "description": "วิธีการเตรียม"}
+              }},
+              "required": false,
+              "description": "ข้อมูลการแพทย์แผนไทย"
+            }
+          }},
+          "required": true,
+          "description": "เนื้อหาข้อมูลตามหมวดหมู่"
+        },
+        "geolocation": {
+          "field_type": {"Object": {
+            "latitude": {"field_type": "Float", "description": "ละติจูด"},
+            "longitude": {"field_type": "Float", "description": "ลองจิจูด"},
+            "province": {"field_type": "Text", "description": "จังหวัด"}
+          }},
+          "required": false,
+          "description": "ข้อมูลพิกัดภูมิศาสตร์"
+        },
+        "task": {
+          "field_type": {"Object": {
+            "task_type": {"field_type": {"Enum": ["วินิจฉัยโรค", "คาดการณ์การระบาด", "แนะนำการรักษา", "วิเคราะห์สุขภาพสาธารณะ"]}, "description": "ประเภทงานที่ต้องการ"},
+            "expected_output": {"field_type": "Text", "description": "ผลลัพธ์ที่คาดหวัง เช่น การวินิจฉัย หรือคำแนะนำ"}
+          }},
+          "required": true,
+          "description": "งานที่ต้องวิเคราะห์จากข้อมูล"
+        }
+      },
+      "relationships": []
+    },
+    "examples": [
+      {
+        "record_id": "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+        "data_category": "บันทึกผู้ป่วย",
+        "data_content": {
+          "patient_record": {
+            "age": 55,
+            "gender": "หญิง",
+            "symptoms": "เหนื่อยง่าย น้ำหนักลด เจ็บหน้าอก",
+            "diagnosis": "โรคหัวใจ",
+            "treatment": "ยาลดความดันและแนะนำปรับพฤติกรรมการกิน"
+          }
+        },
+        "geolocation": {
+          "latitude": 13.7367,
+          "longitude": 100.5331,
+          "province": "กรุงเทพมหานคร"
+        },
+        "task": {
+          "task_type": "วินิจฉัยโรค",
+          "expected_output": "ยืนยันการวินิจฉัยโรคหัวใจ แนะนำตรวจคลื่นไฟฟ้าหัวใจเพิ่มเติม"
+        }
+      },
+      {
+        "record_id": "b2c3d4e5-f6a7-8b9c-0d1e-2f3a4b5c6d7e",
+        "data_category": "การแพร่ระบาดของโรค",
+        "data_content": {
+          "disease_data": {
+            "disease_name": "ไข้เลือดออก",
+            "case_count": 120,
+            "date_reported": "2025-06-15"
+          }
+        },
+        "geolocation": {
+          "latitude": 7.0086,
+          "longitude": 100.4747,
+          "province": "สงขลา"
+        },
+        "task": {
+          "task_type": "คาดการณ์การระบาด",
+          "expected_output": "คาดการณ์ผู้ป่วยไข้เลือดออกเพิ่มขึ้น 20% ในเดือนหน้า แนะนำกำจัดแหล่งน้ำขัง"
+        }
+      },
+      {
+        "record_id": "c3d4e5f6-a7b8-9c0d-1e2f-3a4b5c6d7e8f",
+        "data_category": "สุขภาพสาธารณะ",
+        "data_content": {
+          "public_health_data": {
+            "metric_name": "อัตราผู้ป่วยเบาหวาน",
+            "value": 8.5,
+            "year": 2024
+          }
+        },
+        "geolocation": {
+          "latitude": 16.8211,
+          "longitude": 103.2973,
+          "province": "ร้อยเอ็ด"
+        },
+        "task": {
+          "task_type": "วิเคราะห์สุขภาพสาธารณะ",
+          "expected_output": "อัตราผู้ป่วยเบาหวานสูงกว่าค่าเฉลี่ย แนะนำรณรงค์ลดการบริโภคน้ำตาล"
+        }
+      },
+      {
+        "record_id": "d4e5f6a7-b8c9-0d1e-2f3a-4b5c6d7e8f9a",
+        "data_category": "การแพทย์แผนไทย",
+        "data_content": {
+          "traditional_medicine_data": {
+            "remedy_name": "ขมิ้นชัน",
+            "indication": "รักษาอาการปวดท้อง",
+            "preparation": "ต้มรากขมิ้นชัน 10 กรัมกับน้ำ 500 มล. ดื่มวันละ 2 ครั้ง"
+          }
+        },
+        "geolocation": {
+          "latitude": 18.7890,
+          "longitude": 98.9853,
+          "province": "เชียงใหม่"
+        },
+        "task": {
+          "task_type": "แนะนำการรักษา",
+          "expected_output": "แนะนำใช้ขมิ้นชันสำหรับอาการปวดท้องเล็กน้อย ควบคู่กับการปรึกษาแพทย์หากอาการไม่ดีขึ้น"
+        }
+      }
+    ],
+    "parameters": {
+      "region": {
+        "name": "region",
+        "param_type": "enum",
+        "enum_values": ["เหนือ", "กลาง", "ตะวันออกเฉียงเหนือ", "ใต้", "ตะวันออก", "ตะวันตก"],
+        "description": "เลือกภูมิภาคของข้อมูล",
+        "default": "ทั้งหมด",
+        "required": false
+      },
+      "disease_type": {
+        "name": "disease_type",
+        "param_type": "text",
+        "description": "เลือกประเภทโรค เช่น เบาหวาน ไข้เลือดออก",
+        "default": null,
+        "required": false
+      },
+      "data_category": {
+        "name": "data_category",
+        "param_type": "enum",
+        "enum_values": ["บันทึกผู้ป่วย", "การแพร่ระบาดของโรค", "สุขภาพสาธารณะ", "การแพทย์แผนไทย"],
+        "description": "เลือกหมวดหมู่ของข้อมูล",
+        "default": "ทั้งหมด",
+        "required": false
+      }
+    },
+    "metrics": [
+      {
+        "name": "diagnostic_accuracy",
+        "description": "ความแม่นยำในการวินิจฉัยโรคหรือคาดการณ์",
+        "type": "percentage",
+        "required": true
+      },
+      {
+        "name": "recommendation_relevance",
+        "description": "ความเหมาะสมของคำแนะนำการรักษาหรือนโยบาย",
+        "type": "percentage",
+        "required": false
+      },
+      {
+        "name": "cultural_appropriateness",
+        "description": "ความเหมาะสมของคำแนะนำในบริบทวัฒนธรรมและการแพทย์แผนไทย",
+        "type": "percentage",
+        "required": false
+      }
+    ]
+  },
+  "localized_language_culture": {
+    "name": "ชุดข้อมูลภาษาและวัฒนธรรมท้องถิ่นของไทย",
+    "description": "ชุดข้อมูลมัลติโมดัลที่รวบรวมข้อมูลภาษาท้องถิ่น ภาษาชนกลุ่มน้อย และวัฒนธรรมของไทย รวมถึงข้อความ เสียง และบริบททางวัฒนธรรม เพื่อสนับสนุนการแปลภาษา การอธิบายวัฒนธรรม การสร้างเนื้อหา และการวิเคราะห์ความหมายที่เคารพบริบทท้องถิ่นและรักษามรดกวัฒนธรรมไทย",
+    "format": "Jsonl",
+    "schema": {
+      "fields": {
+        "record_id": {
+          "field_type": "Text",
+          "required": true,
+          "description": "รหัสประจำบันทึกข้อมูล",
+          "constraints": [{"Format": "UUID"}]
+        },
+        "data_category": {
+          "field_type": {"Enum": ["ภาษาถิ่น", "ภาษาชนกลุ่มน้อย", "วัฒนธรรมประเพณี", "นิทานพื้นบ้าน", "ศิลปหัตถกรรม"]},
+          "required": true,
+          "description": "หมวดหมู่ของข้อมูลภาษาและวัฒนธรรม"
+        },
+        "data_content": {
+          "field_type": {"Object": {
+            "dialect_data": {
+              "field_type": {"Object": {
+                "dialect_name": {"field_type": "Text", "description": "ชื่อภาษาถิ่น เช่น ภาษาเหนือ ภาษาอีสาน ภาษาใต้"},
+                "phrase": {"field_type": "Text", "description": "วลีหรือประโยคในภาษาถิ่น"},
+                "standard_thai": {"field_type": "Text", "description": "คำแปลเป็นภาษาไทยกลาง"},
+                "phonetic": {"field_type": "Text", "description": "การถอดเสียง phonetics", "required": false},
+                "audio_reference": {"field_type": "Text", "description": "ลิงก์หรือรหัสอ้างอิงไฟล์เสียง (ถ้ามี)", "required": false}
+              }},
+              "required": false,
+              "description": "ข้อมูลภาษาถิ่น"
+            },
+            "minority_language_data": {
+              "field_type": {"Object": {
+                "language_name": {"field_type": "Text", "description": "ชื่อภาษาชนกลุ่มน้อย เช่น กะเหรี่ยง มลายูปัตตานี เขมร"},
+                "phrase": {"field_type": "Text", "description": "วลีหรือประโยคในภาษาชนกลุ่มน้อย"},
+                "standard_thai": {"field_type": "Text", "description": "คำแปลเป็นภาษาไทยกลาง"},
+                "phonetic": {"field_type": "Text", "description": "การถอดเสียง phonetics", "required": false}
+              }},
+              "required": false,
+              "description": "ข้อมูลภาษาชนกลุ่มน้อย"
+            },
+            "cultural_practice_data": {
+              "field_type": {"Object": {
+                "practice_name": {"field_type": "Text", "description": "ชื่อประเพณี เช่น ยี่เป็ง สงกรานต์"},
+                "description": {"field_type": "Text", "description": "คำอธิบายประเพณี"},
+                "significance": {"field_type": "Text", "description": "ความสำคัญทางวัฒนธรรม"},
+                "historical_context": {"field_type": "Text", "description": "บริบททางประวัติศาสตร์", "required": false}
+              }},
+              "required": false,
+              "description": "ข้อมูลวัฒนธรรมประเพณี"
+            },
+            "folktale_data": {
+              "field_type": {"Object": {
+                "title": {"field_type": "Text", "description": "ชื่อนิทาน เช่น พระสุธน-มโนราห์"},
+                "summary": {"field_type": "Text", "description": "เรื่องย่อของนิทาน"},
+                "moral": {"field_type": "Text", "description": "คติสอนใจ"},
+                "region": {"field_type": "Text", "description": "ภูมิภาคที่นิทานมีที่มา", "required": false}
+              }},
+              "required": false,
+              "description": "ข้อมูลนิทานพื้นบ้าน"
+            },
+            "craft_data": {
+              "field_type": {"Object": {
+                "craft_name": {"field_type": "Text", "description": "ชื่องานหัตถกรรม เช่น ผ้ากาบบัว การแกะสลักไม้"},
+                "description": {"field_type": "Text", "description": "คำอธิบายงานหัตถกรรม"},
+                "cultural_role": {"field_type": "Text", "description": "บทบาทในวัฒนธรรม"}
+              }},
+              "required": false,
+              "description": "ข้อมูลศิลปหัตถกรรม"
+            }
+          }},
+          "required": true,
+          "description": "เนื้อหาข้อมูลตามหมวดหมู่"
+        },
+        "geolocation": {
+          "field_type": {"Object": {
+            "latitude": {"field_type": "Float", "description": "ละติจูด"},
+            "longitude": {"field_type": "Float", "description": "ลองจิจูด"},
+            "province": {"field_type": "Text", "description": "จังหวัด"}
+          }},
+          "required": false,
+          "description": "ข้อมูลพิกัดภูมิศาสตร์"
+        },
+        "task": {
+          "field_type": {"Object": {
+            "task_type": {"field_type": {"Enum": ["แปลภาษาท้องถิ่น", "อธิบายวัฒนธรรม", "สร้างเนื้อหาวัฒนธรรม", "วิเคราะห์ความหมาย"]}, "description": "ประเภทงานที่ต้องการ"},
+            "expected_output": {"field_type": "Text", "description": "ผลลัพธ์ที่คาดหวัง เช่น คำแปล หรือคำอธิบาย"}
+          }},
+          "required": true,
+          "description": "งานที่ต้องวิเคราะห์จากข้อมูล"
+        }
+      },
+      "relationships": []
+    },
+    "examples": [
+      {
+        "record_id": "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+        "data_category": "ภาษาถิ่น",
+        "data_content": {
+          "dialect_data": {
+            "dialect_name": "ภาษาเหนือ",
+            "phrase": "กิ๋นข้าวแล้วกา",
+            "standard_thai": "กินข้าวแล้วหรือยัง",
+            "phonetic": "kin khao laew ka",
+            "audio_reference": "audio_lanna_001"
+          }
+        },
+        "geolocation": {
+          "latitude": 18.7890,
+          "longitude": 98.9853,
+          "province": "เชียงใหม่"
+        },
+        "task": {
+          "task_type": "แปลภาษาท้องถิ่น",
+          "expected_output": "แปลวลี 'กิ๋นข้าวแล้วกา' เป็นภาษาไทยกลาง: กินข้าวแล้วหรือยัง"
+        }
+      },
+      {
+        "record_id": "2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+        "data_category": "วัฒนธรรมประเพณี",
+        "data_content": {
+          "cultural_practice_data": {
+            "practice_name": "สงกรานต์",
+            "description": "เทศกาลสาดน้ำและรดน้ำผู้ใหญ่เพื่อขอพรในวันปีใหม่ไทย",
+            "significance": "แสดงความเคารพต่อผู้ใหญ่และเสริมสร้างความสามัคคีในชุมชน",
+            "historical_context": "มีรากฐานจากประเพณีพราหมณ์-ฮินดูและพุทธศาสนา"
+          }
+        },
+        "geolocation": {
+          "latitude": 13.7367,
+          "longitude": 100.5331,
+          "province": "กรุงเทพมหานคร"
+        },
+        "task": {
+          "task_type": "อธิบายวัฒนธรรม",
+          "expected_output": "อธิบายเทศกาลสงกรานต์: เทศกาลปีใหม่ไทยที่รวมการสาดน้ำ รดน้ำผู้ใหญ่ และทำบุญ มีรากฐานจากพราหมณ์-ฮินดูและพุทธศาสนา"
+        }
+      },
+      {
+        "record_id": "3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f",
+        "data_category": "นิทานพื้นบ้าน",
+        "data_content": {
+          "folktale_data": {
+            "title": "พระสุธน-มโนราห์",
+            "summary": "เรื่องราวความรักระหว่างพระสุธนและนางมโนราห์ กินรีที่ถูกจับมา ต้องเผชิญอุปสรรคเพื่อกลับมาพบกัน",
+            "moral": "ความรักที่แท้จริงต้องผ่านการทดสอบและความพยายาม",
+            "region": "ภาคใต้"
+          }
+        },
+        "geolocation": {
+          "latitude": 7.0086,
+          "longitude": 100.4747,
+          "province": "สงขลา"
+        },
+        "task": {
+          "task_type": "วิเคราะห์ความหมาย",
+          "expected_output": "วิเคราะห์คติสอนใจของนิทานพระสุธน-มโนราห์: แสดงถึงความรักที่ต้องใช้ความอดทนและความพยายามเพื่อเอาชนะอุปสรรค"
+        }
+      },
+      {
+        "record_id": "4d5e6f7a-8b9c-0d1e-2f3a-4b5c6d7e8f9a",
+        "data_category": "ภาษาชนกลุ่มน้อย",
+        "data_content": {
+          "minority_language_data": {
+            "language_name": "มลายูปัตตานี",
+            "phrase": "Selamat datang ke rumah saya",
+            "standard_thai": "ยินดีต้อนรับสู่บ้านของฉัน",
+            "phonetic": "salaamat dataang ke rumah saya"
+          }
+        },
+        "geolocation": {
+          "latitude": 6.5397,
+          "longitude": 101.2800,
+          "province": "นราธิวาส"
+        },
+        "task": {
+          "task_type": "แปลภาษาท้องถิ่น",
+          "expected_output": "แปลวลี 'Selamat datang ke rumah saya' เป็นภาษาไทยกลาง: ยินดีต้อนรับสู่บ้านของฉัน"
+        }
+      },
+      {
+        "record_id": "5e6f7a8b-9c0d-1e2f-3a4b-5c6d7e8f9a0b",
+        "data_category": "ศิลปหัตถกรรม",
+        "data_content": {
+          "craft_data": {
+            "craft_name": "ผ้ากาบบัว",
+            "description": "ผ้าทอไหมและฝ้ายด้วยเทคนิคโบราณ มีลวดลายดอกบัวอันเป็นเอกลักษณ์",
+            "cultural_role": "ใช้ในพิธีกรรมและเป็นสัญลักษณ์ของศิลปะอีสาน"
+          }
+        },
+        "geolocation": {
+          "latitude": 15.2296,
+          "longitude": 104.8571,
+          "province": "อุบลราชธานี"
+        },
+        "task": {
+          "task_type": "อธิบายวัฒนธรรม",
+          "expected_output": "อธิบายผ้ากาบบัว: ผ้าทอไหมและฝ้ายจากอุบลราชธานี ใช้ลายดอกบัวในพิธีกรรมและเป็นสัญลักษณ์ศิลปะอีสาน"
+        }
+      },
+      {
+        "record_id": "6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c",
+        "data_category": "ภาษาถิ่น",
+        "data_content": {
+          "dialect_data": {
+            "dialect_name": "ภาษาใต้",
+            "phrase": "ขี้คร้านนักกะลงโพง",
+            "standard_thai": "ขี้เกียจมากก็ตกน้ำ",
+            "phonetic": "khi khran nak ka long phong"
+          }
+        },
+        "geolocation": {
+          "latitude": 7.8796,
+          "longitude": 98.3923,
+          "province": "ภูเก็ต"
+        },
+        "task": {
+          "task_type": "แปลภาษาท้องถิ่น",
+          "expected_output": "แปลวลี 'ขี้คร้านนักกะลงโพง' เป็นภาษาไทยกลาง: ขี้เกียจมากก็ตกน้ำ"
+        }
+      },
+      {
+        "record_id": "7a8b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+        "data_category": "ภาษาชนกลุ่มน้อย",
+        "data_content": {
+          "minority_language_data": {
+            "language_name": "เขมรเหนือ",
+            "phrase": "សួស្តី",
+            "standard_thai": "สวัสดี",
+            "phonetic": "suostei"
+          }
+        },
+        "geolocation": {
+          "latitude": 14.9746,
+          "longitude": 103.0910,
+          "province": "สุรินทร์"
+        },
+        "task": {
+          "task_type": "แปลภาษาท้องถิ่น",
+          "expected_output": "แปลวลี 'សួស្តី' เป็นภาษาไทยกลาง: สวัสดี"
+        }
+      }
+    ],
+    "parameters": {
+      "region": {
+        "name": "region",
+        "param_type": "enum",
+        "enum_values": ["เหนือ", "กลาง", "ตะวันออกเฉียงเหนือ", "ใต้", "ตะวันออก", "ตะวันตก"],
+        "description": "เลือกภูมิภาคของข้อมูล",
+        "default": "ทั้งหมด",
+        "required": false
+      },
+      "language_dialect": {
+        "name": "language_dialect",
+        "param_type": "text",
+        "description": "เลือกภาษาถิ่นหรือภาษาชนกลุ่มน้อย เช่น ภาษาเหนือ มลายูปัตตานี เขมร",
+        "default": null,
+        "required": false
+      },
+      "cultural_category": {
+        "name": "cultural_category",
+        "param_type": "enum",
+        "enum_values": ["ภาษาถิ่น", "ภาษาชนกลุ่มน้อย", "วัฒนธรรมประเพณี", "นิทานพื้นบ้าน", "ศิลปหัตถกรรม"],
+        "description": "เลือกหมวดหมู่วัฒนธรรม",
+        "default": "ทั้งหมด",
+        "required": false
+      }
+    },
+    "metrics": [
+      {
+        "name": "translation_accuracy",
+        "description": "ความแม่นยำในการแปลภาษาท้องถิ่นหรือภาษาชนกลุ่มน้อยเป็นภาษาไทยกลาง",
+        "type": "percentage",
+        "required": true
+      },
+      {
+        "name": "cultural_sensitivity",
+        "description": "ความเหมาะสมของเนื้อหาในบริบทวัฒนธรรมท้องถิ่น",
+        "type": "percentage",
+        "required": false
+      },
+      {
+        "name": "content_relevance",
+        "description": "ความเกี่ยวข้องของเนื้อหาที่สร้างหรือวิเคราะห์กับบริบทที่กำหนด",
+        "type": "percentage",
+        "required": false
+      }
+    ]
+  },
+  "localized_language_culture_Grade1_6": {
+    "name": "ชุดข้อมูลภาษาและวัฒนธรรมท้องถิ่นของไทย",
+    "description": "ชุดข้อมูลมัลติโมดัลที่รวบรวมข้อมูลภาษาท้องถิ่น ภาษาชนกลุ่มน้อย และวัฒนธรรมของไทย รวมถึงหลักภาษาไทยตั้งแต่ชั้นประถมศึกษาปีที่ 1 ถึงมัธยมศึกษาปีที่ 6 ครอบคลุมข้อความ เสียง และบริบททางวัฒนธรรม เพื่อสนับสนุนการแปลภาษา การวิเคราะห์ไวยากรณ์ การอธิบายวัฒนธรรม การตีความวรรณกรรม และการสร้างเนื้อหาที่สอดคล้องกับหลักสูตรการศึกษาและการรักษามรดกวัฒนธรรมไทย",
+    "format": "Jsonl",
+    "schema": {
+      "fields": {
+        "record_id": {
+          "field_type": "Text",
+          "required": true,
+          "description": "รหัสประจำบันทึกข้อมูล",
+          "constraints": [{"Format": "UUID"}]
+        },
+        "educational_level": {
+          "field_type": {"Enum": ["ป.1-3", "ป.4-6", "ม.1-3", "ม.4-6"]},
+          "required": true,
+          "description": "ระดับการศึกษาตามหลักสูตรกระทรวงศึกษาธิการ"
+        },
+        "data_category": {
+          "field_type": {"Enum": ["ภาษาถิ่น", "ภาษาชนกลุ่มน้อย", "วัฒนธรรมประเพณี", "นิทานพื้นบ้าน", "ศิลปหัตถกรรม", "หลักภาษาไทย"]},
+          "required": true,
+          "description": "หมวดหมู่ของข้อมูลภาษาและวัฒนธรรม"
+        },
+        "data_content": {
+          "field_type": {"Object": {
+            "dialect_data": {
+              "field_type": {"Object": {
+                "dialect_name": {"field_type": "Text", "description": "ชื่อภาษาถิ่น เช่น ภาษาเหนือ ภาษาอีสาน"},
+                "phrase": {"field_type": "Text", "description": "วลีหรือประโยคในภาษาถิ่น"},
+                "standard_thai": {"field_type": "Text", "description": "คำแปลเป็นภาษาไทยกลาง"},
+                "phonetic": {"field_type": "Text", "description": "การถอดเสียง phonetics", "required": false}
+              }},
+              "required": false,
+              "description": "ข้อมูลภาษาถิ่น"
+            },
+            "minority_language_data": {
+              "field_type": {"Object": {
+                "language_name": {"field_type": "Text", "description": "ชื่อภาษาชนกลุ่มน้อย เช่น กะเหรี่ยง มลายูปัตตานี"},
+                "phrase": {"field_type": "Text", "description": "วลีหรือประโยคในภาษาชนกลุ่มน้อย"},
+                "standard_thai": {"field_type": "Text", "description": "คำแปลเป็นภาษาไทยกลาง"},
+                "phonetic": {"field_type": "Text", "description": "การถอดเสียง phonetics", "required": false}
+              }},
+              "required": false,
+              "description": "ข้อมูลภาษาชนกลุ่มน้อย"
+            },
+            "cultural_practice_data": {
+              "field_type": {"Object": {
+                "practice_name": {"field_type": "Text", "description": "ชื่อประเพณี เช่น ยี่เป็ง สงกรานต์"},
+                "description": {"field_type": "Text", "description": "คำอธิบายประเพณี"},
+                "significance": {"field_type": "Text", "description": "ความสำคัญทางวัฒนธรรม"},
+                "historical_context": {"field_type": "Text", "description": "บริบททางประวัติศาสตร์", "required": false}
+              }},
+              "required": false,
+              "description": "ข้อมูลวัฒนธรรมประเพณี"
+            },
+            "folktale_data": {
+              "field_type": {"Object": {
+                "title": {"field_type": "Text", "description": "ชื่อนิทาน เช่น พระสุธน-มโนราห์"},
+                "summary": {"field_type": "Text", "description": "เรื่องย่อของนิทาน"},
+                "moral": {"field_type": "Text", "description": "คติสอนใจ"},
+                "region": {"field_type": "Text", "description": "ภูมิภาคที่นิทานมีที่มา", "required": false}
+              }},
+              "required": false,
+              "description": "ข้อมูลนิทานพื้นบ้าน"
+            },
+            "craft_data": {
+              "field_type": {"Object": {
+                "craft_name": {"field_type": "Text", "description": "ชื่องานหัตถกรรม เช่น ผ้ากาบบัว"},
+                "description": {"field_type": "Text", "description": "คำอธิบายงานหัตถกรรม"},
+                "cultural_role": {"field_type": "Text", "description": "บทบาทในวัฒนธรรม"}
+              }},
+              "required": false,
+              "description": "ข้อมูลศิลปหัตถกรรม"
+            },
+            "language_principle_data": {
+              "field_type": {"Object": {
+                "topic": {"field_type": "Text", "description": "หัวข้อหลักภาษา เช่น พยัญชนะ คำควบกล้ำ ประโยคซ้อน"},
+                "example": {"field_type": "Text", "description": "ตัวอย่าง เช่น คำว่า 'กรอบ' เป็นคำควบกล้ำแท้"},
+                "rule": {"field_type": "Text", "description": "กฏไวยากรณ์ เช่น คำควบกล้ำแท้ต้องออกเสียงพยัญชนะต้นสองตัวพร้อมกัน"},
+                "vocabulary": {"field_type": "Text", "description": "คำศัพท์ที่เกี่ยวข้อง เช่น วัฒนธรรม มรณะ", "required": false}
+              }},
+              "required": false,
+              "description": "ข้อมูลหลักภาษาไทยตามหลักสูตร"
+            }
+          }},
+          "required": true,
+          "description": "เนื้อหาข้อมูลตามหมวดหมู่"
+        },
+        "geolocation": {
+          "field_type": {"Object": {
+            "latitude": {"field_type": "Float", "description": "ละติจูด"},
+            "longitude": {"field_type": "Float", "description": "ลองจิจูด"},
+            "province": {"field_type": "Text", "description": "จังหวัด"}
+          }},
+          "required": false,
+          "description": "ข้อมูลพิกัดภูมิศาสตร์"
+        },
+        "task": {
+          "field_type": {"Object": {
+            "task_type": {"field_type": {"Enum": ["แปลภาษาท้องถิ่น", "วิเคราะห์ไวยากรณ์", "อธิบายวัฒนธรรม", "ตีความวรรณกรรม", "สร้างเนื้อหาวัฒนธรรม"]}, "description": "ประเภทงานที่ต้องการ"},
+            "expected_output": {"field_type": "Text", "description": "ผลลัพธ์ที่คาดหวัง เช่น คำแปล หรือคำอธิบาย"}
+          }},
+          "required": true,
+          "description": "งานที่ต้องวิเคราะห์จากข้อมูล"
+        }
+      },
+      "relationships": []
+    },
+    "examples": [
+      {
+        "record_id": "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+        "educational_level": "ป.1-3",
+        "data_category": "หลักภาษาไทย",
+        "data_content": {
+          "language_principle_data": {
+            "topic": "สระและพยัญชนะ",
+            "example": "คำว่า 'แมว' ประกอบด้วย พยัญชนะ ม และสระ แอ",
+            "rule": "สระเขียนก่อนหรือหลังพยัญชนะต้น ขึ้นอยู่กับรูปสระ เช่น สระ แอ เขียนเป็น 'แ-' ก่อนพยัญชนะ",
+            "vocabulary": "แมว, หมา, ต้นไม้"
+          }
+        },
+        "geolocation": {
+          "latitude": 13.7367,
+          "longitude": 100.5331,
+          "province": "กรุงเทพมหานคร"
+        },
+        "task": {
+          "task_type": "วิเคราะห์ไวยากรณ์",
+          "expected_output": "วิเคราะห์คำว่า 'แมว': ประกอบด้วย พยัญชนะ ม + สระ แอ + พยัญชนะ ว"
+        }
+      },
+      {
+        "record_id": "2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+        "educational_level": "ป.4-6",
+        "data_category": "หลักภาษาไทย",
+        "data_content": {
+          "language_principle_data": {
+            "topic": "คำควบกล้ำ",
+            "example": "คำว่า 'กรอบ' เป็นคำควบกล้ำแท้",
+            "rule": "คำควบกล้ำแท้ต้องออกเสียงพยัญชนะต้นสองตัวพร้อมกัน เช่น ก + ร ใน 'กรอบ'",
+            "vocabulary": "กรอบ, กล้า, ครู"
+          }
+        },
+        "geolocation": {
+          "latitude": 18.7890,
+          "longitude": 98.9853,
+          "province": "เชียงใหม่"
+        },
+        "task": {
+          "task_type": "วิเคราะห์ไวยากรณ์",
+          "expected_output": "ระบุคำควบกล้ำแท้: 'กรอบ' ออกเสียง ก + ร พร้อมกัน เป็นคำควบกล้ำแท้"
+        }
+      },
+      {
+        "record_id": "3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f",
+        "educational_level": "ม.1-3",
+        "data_category": "หลักภาษาไทย",
+        "data_content": {
+          "language_principle_data": {
+            "topic": "ประโยคซ้อน",
+            "example": "เขาบอกว่าเขาจะมาพรุ่งนี้",
+            "rule": "ประโยคซ้อนประกอบด้วยประโยคหลักและประโยคย่อยที่เชื่อมด้วยคำเชื่อม เช่น 'ว่า'",
+            "vocabulary": "วัฒนธรรม, เหตุผล, พิจารณา"
+          }
+        },
+        "geolocation": {
+          "latitude": 16.8211,
+          "longitude": 103.2973,
+          "province": "ร้อยเอ็ด"
+        },
+        "task": {
+          "task_type": "วิเคราะห์ไวยากรณ์",
+          "expected_output": "วิเคราะห์ประโยค 'เขาบอกว่าเขาจะมาพรุ่งนี้': ประโยคหลักคือ 'เขาบอก', ประโยคย่อยคือ 'เขาจะมาพรุ่งนี้', เชื่อมด้วย 'ว่า'"
+        }
+      },
+      {
+        "record_id": "4d5e6f7a-8b9c-0d1e-2f3a-4b5c6d7e8f9a",
+        "educational_level": "ม.4-6",
+        "data_category": "นิทานพื้นบ้าน",
+        "data_content": {
+          "folktale_data": {
+            "title": "นิทานทองอิน",
+            "summary": "เรื่องราวของนากพระโขนงที่สองที่ช่วยเหลือชุมชนด้วยความซื่อสัตย์",
+            "moral": "ความซื่อสัตย์นำมาซึ่งความไว้วางใจ",
+            "region": "ภาคกลาง"
+          }
+        },
+        "geolocation": {
+          "latitude": 14.0523,
+          "longitude": 100.5320,
+          "province": "พระนครศรีอยุธยา"
+        },
+        "task": {
+          "task_type": "ตีความวรรณกรรม",
+          "expected_output": "ตีความคติสอนใจของนิทานทองอิน: ความซื่อสัตย์เป็นคุณค่าที่สร้างความไว้วางใจในชุมชน"
+        }
+      },
+      {
+        "record_id": "5e6f7a8b-9c0d-1e2f-3a4b-5c6d7e8f9a0b",
+        "educational_level": "ป.1-3",
+        "data_category": "ภาษาถิ่น",
+        "data_content": {
+          "dialect_data": {
+            "dialect_name": "ภาษาอีสาน",
+            "phrase": "บ่เป็นหยังดอก",
+            "standard_thai": "ไม่เป็นอะไรหรอก",
+            "phonetic": "bo pen yang dok"
+          }
+        },
+        "geolocation": {
+          "latitude": 16.8211,
+          "longitude": 103.2973,
+          "province": "ร้อยเอ็ด"
+        },
+        "task": {
+          "task_type": "แปลภาษาท้องถิ่น",
+          "expected_output": "แปลวลี 'บ่เป็นหยังดอก' เป็นภาษาไทยกลาง: ไม่เป็นอะไรหรอก"
+        }
+      },
+      {
+        "record_id": "6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c",
+        "educational_level": "ป.4-6",
+        "data_category": "วัฒนธรรมประเพณี",
+        "data_content": {
+          "cultural_practice_data": {
+            "practice_name": "สงกรานต์",
+            "description": "เทศกาลสาดน้ำและรดน้ำผู้ใหญ่เพื่อขอพรในวันปีใหม่ไทย",
+            "significance": "แสดงความเคารพต่อผู้ใหญ่และเสริมสร้างความสามัคคี",
+            "historical_context": "มีรากฐานจากประเพณีพราหมณ์-ฮินดูและพุทธศาสนา"
+          }
+        },
+        "geolocation": {
+          "latitude": 13.7367,
+          "longitude": 100.5331,
+          "province": "กรุงเทพมหานคร"
+        },
+        "task": {
+          "task_type": "อธิบายวัฒนธรรม",
+          "expected_output": "อธิบายเทศกาลสงกรานต์: เทศกาลปีใหม่ไทยที่รวมการสาดน้ำ รดน้ำผู้ใหญ่ และทำบุญ มีรากฐานจากพราหมณ์-ฮินดูและพุทธศาสนา"
+        }
+      },
+      {
+        "record_id": "7a8b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+        "educational_level": "ม.1-3",
+        "data_category": "ภาษาชนกลุ่มน้อย",
+        "data_content": {
+          "minority_language_data": {
+            "language_name": "เขมรเหนือ",
+            "phrase": "សួស្តី",
+            "standard_thai": "สวัสดี",
+            "phonetic": "suostei"
+          }
+        },
+        "geolocation": {
+          "latitude": 14.9746,
+          "longitude": 103.0910,
+          "province": "สุรินทร์"
+        },
+        "task": {
+          "task_type": "แปลภาษาท้องถิ่น",
+          "expected_output": "แปลวลี 'សួស្តី' เป็นภาษาไทยกลาง: สวัสดี"
+        }
+      },
+      {
+        "record_id": "8b9c0d1e-2f3a-4b5c-6d7e-8f9a0b1c2d3e",
+        "educational_level": "ม.4-6",
+        "data_category": "หลักภาษาไทย",
+        "data_content": {
+          "language_principle_data": {
+            "topic": "คำราชาศัพท์",
+            "example": "เสด็จ หมายถึง การเดินทางของพระราชา",
+            "rule": "คำราชาศัพท์ใช้แสดงความเคารพต่อพระมหากษัตริย์และราชวงศ์ เช่น เสด็จ แทน ไป",
+            "vocabulary": "เสด็จ, พระราชทาน, สมเด็จ"
+          }
+        },
+        "geolocation": {
+          "latitude": 13.7367,
+          "longitude": 100.5331,
+          "province": "กรุงเทพมหานคร"
+        },
+        "task": {
+          "task_type": "วิเคราะห์ไวยากรณ์",
+          "expected_output": "วิเคราะห์คำว่า 'เสด็จ': เป็นคำราชาศัพท์ ใช้แทนการเดินทางของพระราชา แสดงความเคารพ"
+        }
+      }
+    ],
+    "parameters": {
+      "educational_level": {
+        "name": "educational_level",
+        "param_type": "enum",
+        "enum_values": ["ป.1-3", "ป.4-6", "ม.1-3", "ม.4-6"],
+        "description": "เลือกระดับการศึกษา",
+        "default": "ทั้งหมด",
+        "required": false
+      },
+      "region": {
+        "name": "region",
+        "param_type": "enum",
+        "enum_values": ["เหนือ", "กลาง", "ตะวันออกเฉียงเหนือ", "ใต้", "ตะวันออก", "ตะวันตก"],
+        "description": "เลือกภูมิภาคของข้อมูล",
+        "default": "ทั้งหมด",
+        "required": false
+      },
+      "language_dialect": {
+        "name": "language_dialect",
+        "param_type": "text",
+        "description": "เลือกภาษาถิ่นหรือภาษาชนกลุ่มน้อย เช่น ภาษาเหนือ มลายูปัตตานี",
+        "default": null,
+        "required": false
+      },
+      "task_type": {
+        "name": "task_type",
+        "param_type": "enum",
+        "enum_values": ["แปลภาษาท้องถิ่น", "วิเคราะห์ไวยากรณ์", "อธิบายวัฒนธรรม", "ตีความวรรณกรรม", "สร้างเนื้อหาวัฒนธรรม"],
+        "description": "เลือกประเภทงาน",
+        "default": "ทั้งหมด",
+        "required": false
+      }
+    },
+    "metrics": [
+      {
+        "name": "translation_accuracy",
+        "description": "ความแม่นยำในการแปลภาษาท้องถิ่นหรือภาษาชนกลุ่มน้อยเป็นภาษาไทยกลาง",
+        "type": "percentage",
+        "required": true
+      },
+      {
+        "name": "grammatical_correctness",
+        "description": "ความถูกต้องของการวิเคราะห์ไวยากรณ์ตามหลักภาษาไทย",
+        "type": "percentage",
+        "required": false
+      },
+      {
+        "name": "cultural_sensitivity",
+        "description": "ความเหมาะสมของเนื้อหาในบริบทวัฒนธรรมท้องถิ่น",
+        "type": "percentage",
+        "required": false
+      },
+      {
+        "name": "educational_alignment",
+        "description": "ความสอดคล้องของเนื้อหากับหลักสูตรการศึกษาระดับป.1-ม.6",
+        "type": "percentage",
+        "required": false
+      }    ]
+  },
+  "ai_language_detective": {
+    "name": "ชุดข้อมูลนักสืบภาษาไทย (AI Language Detective)",
+    "description": "ชุดข้อมูลมัลติโมดัลที่ช่วยให้ AI สามารถระบุจังหวัดต้นกำเนิดของผู้พูดจากรูปแบบการใช้ภาษา โดยรวบรวมลักษณะเฉพาะการใช้ภาษาไทยกลาง ภาษาถิ่น คำศัพท์เฉพาะพื้นที่ สำเนียง และรูปแบบการสื่อสารของแต่ละจังหวัดใน 77 จังหวัดของประเทศไทย เพื่อการวิเคราะห์ภูมิภาคภาษาศาสตร์ การตลาดเฉพาะพื้นที่ และการระบุตัวตนทางภาษา",
+    "format": "Jsonl",
+    "schema": {
+      "fields": {
+        "record_id": {
+          "field_type": "Text",
+          "required": true,
+          "description": "รหัสประจำบันทึกข้อมูล",
+          "constraints": [{"Format": "UUID"}]
+        },
+        "text_sample": {
+          "field_type": "Text",
+          "required": true,
+          "description": "ตัวอย่างข้อความ การพูด หรือการเขียน",
+          "constraints": [{"Length": {"min": 20, "max": 1000}}]
+        },
+        "province_code": {
+          "field_type": "Text",
+          "required": true,
+          "description": "รหัสจังหวัดตามมาตรฐาน (เช่น BKK, CNX, UBN)",
+          "constraints": [{"Format": "Province Code"}]
+        },
+        "province_name": {
+          "field_type": "Text",
+          "required": true,
+          "description": "ชื่อจังหวัดเต็ม (เช่น กรุงเทพมหานคร, เชียงใหม่, อุบลราชธานี)"
+        },
+        "region": {
+          "field_type": {"Enum": ["กลาง", "เหนือ", "ตะวันออกเฉียงเหนือ", "ใต้", "ตะวันออก", "ตะวันตก"]},
+          "required": true,
+          "description": "ภูมิภาคหลัก"
+        },
+        "language_features": {
+          "field_type": {"Object": {
+            "dialect_words": {
+              "field_type": {"Array": {"items": {"field_type": "Text"}}},
+              "description": "คำศัพท์ภาษาถิ่นที่ปรากฏในข้อความ",
+              "required": false
+            },
+            "accent_markers": {
+              "field_type": {"Array": {"items": {"field_type": "Text"}}},
+              "description": "ลักษณะสำเนียงหรือการออกเสียงเฉพาะ",
+              "required": false
+            },
+            "sentence_patterns": {
+              "field_type": {"Array": {"items": {"field_type": "Text"}}},
+              "description": "รูปแบบประโยคที่เป็นเอกลักษณ์ของพื้นที่",
+              "required": false
+            },
+            "local_expressions": {
+              "field_type": {"Array": {"items": {"field_type": "Text"}}},
+              "description": "สำนวนหรือการแสดงออกเฉพาะถิ่น",
+              "required": false
+            },
+            "formal_thai_usage": {
+              "field_type": "Text",
+              "description": "ลักษณะการใช้ภาษาไทยกลางที่มีเอกลักษณ์ของพื้นที่นั้น",
+              "required": false
+            }
+          }},
+          "required": true,
+          "description": "คุณลักษณะทางภาษาที่เป็นเอกลักษณ์"
+        },
+        "context_data": {
+          "field_type": {"Object": {
+            "speaker_demographics": {
+              "field_type": {"Object": {
+                "age_group": {"field_type": {"Enum": ["เด็ก", "วัยรุ่น", "ผู้ใหญ่", "ผู้สูงอายุ"]}, "required": false},
+                "education_level": {"field_type": {"Enum": ["ประถม", "มัธยม", "ปริญญาตรี", "สูงกว่าปริญญาตรี"]}, "required": false},
+                "occupation": {"field_type": "Text", "required": false}
+              }},
+              "required": false,
+              "description": "ข้อมูลประชากรศาสตร์ของผู้พูด"
+            },
+            "communication_setting": {
+              "field_type": {"Enum": ["ทางการ", "ไม่เป็นทางการ", "ครอบครัว", "เพื่อน", "ธุรกิจ", "โซเชียลมีเดีย"]},
+              "required": false,
+              "description": "บริบทการสื่อสาร"
+            },
+            "medium": {
+              "field_type": {"Enum": ["พูด", "เขียน", "แชท", "คอมเมนต์", "โพสต์"]},
+              "required": true,
+              "description": "สื่อที่ใช้ในการสื่อสาร"
+            }
+          }},
+          "required": false,
+          "description": "บริบทการสื่อสาร"
+        },
+        "cultural_indicators": {
+          "field_type": {"Object": {
+            "local_references": {
+              "field_type": {"Array": {"items": {"field_type": "Text"}}},
+              "description": "การอ้างอิงสถานที่ วัฒนธรรม หรือประเพณีท้องถิ่น",
+              "required": false
+            },
+            "cultural_concepts": {
+              "field_type": {"Array": {"items": {"field_type": "Text"}}},
+              "description": "แนวคิดหรือค่านิยมทางวัฒนธรรมที่ปรากฏ",
+              "required": false
+            },
+            "local_foods": {
+              "field_type": {"Array": {"items": {"field_type": "Text"}}},
+              "description": "อาหารหรือเครื่องดื่มท้องถิ่นที่กล่าวถึง",
+              "required": false
+            }
+          }},
+          "required": false,
+          "description": "ตัวบ่งชี้ทางวัฒนธรรม"
+        },
+        "geolocation": {
+          "field_type": {"Object": {
+            "latitude": {"field_type": "Float", "description": "ละติจูด"},
+            "longitude": {"field_type": "Float", "description": "ลองจิจูด"},
+            "district": {"field_type": "Text", "description": "อำเภอ", "required": false},
+            "subdistrict": {"field_type": "Text", "description": "ตำบล", "required": false}
+          }},
+          "required": false,
+          "description": "ข้อมูลพิกัดภูมิศาสตร์ระดับละเอียด"
+        },
+        "confidence_score": {
+          "field_type": "Float",
+          "required": true,
+          "description": "คะแนนความมั่นใจในการระบุจังหวัด (0.0 ถึง 1.0)",
+          "constraints": [{"Range": {"min": 0.0, "max": 1.0}}]
+        },
+        "validation_source": {
+          "field_type": {"Enum": ["เจ้าของภาษา", "ผู้เชี่ยวชาญ", "เอกสารอ้างอิง", "การสำรวจ", "โซเชียลมีเดีย"]},
+          "required": true,
+          "description": "แหล่งที่มาของการยืนยันข้อมูล"
+        }
+      },
+      "relationships": []
+    },
+    "examples": [
+      {
+        "record_id": "det001-bkk-formal-001",
+        "text_sample": "ผมต้องไปราชประสงค์แล้วต่อรถไฟฟ้าไปสยามครับ ช่วงนี้รถติดมากเลย",
+        "province_code": "BKK",
+        "province_name": "กรุงเทพมหานคร",
+        "region": "กลาง",
+        "language_features": {
+          "dialect_words": [],
+          "accent_markers": ["การใช้ 'ครับ' บ่อย", "เน้นความสุภาพ"],
+          "sentence_patterns": ["รูปแบบประโยคที่เป็นทางการ"],
+          "local_expressions": ["ไปราชประสงค์", "ต่อรถไฟฟ้า"],
+          "formal_thai_usage": "ใช้ภาษาไทยกลางแบบเป็นทางการ มีการใช้สรรพนาม 'ผม' และ 'ครับ'"
+        },
+        "context_data": {
+          "speaker_demographics": {
+            "age_group": "ผู้ใหญ่",
+            "education_level": "ปริญญาตรี"
+          },
+          "communication_setting": "ทางการ",
+          "medium": "พูด"
+        },
+        "cultural_indicators": {
+          "local_references": ["ราชประสงค์", "สยาม", "รถไฟฟ้า"],
+          "cultural_concepts": ["การใช้ขนส่งสาธารณะ", "ความสุภาพในการพูด"]
+        },
+        "geolocation": {
+          "latitude": 13.7563,
+          "longitude": 100.5018,
+          "district": "ปทุมวัน"
+        },
+        "confidence_score": 0.92,
+        "validation_source": "เจ้าของภาษา"
+      },
+      {
+        "record_id": "det002-cnx-informal-001", 
+        "text_sample": "กิ๋นข้าวแล้วกา เดี๋ยวไปกินข้าวซอยกันเจ้า หลานจ๋าอยากไปบ่",
+        "province_code": "CNX",
+        "province_name": "เชียงใหม่",
+        "region": "เหนือ",
+        "language_features": {
+          "dialect_words": ["กิ๋น", "กา", "เดี๋ยว", "เจ้า", "หลาน", "บ่"],
+          "accent_markers": ["เสียงสูงต่ำแบบเหนือ", "การใช้ 'จ๋า' เป็นคำขยาย"],
+          "sentence_patterns": ["โครงสร้างประโยคแบบเหนือ", "การใช้คำปฏิเสธ 'บ่'"],
+          "local_expressions": ["กิ๋นข้าวแล้วกา", "หลานจ๋า"],
+          "formal_thai_usage": "ใช้ภาษาถิ่นเหนือผสมกับภาษากลางแบบไม่เป็นทางการ"
+        },
+        "context_data": {
+          "speaker_demographics": {
+            "age_group": "ผู้สูงอายุ",
+            "education_level": "มัธยม"
+          },
+          "communication_setting": "ครอบครัว",
+          "medium": "พูด"
+        },
+        "cultural_indicators": {
+          "local_references": ["ข้าวซอย"],
+          "local_foods": ["ข้าวซอย"],
+          "cultural_concepts": ["การทักทายแบบเหนือ", "ความสัมพันธ์ครอบครัว"]
+        },
+        "geolocation": {
+          "latitude": 18.7883,
+          "longitude": 98.9853,
+          "district": "เมืองเชียงใหม่"
+        },
+        "confidence_score": 0.95,
+        "validation_source": "เจ้าของภาษา"
+      },
+      {
+        "record_id": "det003-ubn-social-001",
+        "text_sample": "บักสาวอีสานเฮาจะไปงานบุญที่วัด แต่งตัวสวยๆ ใส่ผ้าซิ่นงามๆ",
+        "province_code": "UBN", 
+        "province_name": "อุบลราชธานี",
+        "region": "ตะวันออกเฉียงเหนือ",
+        "language_features": {
+          "dialect_words": ["บัก", "เฮา", "จะ", "งานบุญ"],
+          "accent_markers": ["การออกเสียงแบบอีสาน", "เน้นคำว่า 'เฮา'"],
+          "sentence_patterns": ["โครงสร้างประโยคแบบอีสาน"],
+          "local_expressions": ["บักสาวอีสาน", "งานบุญที่วัด"],
+          "formal_thai_usage": "ใช้ภาษาอีสานผสมกับภาษาไทยกลาง"
+        },
+        "context_data": {
+          "communication_setting": "โซเชียลมีเดีย",
+          "medium": "โพสต์"
+        },
+        "cultural_indicators": {
+          "local_references": ["งานบุญ", "วัด", "ผ้าซิ่น"],
+          "cultural_concepts": ["การไปวัด", "การแต่งกายแบบอีสาน", "งานบุญ"]
+        },
+        "geolocation": {
+          "latitude": 15.2286,
+          "longitude": 104.8469,
+          "district": "เมืองอุบลราชธานี"
+        },
+        "confidence_score": 0.88,
+        "validation_source": "โซเชียลมีเดีย"
+      },
+      {
+        "record_id": "det004-nma-business-001",
+        "text_sample": "ร้านเฮาขายส้มตำ แซ่บลืมโลก มาลองชิมกันเถอะ อร่อยจริงๆ นะครับ",
+        "province_code": "NMA",
+        "province_name": "หนองคาย", 
+        "region": "ตะวันออกเฉียงเหนือ",
+        "language_features": {
+          "dialect_words": ["เฮา", "แซ่บ", "เถอะ"],
+          "accent_markers": ["การออกเสียงแบบอีสาน"],
+          "sentence_patterns": ["การผสมภาษาถิ่นกับภาษากลาง"],
+          "local_expressions": ["แซ่บลืมโลก", "ร้านเฮา"],
+          "formal_thai_usage": "ใช้ภาษาอีสานในการขายของ แต่ปิดท้ายด้วย 'ครับ' แบบสุภาพ"
+        },
+        "context_data": {
+          "communication_setting": "ธุรกิจ",
+          "medium": "โพสต์"
+        },
+        "cultural_indicators": {
+          "local_foods": ["ส้มตำ"],
+          "cultural_concepts": ["การขายของแบบอีสาน", "ความเป็นกันเองในการค้าขาย"]
+        },
+        "geolocation": {
+          "latitude": 17.8782,
+          "longitude": 102.7412,
+          "district": "เมืองหนองคาย"
+        },
+        "confidence_score": 0.91,
+        "validation_source": "เอกสารอ้างอิง"
+      },
+      {
+        "record_id": "det005-sni-chat-001",
+        "text_sample": "กูกำลังไปตลาดน้ำอยุธยา มึงอยากได้อะไรบ้าง ของหวานโบราณอร่อยๆ",
+        "province_code": "PRA",
+        "province_name": "พระนครศรีอยุธยา",
+        "region": "กลาง", 
+        "language_features": {
+          "dialect_words": ["กู", "มึง"],
+          "accent_markers": ["การใช้สรรพนาม 'กู-มึง' แบบสนิท"],
+          "sentence_patterns": ["รูปแบบภาษาไม่เป็นทางการ"],
+          "local_expressions": ["ตลาดน้ำอยุธยา", "ของหวานโบราณ"],
+          "formal_thai_usage": "ใช้ภาษาไทยกลางแบบไม่เป็นทางการ กับเพื่อนสนิท"
+        },
+        "context_data": {
+          "speaker_demographics": {
+            "age_group": "วัยรุ่น"
+          },
+          "communication_setting": "เพื่อน",
+          "medium": "แชท"
+        },
+        "cultural_indicators": {
+          "local_references": ["ตลาดน้ำอยุธยา"],
+          "local_foods": ["ของหวานโบราณ"],
+          "cultural_concepts": ["การท่องเที่ยวประวัติศาสตร์", "มิตรภาพแบบสนิท"]
+        },
+        "geolocation": {
+          "latitude": 14.3692,
+          "longitude": 100.5877,
+          "district": "พระนครศรีอยุธยา"
+        },
+        "confidence_score": 0.89,
+        "validation_source": "การสำรวจ"
+      }
+    ],
+    "parameters": {
+      "province_filter": {
+        "name": "province_filter",
+        "param_type": "enum",
+        "enum_values": ["กรุงเทพมหานคร", "เชียงใหม่", "เชียงราย", "น่าน", "พะเยา", "แพร่", "แม่ฮ่องสอน", "ลำปาง", "ลำพูน", "อุตรดิตถ์", "ตาก", "สุโขทัย", "พิษณุโลก", "กำแพงเพชร", "นครสวรรค์", "อุทัยธานี", "ชัยนาท", "สิงห์บุรี", "อ่างทอง", "พระนครศรีอยุธยา", "ลพบุรี", "สระบุรี", "นครนายก", "ปทุมธานี", "นนทบุรี", "สมุทรปราการ", "สมุทรสาคร", "สมุทรสงคราม", "ราชบุรี", "กาญจนบุรี", "สุพรรณบุรี", "นครปฐม", "เพชรบุรี", "ประจวบคีรีขันธ์", "ขอนแก่น", "อุดรธานี", "เลย", "หนองบัวลำภู", "หนองคาย", "บึงกาฬ", "สกลนคร", "นครพนม", "มุกดาหาร", "ยโสธร", "อำนาจเจริญ", "อุบลราชธานี", "ศรีสะเกษ", "สุรินทร์", "บุรีรัมย์", "มหาสารคาม", "ร้อยเอ็ด", "กาฬสินธุ์", "ชัยภูมิ", "นครราชสีมา", "นครศรีธรรมราช", "กระบี่", "พังงา", "ภูเก็ต", "สุราษฎร์ธานี", "ระนอง", "ชุมพร", "สงขลา", "สตูล", "ตรัง", "พัทลุง", "ยะลา", "นราธิวาส", "ปัตตานี", "จันทบุรี", "ตราด", "ฉะเชิงเทรา", "ปราจีนบุรี", "สระแก้ว", "ระยอง", "ชลบุรี"],
+        "description": "เลือกจังหวัดที่ต้องการวิเคราะห์",
+        "default": "ทั้งหมด",
+        "required": false
+      },
+      "region_filter": {
+        "name": "region_filter", 
+        "param_type": "enum",
+        "enum_values": ["กลาง", "เหนือ", "ตะวันออกเฉียงเหนือ", "ใต้", "ตะวันออก", "ตะวันตก"],
+        "description": "เลือกภูมิภาคที่ต้องการวิเคราะห์",
+        "default": "ทั้งหมด",
+        "required": false
+      },
+      "communication_medium": {
+        "name": "communication_medium",
+        "param_type": "enum", 
+        "enum_values": ["พูด", "เขียน", "แชท", "คอมเมนต์", "โพสต์"],
+        "description": "เลือกสื่อการสื่อสารที่ต้องการวิเคราะห์",
+        "default": "ทั้งหมด",
+        "required": false
+      },
+      "formality_level": {
+        "name": "formality_level",
+        "param_type": "enum",
+        "enum_values": ["ทางการ", "ไม่เป็นทางการ", "ครอบครัว", "เพื่อน", "ธุรกิจ", "โซเชียลมีเดีย"],
+        "description": "เลือกระดับความเป็นทางการของการสื่อสาร",
+        "default": "ทั้งหมด", 
+        "required": false
+      },
+      "confidence_threshold": {
+        "name": "confidence_threshold",
+        "param_type": "float",
+        "description": "ค่าต่ำสุดของคะแนนความมั่นใจ (0.0-1.0)",
+        "default": 0.7,
+        "required": false
+      }
+    },
+    "metrics": [
+      {
+        "name": "province_identification_accuracy",
+        "description": "ความแม่นยำในการระบุจังหวัดต้นกำเนิดจากลักษณะการใช้ภาษา",
+        "type": "percentage",
+        "required": true
+      },
+      {
+        "name": "regional_classification_accuracy", 
+        "description": "ความแม่นยำในการจำแนกภูมิภาคจากลักษณะทางภาษา",
+        "type": "percentage",
+        "required": true
+      },
+      {
+        "name": "dialect_feature_extraction_score",
+        "description": "คะแนนการสกัดคุณลักษณะภาษาถิ่นที่สำคัญ",
+        "type": "percentage", 
+        "required": false
+      },
+      {
+        "name": "cultural_context_relevance",
+        "description": "ความเกี่ยวข้องของบริบททางวัฒนธรรมกับการใช้ภาษา",
+        "type": "percentage",
+        "required": false
+      },
+      {
+        "name": "cross_validation_consistency",
+        "description": "ความสม่ำเสมอของผลการวิเคราะห์เมื่อทดสอบซ้ำ",
+        "type": "percentage",
+        "required": false
+      }
+    ]
   }
 }
