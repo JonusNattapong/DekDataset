@@ -196,7 +196,7 @@ def extract_twitter_data(url, fetch_profile=False):
                 # Skip if empty, too short, or duplicate
                 if not text or len(text) < 2 or text in seen_texts:
                     continue
-                    
+                
                 # Skip if it matches the main tweet
                 if data.get("tweet") == text:
                     continue
@@ -1081,3 +1081,281 @@ def save_comments_for_training(
     except Exception as e:
         print(f"[ERROR] Failed to save comments: {e}")
         return ""
+
+class SocialMediaConfig:
+    """Configuration class for social media extraction"""
+    
+    def __init__(self):
+        self.rate_limits = {
+            "twitter": {"requests_per_minute": 300, "delay": 2},
+            "reddit": {"requests_per_minute": 60, "delay": 1},
+            "youtube": {"requests_per_minute": 100, "delay": 1.5},
+            "facebook": {"requests_per_minute": 200, "delay": 3},
+            "pantip": {"requests_per_minute": 120, "delay": 2}
+        }
+        
+        self.max_retries = 3
+        self.timeout = 30
+        self.user_agents = USER_AGENTS
+        
+    def get_rate_limit(self, platform: str) -> Dict[str, Any]:
+        return self.rate_limits.get(platform.lower(), {"requests_per_minute": 60, "delay": 2})
+
+# Global config instance
+social_config = SocialMediaConfig()
+
+def enhanced_error_handler(func):
+    """Decorator for enhanced error handling"""
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except requests.exceptions.Timeout:
+            print(f"[ERROR] Timeout occurred in {func.__name__}")
+            return []
+        except requests.exceptions.ConnectionError:
+            print(f"[ERROR] Connection error in {func.__name__}")
+            return []
+        except Exception as e:
+            print(f"[ERROR] Unexpected error in {func.__name__}: {e}")
+            return []
+    return wrapper
+
+@enhanced_error_handler
+def extract_reddit_comments(
+    subreddit: str,
+    limit: int = 100,
+    time_filter: str = "week",
+    include_sentiment: bool = False
+) -> List[Dict[str, Any]]:
+    """Extract comments from Reddit subreddit"""
+    if not CRAWL4AI_AVAILABLE:
+        print("[WARN] Crawl4AI not available, using basic extraction")
+        return []
+    
+    comments = []
+    url = f"https://www.reddit.com/r/{subreddit}/hot/"
+    
+    try:
+        # Use Playwright to get Reddit content
+        html = fetch_with_playwright(
+            url,
+            wait_selector="div[data-testid='post-container']",
+            timeout=30000
+        )
+        
+        if not html:
+            return []
+            
+        soup = BeautifulSoup(html, "html.parser")
+        
+        # Extract posts and comments
+        posts = soup.select("div[data-testid='post-container']")
+        
+        for post in posts[:limit]:
+            try:
+                # Extract post content
+                title_element = post.select_one("h3")
+                content_element = post.select_one("div[data-click-id='text']")
+                
+                if title_element:
+                    post_text = title_element.get_text(strip=True)
+                    if content_element:
+                        post_text += " " + content_element.get_text(strip=True)
+                    
+                    post_text = sanitize_text(post_text)
+                    
+                    if post_text and len(post_text) > 10:
+                        comment_data = {
+                            "text": post_text,
+                            "platform": "reddit",
+                            "post_type": "post",
+                            "subreddit": subreddit,
+                            "created_at": datetime.now().isoformat(),
+                            "is_spam": False
+                        }
+                        
+                        if include_sentiment:
+                            comment_data["sentiment"] = analyze_sentiment(post_text)
+                        
+                        comments.append(comment_data)
+                        
+            except Exception as e:
+                print(f"[WARN] Error extracting Reddit post: {e}")
+                continue
+                
+        return comments[:limit]
+        
+    except Exception as e:
+        print(f"[ERROR] Reddit extraction failed: {e}")
+        return []
+
+@enhanced_error_handler
+def extract_youtube_comments(
+    video_id: str,
+    max_results: int = 100,
+    include_sentiment: bool = False
+) -> List[Dict[str, Any]]:
+    """Extract comments from YouTube video"""
+    if not youtube_api_key:
+        print("[ERROR] YouTube API key not found")
+        return []
+    
+    comments = []
+    
+    try:
+        # YouTube API v3 endpoint
+        url = "https://www.googleapis.com/youtube/v3/commentThreads"
+        params = {
+            "part": "snippet",
+            "videoId": video_id,
+            "key": youtube_api_key,
+            "maxResults": min(max_results, 100),
+            "order": "relevance"
+        }
+        
+        response = requests.get(url, params=params, timeout=30)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        for item in data.get("items", []):
+            try:
+                comment_snippet = item["snippet"]["topLevelComment"]["snippet"]
+                comment_text = sanitize_text(comment_snippet["textDisplay"])
+                
+                if comment_text and len(comment_text) > 5:
+                    comment_data = {
+                        "text": comment_text,
+                        "platform": "youtube",
+                        "post_type": "comment",
+                        "author": comment_snippet.get("authorDisplayName", "Unknown"),
+                        "video_id": video_id,
+                        "created_at": comment_snippet.get("publishedAt", datetime.now().isoformat()),
+                        "is_spam": False
+                    }
+                    
+                    if include_sentiment:
+                        comment_data["sentiment"] = analyze_sentiment(comment_text)
+                    
+                    comments.append(comment_data)
+                    
+            except Exception as e:
+                print(f"[WARN] Error processing YouTube comment: {e}")
+                continue
+                
+        return comments
+        
+    except Exception as e:
+        print(f"[ERROR] YouTube extraction failed: {e}")
+        return []
+
+def extract_pantip_comments(
+    topic_id: str,
+    max_results: int = 100,
+    include_sentiment: bool = False
+) -> List[Dict[str, Any]]:
+    """Extract comments from Pantip topic"""
+    comments = []
+    url = f"https://pantip.com/topic/{topic_id}"
+    
+    try:
+        html = fetch_with_playwright(
+            url,
+            wait_selector="div.display-post-wrapper",
+            timeout=30000
+        )
+        
+        if not html:
+            return []
+            
+        soup = BeautifulSoup(html, "html.parser")
+        
+        # Extract main post
+        main_post = soup.select_one("div.display-post-story")
+        if main_post:
+            post_text = sanitize_text(main_post.get_text(strip=True))
+            if post_text and len(post_text) > 10:
+                comment_data = {
+                    "text": post_text,
+                    "platform": "pantip",
+                    "post_type": "topic",
+                    "topic_id": topic_id,
+                    "created_at": datetime.now().isoformat(),
+                    "is_spam": False
+                }
+                
+                if include_sentiment:
+                    comment_data["sentiment"] = analyze_sentiment(post_text, "th")
+                
+                comments.append(comment_data)
+        
+        # Extract replies
+        replies = soup.select("div.display-post-wrapper div.display-post-story")
+        
+        for reply in replies[:max_results-1]:  # -1 for main post
+            try:
+                reply_text = sanitize_text(reply.get_text(strip=True))
+                
+                if reply_text and len(reply_text) > 5:
+                    comment_data = {
+                        "text": reply_text,
+                        "platform": "pantip",
+                        "post_type": "reply",
+                        "topic_id": topic_id,
+                        "created_at": datetime.now().isoformat(),
+                        "is_spam": False
+                    }
+                    
+                    if include_sentiment:
+                        comment_data["sentiment"] = analyze_sentiment(reply_text, "th")
+                    
+                    comments.append(comment_data)
+                    
+            except Exception as e:
+                print(f"[WARN] Error extracting Pantip reply: {e}")
+                continue
+                
+        return comments[:max_results]
+        
+    except Exception as e:
+        print(f"[ERROR] Pantip extraction failed: {e}")
+        return []
+
+def remove_spam_and_fill(
+    comments: List[Dict[str, Any]], 
+    fetch_more_func: callable,
+    max_results: int,
+    max_iterations: int = 3
+) -> List[Dict[str, Any]]:
+    """Remove spam and fetch more data to fill quota"""
+    
+    clean_comments = spam_filter(comments)
+    iteration = 0
+    
+    while len(clean_comments) < max_results and iteration < max_iterations:
+        needed = max_results - len(clean_comments)
+        print(f"[INFO] Need {needed} more comments, fetching additional data...")
+        
+        try:
+            additional_comments = fetch_more_func()
+            if not additional_comments:
+                break
+                
+            # Filter spam from new comments
+            new_clean_comments = spam_filter(additional_comments)
+            
+            # Deduplicate against existing comments
+            existing_texts = {c.get("text", "") for c in clean_comments}
+            unique_new_comments = [
+                c for c in new_clean_comments 
+                if c.get("text", "") not in existing_texts
+            ]
+            
+            clean_comments.extend(unique_new_comments)
+            iteration += 1
+            
+        except Exception as e:
+            print(f"[WARN] Error fetching additional comments: {e}")
+            break
+    
+    return clean_comments[:max_results]

@@ -7,7 +7,7 @@ import shutil
 import pandas as pd
 import csv
 from datetime import datetime
-from typing import Dict, Any, List, Union, Optional
+from typing import Dict, Any, List, Union, Optional, Tuple
 from dotenv import load_dotenv
 from task_definitions import get_task_definitions
 from banner import print_ascii_banner
@@ -672,6 +672,98 @@ JSON Array ที่มีโครงสร้างตาม Schema โดย�
 
         return all_entries
 
+    # เพิ่มฟังก์ชัน validation และ quality check
+def validate_data_quality(entries: List[Dict], task: Dict) -> Tuple[List[Dict], List[str]]:
+    """Validate data quality and return filtered entries with issues"""
+    valid_entries = []
+    issues = []
+    
+    required_fields = task.get('schema', {}).get('fields', {})
+    
+    for i, entry in enumerate(entries):
+        entry_issues = []
+        
+        # Check required fields
+        for field_name, field_config in required_fields.items():
+            if field_config.get('required', False) and field_name not in entry:
+                entry_issues.append(f"Missing required field: {field_name}")
+        
+        # Check data constraints
+        for field_name, value in entry.items():
+            if field_name in required_fields:
+                field_config = required_fields[field_name]
+                constraints = field_config.get('constraints', [])
+                
+                for constraint in constraints:
+                    if 'Length' in constraint:
+                        length_constraint = constraint['Length']
+                        if isinstance(value, str):
+                            if len(value) < length_constraint.get('min', 0):
+                                entry_issues.append(f"Field {field_name} too short")
+                            if len(value) > length_constraint.get('max', float('inf')):
+                                entry_issues.append(f"Field {field_name} too long")
+        
+        if not entry_issues:
+            valid_entries.append(entry)
+        else:
+            issues.extend([f"Entry {i+1}: {issue}" for issue in entry_issues])
+    
+    return valid_entries, issues
+
+def generate_dataset_with_quality_control(task: Dict, count: int, **kwargs) -> Tuple[List[Dict], Dict]:
+    """Generate dataset with comprehensive quality control"""
+    client = kwargs.get('client')
+    if not client:
+        raise ValueError("Client is required")
+    
+    # Generate with buffer (extra items to account for quality filtering)
+    buffer_count = int(count * 1.2)  # 20% buffer
+    
+    print(f"[INFO] Generating {buffer_count} entries (with buffer) to ensure {count} quality entries")
+    
+    # Generate entries in batches for better error recovery
+    all_entries = []
+    batch_size = kwargs.get('batch_size', 10)
+    
+    for batch_start in range(0, buffer_count, batch_size):
+        batch_count = min(batch_size, buffer_count - batch_start)
+        
+        try:
+            batch_entries = client.generate_dataset_batch(
+                task=task,
+                total_count=batch_count,
+                batch_size=batch_count,
+                **kwargs
+            )
+            
+            if batch_entries:
+                all_entries.extend(batch_entries)
+                print(f"[INFO] Generated batch: {len(batch_entries)} entries (Total: {len(all_entries)})")
+            
+        except Exception as e:
+            print(f"[WARN] Batch generation failed: {e}")
+            continue
+    
+    # Validate quality
+    valid_entries, issues = validate_data_quality(all_entries, task)
+    
+    # Report quality metrics
+    quality_report = {
+        "total_generated": len(all_entries),
+        "valid_entries": len(valid_entries),
+        "quality_rate": len(valid_entries) / len(all_entries) if all_entries else 0,
+        "issues_found": len(issues),
+        "final_count": min(len(valid_entries), count)
+    }
+    
+    if issues:
+        print(f"[WARN] Found {len(issues)} data quality issues:")
+        for issue in issues[:5]:  # Show first 5 issues
+            print(f"  - {issue}")
+        if len(issues) > 5:
+            print(f"  ... and {len(issues) - 5} more issues")
+    
+    return valid_entries[:count], quality_report
 
 # ----------------- Main Logic -----------------
 def import_vision_jsonl(input_path, schema, output_path=None):
@@ -711,7 +803,7 @@ def create_dataset_standard_structure(
     Args:
         output_path: path ไปยังไฟล์ output หลัก (เช่น auto-dataset-task-date.jsonl)
         task: dictionary ของ task definition
-        format: รูปแบบไฟล์ ("jsonl", "json", "csv", "parquet")
+        format: รูปแบบไฟล์ ("json", "jsonl", "csv", "parquet")
         split: เป็น True ถ้ามีการคัดลอกไฟล์ไปเป็น train/valid/test (ไม่ได้แบ่งข้อมูลจริง)
         split_paths: tuple ของ (train_path, valid_path, test_path) ถ้า split=True
         sample_count: จำนวนตัวอย่างทั้งหมดใน dataset (ถ้าระบุ)
@@ -1138,7 +1230,90 @@ def main():
         default="platform",
         help="Column name containing platform for file import"
     )
-    # ...continue with existing arguments...
+    args = parser.parse_args()
+
+    # --- Social Media Extraction Mode ---
+    if args.social_platform:
+        print(f"[INFO] Social media extraction mode activated for platform: {args.social_platform}")
+        
+        try:
+            comments = extract_social_media_comments(
+                platform=args.social_platform,
+                query=args.social_query,
+                max_results=args.social_max,
+                include_sentiment=args.social_include_sentiment,
+                filter_spam=True,
+                silent=False,
+                lang=args.social_lang,
+                time_filter=args.social_time_filter
+            )
+            
+            if not comments:
+                print("[ERROR] No comments extracted. Please check your query and platform settings.")
+                return
+            
+            print(f"[SUCCESS] Extracted {len(comments)} comments from {args.social_platform}")
+            
+            # Save extracted comments
+            now = datetime.now().strftime("%Y%m%d-%H%M%S")
+            output_dir = "data/output"
+            os.makedirs(output_dir, exist_ok=True)
+            filename = f"social-{args.social_platform}-{now}.{args.format}"
+            output_path = os.path.join(output_dir, filename)
+            
+            # Convert to dataset format
+            data_entries = []
+            for i, comment in enumerate(comments):
+                data_entry = DataEntry(
+                    id=f"social-{args.social_platform}-{i+1}",
+                    content=comment,
+                    metadata={
+                        "source": f"social_media_{args.social_platform}",
+                        "extracted_at": datetime.now().isoformat(),
+                        "query": args.social_query,
+                        "lang": args.social_lang
+                    }
+                ).to_dict()
+                data_entries.append(data_entry)
+            
+            # Export using existing functions
+            if args.format == "jsonl":
+                export_jsonl(data_entries, output_path)
+            elif args.format == "json":
+                export_json(data_entries, output_path)
+            elif args.format == "csv":
+                export_csv(data_entries, output_path)
+            elif args.format == "parquet":
+                export_parquet(data_entries, output_path)
+            
+            print(f"[SUCCESS] Social media data saved to {output_path}")
+            
+            # Create standard structure if requested
+            if args.create_standard:
+                # Create a mock task for social media data
+                social_task = {
+                    "name": f"Social Media Comments - {args.social_platform.title()}",
+                    "description": f"Comments extracted from {args.social_platform}",
+                    "schema": {
+                        "fields": {
+                            "text": {"field_type": "Text", "required": True},
+                            "platform": {"field_type": "Text", "required": True},
+                            "author": {"field_type": "Text", "required": False},
+                            "post_type": {"field_type": "Text", "required": False}
+                        }
+                    }
+                }
+                
+                standard_structure = create_dataset_standard_structure(
+                    output_path, social_task, args.format, args.split, None, len(data_entries)
+                )
+                print(f"[SUCCESS] Created standard structure at: {standard_structure}")
+            
+            return
+            
+        except Exception as e:
+            print(f"[ERROR] Social media extraction failed: {e}")
+            return
 
     # --- OCR extraction mode: extract text and optionally generate dataset ---
     if args.input_file:
@@ -1232,15 +1407,6 @@ def main():
         import_vision_jsonl(args.import_vision, task["schema"], output_path)
         return
 
-    # --- สร้าง DeepseekClient ด้วยค่า config ที่กำหนด ---
-    client = DeepseekClient(
-        api_key=api_key, model=args.model, temperature=args.temperature
-    )
-
-    print(
-        f"\n{Fore.LIGHTCYAN_EX}Generating dataset for task: {args.task} ({args.count} samples)...{Style.RESET_ALL}"
-    )
-
     # --- กำหนดตัวเลือกสำหรับการทำความสะอาดข้อมูล ---
     clean_options = {
         "remove_html": not args.no_clean,
@@ -1271,6 +1437,8 @@ def main():
         delay=args.delay,
         clean_data=not args.no_clean,
         clean_options=clean_options,
+        advanced_prompt=True,
+        post_process=True
     )
 
     if not all_entries:
@@ -1641,8 +1809,39 @@ def balance_label_entries(
 def split_dataset(
     data_entries: list,
     output_dir: str,
-        f"       - Test: {test_samples} entries ({test_ratio*100:.1f}%) -> {test_path}"
-    )
+    filename_prefix: str,
+    train_ratio: float,
+    valid_ratio: float,
+    test_ratio: float,
+    format: str
+):
+    """Split dataset into train/valid/test files according to specified ratios"""
+    import shutil
+    
+    # Calculate number of samples for each split
+    total_samples = len(data_entries)
+    train_samples = int(total_samples * train_ratio)
+    valid_samples = int(total_samples * valid_ratio)
+    test_samples = total_samples - train_samples - valid_samples
+    
+    # Create file paths
+    train_path = os.path.join(output_dir, f"{filename_prefix}-train.{format}")
+    valid_path = os.path.join(output_dir, f"{filename_prefix}-valid.{format}")
+    test_path = os.path.join(output_dir, f"{filename_prefix}-test.{format}")
+    
+    # For now, copy the full dataset to each file (as indicated by the original comment)
+    # In a real implementation, you might want to actually split the data
+    original_path = os.path.join(output_dir, f"{filename_prefix}.{format}")
+    
+    if os.path.exists(original_path):
+        shutil.copy(original_path, train_path)
+        shutil.copy(original_path, valid_path) 
+        shutil.copy(original_path, test_path)
+    
+    print(f"       - Train: {train_samples} entries ({train_ratio*100:.1f}%) -> {train_path}")
+    print(f"       - Valid: {valid_samples} entries ({valid_ratio*100:.1f}%) -> {valid_path}")
+    print(f"       - Test: {test_samples} entries ({test_ratio*100:.1f}%) -> {test_path}")
+
     print(
         f"       [NOTE] All files contain the full dataset. When using, sample according to the ratios."
     )

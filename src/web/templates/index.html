@@ -1,0 +1,1279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DekDataset - AI Dataset Generator</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
+        }
+        
+        :root {
+            --primary: #2c3e50;
+            --primary-dark: #1a252f;
+            --secondary: #3498db;
+            --accent: #e74c3c;
+            --warning: #f39c12;
+            --dark: #2c3e50;
+            --light-gray: #f5f7fa;
+            --card-bg: #ffffff;
+            --border: #e0e6ed;
+            --text-primary: #2c3e50;
+            --text-secondary: #7f8c8d;
+            --text-muted: #95a5a6;
+            --shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+            --shadow-lg: 0 5px 15px rgba(0, 0, 0, 0.08);
+        }
+
+        body {
+            background: var(--light-gray);
+            min-height: 100vh;
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        .navbar {
+            background: var(--card-bg);
+            border-bottom: 1px solid var(--border);
+            padding: 1.2rem 0;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: var(--shadow);
+        }
+
+        .navbar-brand {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .navbar-brand i {
+            color: var(--secondary);
+            font-size: 1.8rem;
+        }
+
+        .main-content {
+            padding: 2.5rem 0;
+            display: grid;
+            grid-template-columns: 380px 1fr;
+            gap: 2rem;
+            min-height: calc(100vh - 100px);
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 2rem;
+            box-shadow: var(--shadow);
+            transition: all 0.2s ease;
+        }
+
+        .card:hover {
+            box-shadow: var(--shadow-lg);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1.8rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .card-header h2 {
+            font-size: 1.4rem;
+            font-weight: 600;
+            margin: 0;
+            color: var(--text-primary);
+        }
+
+        .card-header i {
+            font-size: 1.4rem;
+            color: var(--secondary);
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+        }
+
+        .form-control, .form-select {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            transition: all 0.2s ease;
+        }
+
+        .form-control:focus, .form-select:focus {
+            outline: none;
+            border-color: var(--secondary);
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+        }
+
+        .form-control::placeholder {
+            color: var(--text-muted);
+        }
+
+        .btn {
+            padding: 0.8rem 1.5rem;
+            border: none;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            text-decoration: none;
+            border: 1px solid transparent;
+        }
+
+        .btn-primary {
+            background: var(--secondary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #2980b9;
+            transform: translateY(-1px);
+        }
+
+        .btn-success {
+            background: #27ae60;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #219653;
+            transform: translateY(-1px);
+        }
+
+        .btn-warning {
+            background: var(--warning);
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background: #e67e22;
+            transform: translateY(-1px);
+        }
+
+        .btn-danger {
+            background: var(--accent);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c0392b;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: var(--card-bg);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: #f1f5f9;
+            transform: translateY(-1px);
+        }
+
+        .btn-sm {
+            padding: 0.6rem 1rem;
+            font-size: 0.8rem;
+        }
+
+        .task-item {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            transition: all 0.2s ease;
+        }
+
+        .task-item:hover {
+            border-color: var(--secondary);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .task-item h6 {
+            color: var(--text-primary);
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            font-size: 1rem;
+        }
+
+        .task-item small {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+
+        .task-actions {
+            margin-top: 1rem;
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .progress {
+            width: 100%;
+            height: 8px;
+            background: var(--border);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 1rem;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: var(--secondary);
+            transition: width 0.3s ease;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.4);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+        }
+
+        .modal-header {
+            padding: 1.8rem 1.8rem 1rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            color: var(--text-primary);
+            font-weight: 600;
+            margin: 0;
+            font-size: 1.4rem;
+        }
+
+        .modal-body {
+            padding: 1.8rem;
+        }
+
+        .modal-footer {
+            padding: 1rem 1.8rem 1.8rem;
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.25rem;
+            cursor: pointer;
+            padding: 0.5rem;
+            width: 35px;
+            height: 35px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+        }
+
+        .close-btn:hover {
+            background: var(--light-gray);
+            color: var(--text-primary);
+        }
+
+        .alert {
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            border-left: 4px solid;
+            font-size: 0.95rem;
+        }
+
+        .alert-info {
+            background: #eaf6ff;
+            border-color: var(--secondary);
+            color: #1a5d8f;
+        }
+
+        .alert-success {
+            background: #e8f9f0;
+            border-color: #27ae60;
+            color: #166534;
+        }
+
+        .alert-danger {
+            background: #fdeded;
+            border-color: var(--accent);
+            color: #991b1b;
+        }
+
+        .json-editor {
+            font-family: 'JetBrains Mono', 'Courier New', monospace;
+            background: #f8fafc;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 1rem;
+            min-height: 300px;
+            color: var(--text-primary);
+            resize: vertical;
+            font-size: 0.9rem;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+
+        .status-active {
+            background: #27ae60;
+        }
+
+        .status-inactive {
+            background: var(--text-muted);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 0.8rem;
+            flex-wrap: wrap;
+        }
+
+        .generation-panel {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .dataset-preview {
+            background: #f8fafc;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 1.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            max-height: 300px;
+            overflow-y: auto;
+            line-height: 1.7;
+        }
+
+        .dataset-preview .key {
+            color: #2980b9;
+        }
+        
+        .dataset-preview .string {
+            color: #27ae60;
+        }
+        
+        .dataset-preview .number {
+            color: #d35400;
+        }
+
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+                gap: 1.8rem;
+            }
+
+            .generation-panel {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 0 1.5rem;
+            }
+
+            .card {
+                padding: 1.8rem;
+            }
+
+            .btn-group {
+                flex-direction: column;
+            }
+        }
+
+        .section-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: var(--text-primary);
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border);
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-animation"></div>
+    <div class="floating-elements">
+        <div class="floating-element"></div>
+        <div class="floating-element"></div>
+        <div class="floating-element"></div>
+    </div>
+
+    <nav class="navbar">
+        <div class="container">
+            <a href="#" class="navbar-brand">
+                <i class="fas fa-brain"></i>
+                DekDataset
+            </a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="main-content">
+            <!-- Task Management Panel -->
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-tasks"></i>
+                    <h2>Task Management</h2>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Select Task</label>
+                    <select class="form-select" id="taskDropdown">
+                        <option value="">-- Select Task --</option>
+                        <!-- Task options will be populated by JavaScript -->
+                    </select>
+                </div>
+
+                <div id="taskJsonSection" style="display:none;">
+                    <div class="form-group">
+                        <label class="form-label">Task Configuration</label>
+                        <textarea id="taskJsonArea" class="form-control json-editor" rows="12"></textarea>
+                        <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
+                            <button class="btn btn-primary btn-sm" id="saveTaskJson">
+                                <i class="fas fa-save"></i> Save
+                            </button>
+                            <button class="btn btn-secondary btn-sm" id="reloadTaskJson">
+                                <i class="fas fa-sync"></i> Reload
+                            </button>
+                        </div>
+                        <div id="taskJsonMsg" style="margin-top: 0.5rem;"></div>
+                    </div>
+                </div>
+                
+                <button class="btn btn-success" id="createTaskBtn" style="margin-bottom: 2rem; width: 100%;">
+                    <i class="fas fa-plus"></i>Create New Task
+                </button>
+                
+                <div id="taskList">
+                    <!-- Task items will be populated by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Generation Panel -->
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-magic"></i>
+                    <h2>Dataset Generation</h2>
+                </div>
+                
+                <div class="generation-panel">
+                    <div class="form-group">
+                        <label class="form-label">Selected Task</label>
+                        <input type="text" class="form-control" id="selectedTask" readonly placeholder="No task selected">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Number of Entries</label>
+                        <input type="number" class="form-control" id="entryCount" value="10" min="1" max="1000">
+                    </div>
+                </div>
+                  <div style="margin-bottom: 2rem;">
+                    <div class="btn-group">
+                        <button class="btn btn-warning" id="testGeneration">
+                            <i class="fas fa-flask"></i>Test Generation
+                        </button>
+                        <button class="btn btn-primary" id="generateDataset">
+                            <i class="fas fa-rocket"></i>Generate Dataset
+                        </button>
+                        <button class="btn btn-secondary" id="qualityBtn">
+                            <i class="fas fa-shield-alt"></i>Quality Settings
+                        </button>
+                        <button class="btn btn-info" id="apiConfigBtn">
+                            <i class="fas fa-key"></i>API Config
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Progress Section -->
+                <div id="progressSection" style="display: none;">
+                    <div class="progress">
+                        <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+                    </div>
+                    <div id="progressText" style="text-align: center; color: var(--text-secondary);"></div>
+                </div>
+
+                <!-- Results Section -->
+                <div id="resultsSection" style="display: none;">
+                    <h3 style="margin-bottom: 1rem;">Generated Dataset</h3>
+                    <div id="qualityReport" class="alert alert-info" style="display: none;"></div>
+                    <div id="datasetPreview" style="margin-bottom: 2rem;"></div>
+                    
+                    <div class="btn-group">
+                        <button class="btn btn-success download-btn" data-format="json">
+                            <i class="fas fa-download"></i>Download JSON
+                        </button>
+                        <button class="btn btn-success download-btn" data-format="csv">
+                            <i class="fas fa-download"></i>Download CSV
+                        </button>
+                        <button class="btn btn-success download-btn" data-format="zip">
+                            <i class="fas fa-download"></i>Download ZIP
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Task Modal -->
+    <div class="modal" id="createTaskModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Create New Task</h3>
+                <button class="close-btn" id="closeCreateModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Task ID</label>
+                    <input type="text" class="form-control" id="taskId" placeholder="Enter unique task ID" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Task Type</label>
+                    <select class="form-select" id="taskType">
+                        <option value="custom">Custom</option>
+                        <option value="qa">Question-Answer</option>
+                        <option value="classification">Classification</option>
+                        <option value="generation">Text Generation</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <textarea class="form-control" id="taskDescription" rows="3" placeholder="Describe what this task does..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Prompt Template</label>
+                    <textarea class="form-control json-editor" id="promptTemplate" rows="5" placeholder="Enter your prompt template here..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelCreateTask">Cancel</button>
+                <button class="btn btn-primary" id="saveTask">
+                    <i class="fas fa-plus"></i>Create Task
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- API Configuration Modal -->
+    <div class="modal" id="apiConfigModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>API Configuration</h3>
+                <button class="close-btn" id="closeApiConfigModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    <strong>Note:</strong> You need a DeepSeek API key to generate real datasets. Get one from <a href="https://platform.deepseek.com" target="_blank">platform.deepseek.com</a>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">DeepSeek API Key</label>
+                    <input type="password" class="form-control" id="apiKey" placeholder="sk-...">
+                    <small style="color: var(--text-secondary);">This will be stored in your environment variables for this session.</small>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">API Status</label>
+                    <div id="apiStatus" class="alert alert-secondary">
+                        <i class="fas fa-question-circle"></i>
+                        Status unknown - Click "Test API" to check
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="testApiBtn">
+                    <i class="fas fa-flask"></i>Test API
+                </button>
+                <button class="btn btn-success" id="saveApiKey">
+                    <i class="fas fa-save"></i>Save & Set
+                </button>
+                <button class="btn btn-secondary" id="cancelApiConfig">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quality Settings Modal -->
+    <div class="modal" id="qualityModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Quality Control Settings</h3>
+                <button class="close-btn" id="closeQualityModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Minimum Length</label>
+                    <input type="number" class="form-control" id="minLength" value="10">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Maximum Length</label>
+                    <input type="number" class="form-control" id="maxLength" value="1000">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Similarity Threshold</label>
+                    <input type="range" class="form-range" id="similarityThreshold" min="0" max="1" step="0.1" value="0.8">
+                    <small style="color: var(--text-secondary);">Current: <span id="thresholdValue">0.8</span></small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelQuality">Cancel</button>
+                <button class="btn btn-primary" id="saveQuality">
+                    <i class="fas fa-save"></i>Save Settings
+                </button>
+            </div>
+        </div>
+    </div>    <script>
+        // Load data from tasks.json
+        let tasksArray = [];
+        let tasks = {};
+
+        // Function to load tasks from tasks.json
+        async function loadTasks() {
+            try {
+                const response = await fetch('/api/app-config/tasks.json'); // MODIFIED URL
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const tasksData = await response.json();
+                
+                // Convert tasks object to array format
+                tasksArray = Object.keys(tasksData).map(taskId => ({
+                    id: taskId,
+                    type: tasksData[taskId].schema?.type || 'custom',
+                    description: tasksData[taskId].description || tasksData[taskId].name || taskId,
+                    name: tasksData[taskId].name || taskId,
+                    format: tasksData[taskId].format || 'Jsonl',
+                    schema: tasksData[taskId].schema || {},
+                    examples: tasksData[taskId].examples || [],
+                    parameters: tasksData[taskId].parameters || {}
+                }));
+                
+                // Convert to object for easy access
+                tasks = Object.fromEntries(tasksArray.map(t => [t.id, t]));
+                
+                // Update UI after loading
+                populateTaskDropdown();
+                renderTaskList();
+                
+                console.log(`Loaded ${tasksArray.length} tasks from tasks.json`);
+            } catch (error) {
+                console.error('Error loading tasks:', error);
+                showAlert('Failed to load tasks from tasks.json. Using fallback data.', 'error');
+                
+                // Fallback to mock data
+                tasksArray = [
+                    { id: 'task_qa', type: 'qa', description: 'Question-Answer Generation' },
+                    { id: 'task_classify', type: 'classification', description: 'Text Classification' },
+                    { id: 'task_generate', type: 'generation', description: 'Text Generation' }
+                ];
+                tasks = Object.fromEntries(tasksArray.map(t => [t.id, t]));
+                populateTaskDropdown();
+                renderTaskList();
+            }
+        }
+
+        const taskDropdown = document.getElementById('taskDropdown');
+        const taskJsonSection = document.getElementById('taskJsonSection');
+        const taskJsonArea = document.getElementById('taskJsonArea');
+        const saveTaskJsonBtn = document.getElementById('saveTaskJson');
+        const reloadTaskJsonBtn = document.getElementById('reloadTaskJson');
+        const taskJsonMsg = document.getElementById('taskJsonMsg');
+        const taskList = document.getElementById('taskList');
+        const selectedTaskInput = document.getElementById('selectedTask');
+
+        let currentTaskId = null;
+        let originalTaskJson = null;        // Initialize UI
+        async function init() {
+            // Load tasks from tasks.json first
+            await loadTasks();
+            setupEventListeners();
+            checkApiStatus(); // Check API status on load
+        }
+
+        function populateTaskDropdown() {
+            taskDropdown.innerHTML = '<option value="">-- Select Task --</option>';
+            tasksArray.forEach(task => {
+                const option = document.createElement('option');
+                option.value = task.id;
+                option.textContent = task.id;
+                taskDropdown.appendChild(option);
+            });
+        }
+
+        function renderTaskList() {
+            taskList.innerHTML = '';
+            tasksArray.forEach(task => {
+                const taskItem = document.createElement('div');
+                taskItem.className = 'task-item';
+                taskItem.innerHTML = `
+                    <h6><span class="status-indicator status-active"></span>${task.id}</h6>
+                    <small>${task.type}</small>
+                    <div class="task-actions">
+                        <button class="btn btn-primary btn-sm select-task" data-task-id="${task.id}">
+                            <i class="fas fa-check"></i> Select
+                        </button>
+                        <button class="btn btn-danger btn-sm delete-task" data-task-id="${task.id}">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                `;
+                taskList.appendChild(taskItem);
+            });
+        }
+
+        function showTaskJson(taskId) {
+            if (!taskId || !tasks[taskId]) {
+                taskJsonSection.style.display = 'none';
+                return;
+            }
+            currentTaskId = taskId;
+            originalTaskJson = JSON.stringify(tasks[taskId], null, 2);
+            taskJsonArea.value = originalTaskJson;
+            taskJsonSection.style.display = 'block';
+            taskJsonMsg.innerHTML = '';
+        }
+
+        function setupEventListeners() {
+            // Task dropdown
+            taskDropdown.addEventListener('change', function() {
+                showTaskJson(this.value);
+                selectedTaskInput.value = this.value;
+            });
+
+            // JSON editor buttons
+            reloadTaskJsonBtn.addEventListener('click', function() {
+                if (currentTaskId && tasks[currentTaskId]) {
+                    taskJsonArea.value = JSON.stringify(tasks[currentTaskId], null, 2);
+                    showMessage(taskJsonMsg, 'Reloaded from original.', 'info');
+                }
+            });
+
+            saveTaskJsonBtn.addEventListener('click', async function() {
+                if (!currentTaskId) return;
+                let newJson;
+                try {
+                    newJson = JSON.parse(taskJsonArea.value);
+                    tasks[currentTaskId] = newJson;
+                    showMessage(taskJsonMsg, 'Saved successfully.', 'success');
+                } catch (e) {
+                    showMessage(taskJsonMsg, 'Invalid JSON: ' + e.message, 'error');
+                }
+            });
+
+            // Task list actions
+            taskList.addEventListener('click', function(e) {
+                const taskId = e.target.closest('[data-task-id]')?.dataset.taskId;
+                if (!taskId) return;
+
+                if (e.target.closest('.select-task')) {
+                    taskDropdown.value = taskId;
+                    selectedTaskInput.value = taskId;
+                    showTaskJson(taskId);
+                } else if (e.target.closest('.delete-task')) {
+                    if (confirm('Are you sure you want to delete this task?')) {
+                        delete tasks[taskId];
+                        tasksArray = tasksArray.filter(t => t.id !== taskId);
+                        populateTaskDropdown();
+                        renderTaskList();
+                    }
+                }
+            });            // Modal controls
+            setupModalControls();
+
+            // API Configuration
+            document.getElementById('apiConfigBtn').addEventListener('click', () => {
+                document.getElementById('apiConfigModal').classList.add('show');
+            });
+
+            document.getElementById('closeApiConfigModal').addEventListener('click', () => {
+                document.getElementById('apiConfigModal').classList.remove('show');
+            });
+
+            document.getElementById('cancelApiConfig').addEventListener('click', () => {
+                document.getElementById('apiConfigModal').classList.remove('show');
+            });
+
+            document.getElementById('testApiBtn').addEventListener('click', checkApiStatus);
+            document.getElementById('saveApiKey').addEventListener('click', saveApiKey);
+
+            // Generation controls
+            setupGenerationControls();
+        }
+
+        function setupModalControls() {
+            const createTaskBtn = document.getElementById('createTaskBtn');
+            const createTaskModal = document.getElementById('createTaskModal');
+            const qualityBtn = document.getElementById('qualityBtn');
+            const qualityModal = document.getElementById('qualityModal');
+
+            createTaskBtn.addEventListener('click', () => {
+                createTaskModal.classList.add('show');
+            });
+
+            qualityBtn.addEventListener('click', () => {
+                qualityModal.classList.add('show');
+            });
+
+            // Close modal handlers
+            document.getElementById('closeCreateModal').addEventListener('click', () => {
+                createTaskModal.classList.remove('show');
+            });
+
+            document.getElementById('closeQualityModal').addEventListener('click', () => {
+                qualityModal.classList.remove('show');
+            });
+
+            document.getElementById('cancelCreateTask').addEventListener('click', () => {
+                createTaskModal.classList.remove('show');
+            });
+
+            document.getElementById('cancelQuality').addEventListener('click', () => {
+                qualityModal.classList.remove('show');
+            });
+
+            // Save handlers
+            document.getElementById('saveTask').addEventListener('click', () => {
+                const taskId = document.getElementById('taskId').value;
+                const taskType = document.getElementById('taskType').value;
+                const taskDescription = document.getElementById('taskDescription').value;
+                const promptTemplate = document.getElementById('promptTemplate').value;
+
+                if (!taskId) {
+                    alert('Please enter a Task ID');
+                    return;
+                }
+
+                if (tasks[taskId]) {
+                    alert('Task ID already exists');
+                    return;
+                }
+
+                const newTask = {
+                    id: taskId,
+                    type: taskType,
+                    description: taskDescription,
+                    promptTemplate: promptTemplate
+                };
+
+                tasks[taskId] = newTask;
+                tasksArray.push(newTask);
+                populateTaskDropdown();
+                renderTaskList();
+                createTaskModal.classList.remove('show');
+                
+                // Clear form
+                document.getElementById('taskId').value = '';
+                document.getElementById('taskDescription').value = '';
+                document.getElementById('promptTemplate').value = '';
+            });
+
+            // Quality settings
+            const similarityThreshold = document.getElementById('similarityThreshold');
+            const thresholdValue = document.getElementById('thresholdValue');
+            
+            similarityThreshold.addEventListener('input', () => {
+                thresholdValue.textContent = similarityThreshold.value;
+            });
+
+            document.getElementById('saveQuality').addEventListener('click', () => {
+                // Save quality settings logic here
+                qualityModal.classList.remove('show');
+                showAlert('Quality settings saved successfully!', 'success');
+            });
+
+            // Close modals when clicking outside
+            [createTaskModal, qualityModal].forEach(modal => {
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) {
+                        modal.classList.remove('show');
+                    }
+                });
+            });
+        }        function setupGenerationControls() {
+            const testGeneration = document.getElementById('testGeneration');
+            const generateDataset = document.getElementById('generateDataset');
+            const progressSection = document.getElementById('progressSection');
+            const resultsSection = document.getElementById('resultsSection');
+            const progressBar = document.querySelector('.progress-bar');
+            const progressText = document.getElementById('progressText');
+
+            testGeneration.addEventListener('click', async () => {
+                const selectedTask = document.getElementById('selectedTask').value;
+                if (!selectedTask) {
+                    showAlert('Please select a task first', 'error');
+                    return;
+                }
+                
+                try {
+                    showAlert('Test generation started...', 'info');
+                    progressSection.style.display = 'block';
+                    progressText.textContent = 'Testing generation...';
+                    progressBar.style.width = '50%';
+
+                    const response = await fetch('/api/test-generation', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            task_id: selectedTask
+                        })
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.detail || 'Test generation failed');
+                    }
+
+                    const result = await response.json();
+                    progressSection.style.display = 'none';
+                    showTestResults(result);
+                    showAlert('Test completed successfully!', 'success');
+                } catch (error) {
+                    progressSection.style.display = 'none';
+                    console.error('Error in test generation:', error);
+                    showAlert('Test generation failed: ' + error.message, 'error');
+                }
+            });
+
+            generateDataset.addEventListener('click', async () => {
+                const selectedTask = document.getElementById('selectedTask').value;
+                const entryCount = parseInt(document.getElementById('entryCount').value);
+                
+                if (!selectedTask) {
+                    showAlert('Please select a task first', 'error');
+                    return;
+                }
+
+                if (!entryCount || entryCount < 1 || entryCount > 1000) {
+                    showAlert('Please enter a valid number of entries (1-1000)', 'error');
+                    return;
+                }
+
+                try {
+                    progressSection.style.display = 'block';
+                    resultsSection.style.display = 'none';
+                    progressText.textContent = `Generating ${entryCount} entries...`;
+                    progressBar.style.width = '0%';
+
+                    // Start generation
+                    const response = await fetch('/api/generate', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            task_id: selectedTask,
+                            count: entryCount
+                        })
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.detail || 'Dataset generation failed');
+                    }
+
+                    // Simulate progress during generation
+                    let progress = 0;
+                    const progressInterval = setInterval(() => {
+                        progress += Math.random() * 10;
+                        if (progress >= 90) {
+                            progress = 90; // Don't reach 100% until we get response
+                        }
+                        progressBar.style.width = progress + '%';
+                    }, 500);
+
+                    const result = await response.json();
+                    clearInterval(progressInterval);
+                    progressBar.style.width = '100%';
+                    
+                    setTimeout(() => {
+                        progressSection.style.display = 'none';
+                        showResults(result, selectedTask);
+                        showAlert(`Generated ${result.count} entries successfully!`, 'success');
+                    }, 500);
+
+                } catch (error) {
+                    progressSection.style.display = 'none';
+                    console.error('Error in dataset generation:', error);
+                    showAlert('Dataset generation failed: ' + error.message, 'error');
+                }
+            });
+
+            // Download buttons
+            document.addEventListener('click', (e) => {
+                if (e.target.closest('.download-btn')) {
+                    const format = e.target.closest('.download-btn').dataset.format;
+                    const selectedTask = document.getElementById('selectedTask').value;
+                    if (selectedTask) {
+                        downloadDataset(format, selectedTask);
+                    } else {
+                        showAlert('No task selected for download', 'error');
+                    }
+                }
+            });
+        }        function showTestResults(result) {
+            const resultsSection = document.getElementById('resultsSection');
+            const qualityReport = document.getElementById('qualityReport');
+            const datasetPreview = document.getElementById('datasetPreview');
+
+            qualityReport.style.display = 'block';
+            qualityReport.innerHTML = `
+                <strong>Test Generation Report:</strong><br>
+                • Test entries generated: ${result.test_entries ? result.test_entries.length : 0}<br>
+                • Status: ${result.status}<br>
+                • Task ID: ${result.task_id}
+            `;
+
+            // Show first few test entries
+            const previewData = result.test_entries ? result.test_entries.slice(0, 3) : [];
+            datasetPreview.innerHTML = `
+                <div style="background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 8px; font-family: monospace; max-height: 300px; overflow-y: auto;">
+                    <div style="color: #10b981; margin-bottom: 0.5rem;">[Test Generated Data - First 3 Entries]</div>
+                    <div style="color: #e2e8f0;">
+                        ${JSON.stringify(previewData, null, 2)}
+                    </div>
+                </div>
+            `;
+
+            resultsSection.style.display = 'block';
+        }
+
+        function showResults(result, taskId) {
+            const resultsSection = document.getElementById('resultsSection');
+            const qualityReport = document.getElementById('qualityReport');
+            const datasetPreview = document.getElementById('datasetPreview');
+
+            // Store current task ID for downloads
+            window.currentGeneratedTaskId = taskId;
+
+            qualityReport.style.display = 'block';
+            const qualityData = result.quality_report || {};
+            qualityReport.innerHTML = `
+                <strong>Quality Report:</strong><br>
+                • Generated entries: ${result.count || 0}<br>
+                • Quality score: ${qualityData.quality_score ? (qualityData.quality_score * 100).toFixed(1) + '%' : 'N/A'}<br>
+                • Duplicates removed: ${qualityData.duplicates_removed || 0}<br>
+                • Average length: ${qualityData.average_length ? qualityData.average_length.toFixed(1) + ' characters' : 'N/A'}<br>
+                • Generated at: ${new Date(result.generated_at).toLocaleString()}
+            `;
+
+            // Show first few entries
+            const previewData = result.entries ? result.entries.slice(0, 5) : [];
+            datasetPreview.innerHTML = `
+                <div style="background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 8px; font-family: monospace; max-height: 300px; overflow-y: auto;">
+                    <div style="color: #10b981; margin-bottom: 0.5rem;">[Generated Dataset Preview - First 5 Entries]</div>
+                    <div style="color: #e2e8f0;">
+                        ${JSON.stringify(previewData, null, 2)}
+                    </div>
+                </div>
+            `;
+
+            resultsSection.style.display = 'block';
+        }
+
+        async function downloadDataset(format, taskId) {
+            try {
+                showAlert(`Preparing ${format.toUpperCase()} download...`, 'info');
+                
+                const response = await fetch(`/api/download/${format}/${taskId}`);
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || 'Download failed');
+                }
+
+                // Get the filename from the response headers or use a default
+                const contentDisposition = response.headers.get('content-disposition');
+                let filename = `dataset_${taskId}.${format}`;
+                if (contentDisposition) {
+                    const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(contentDisposition);
+                    if (matches != null && matches[1]) {
+                        filename = matches[1].replace(/['"]/g, '');
+                    }
+                }
+
+                // Create blob and download
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+
+                showAlert(`Dataset downloaded successfully as ${format.toUpperCase()}!`, 'success');
+            } catch (error) {
+                console.error('Download error:', error);
+                showAlert('Download failed: ' + error.message, 'error');
+            }
+        }
+
+        function showMessage(container, message, type) {
+            const className = type === 'error' ? 'text-danger' : 
+                            type === 'success' ? 'text-success' : 'text-info';
+            container.innerHTML = `<span class="${className}">${message}</span>`;
+            setTimeout(() => {
+                container.innerHTML = '';
+            }, 3000);
+        }
+
+        function showAlert(message, type) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type === 'error' ? 'danger' : type}`;
+            alertDiv.innerHTML = `
+                <i class="fas fa-${type === 'error' ? 'exclamation-triangle' : 
+                                 type === 'success' ? 'check-circle' : 'info-circle'}"></i>
+                ${message}
+            `;
+            
+            const container = document.querySelector('.container');
+            container.insertBefore(alertDiv, container.firstChild);
+            
+            setTimeout(() => {
+                alertDiv.style.opacity = '0';
+                alertDiv.style.transform = 'translateY(-20px)';
+                setTimeout(() => alertDiv.remove(), 300);
+            }, 3000);
+        }
+
+        async function checkApiStatus() {
+            const apiStatus = document.getElementById('apiStatus');
+            try {
+                const response = await fetch('/api/status');
+                const status = await response.json();
+                
+                if (status.deepseek_api_configured) {
+                    apiStatus.className = 'alert alert-success';
+                    apiStatus.innerHTML = `
+                        <i class="fas fa-check-circle"></i>
+                        DeepSeek API is configured and ready to use
+                    `;
+                } else {
+                    apiStatus.className = 'alert alert-warning';
+                    apiStatus.innerHTML = `
+                        <i class="fas fa-exclamation-triangle"></i>
+                        DeepSeek API key not configured. Please set your API key.
+                    `;
+                }
+            } catch (error) {
+                apiStatus.className = 'alert alert-danger';
+                apiStatus.innerHTML = `
+                    <i class="fas fa-times-circle"></i>
+                    Error checking API status: ${error.message}
+                `;
+            }
+        }
+
+        async function saveApiKey() {
+            const apiKey = document.getElementById('apiKey').value;
+            if (!apiKey || !apiKey.startsWith('sk-')) {
+                showAlert('Please enter a valid DeepSeek API key (starts with sk-)', 'error');
+                return;
+            }
+
+            try {
+                // Note: This is a frontend-only approach - the API key would need to be 
+                // set as an environment variable on the server side for actual use
+                showAlert('API key saved for this session. Note: You need to set DEEPSEEK_API_KEY environment variable on the server for persistent use.', 'info');
+                
+                // Clear the input for security
+                document.getElementById('apiKey').value = '';
+                
+                // Close modal
+                document.getElementById('apiConfigModal').classList.remove('show');
+                
+                // Refresh API status
+                await checkApiStatus();
+                
+            } catch (error) {
+                showAlert('Error saving API key: ' + error.message, 'error');
+            }
+        }
+
+        // Initialize the application
+        init();
+
+        // Add some interactive animations
+
+        // createParticles(); // Commented out as it's not defined
+    </script>
+</body>
+</html>

@@ -1,0 +1,110 @@
+{
+  "entries": [
+    {
+      "id": null,
+      "input": null,
+      "output": null,
+      "raw_data": {
+        "text": "ร้านอาหารนี้บริการดีมาก อาหารอร่อยและราคาไม่แพง",
+        "sentiment": "positive"
+      }
+    },
+    {
+      "id": null,
+      "input": null,
+      "output": null,
+      "raw_data": {
+        "text": "สินค้าที่สั่งมาชำรุดและคุณภาพไม่ดีเลย",
+        "sentiment": "negative"
+      }
+    },
+    {
+      "id": null,
+      "input": null,
+      "output": null,
+      "raw_data": {
+        "text": "วันนี้อากาศร้อนมาก แต่ก็ยังมีลมพัดเบาๆ",
+        "sentiment": "neutral"
+      }
+    },
+    {
+      "id": null,
+      "input": null,
+      "output": null,
+      "raw_data": {
+        "text": "หนังเรื่องนี้สนุกมาก แนะนำให้ดูเลย",
+        "sentiment": "positive"
+      }
+    },
+    {
+      "id": null,
+      "input": null,
+      "output": null,
+      "raw_data": {
+        "text": "บริการหลังการขายแย่มาก ตอบช้าและไม่แก้ปัญหา",
+        "sentiment": "negative"
+      }
+    },
+    {
+      "id": null,
+      "input": null,
+      "output": null,
+      "raw_data": {
+        "text": "รถไฟฟ้าวันนี้คนไม่เยอะมาก นั่งสบาย",
+        "sentiment": "neutral"
+      }
+    },
+    {
+      "id": null,
+      "input": null,
+      "output": null,
+      "raw_data": {
+        "text": "พนักงานที่นี่เป็นกันเองและช่วยเหลือดีมาก",
+        "sentiment": "positive"
+      }
+    },
+    {
+      "id": null,
+      "input": null,
+      "output": null,
+      "raw_data": {
+        "text": "สินค้ามาไม่ตรงตามที่สั่งและแพ็คเกจก็เสียหาย",
+        "sentiment": "negative"
+      }
+    },
+    {
+      "id": null,
+      "input": null,
+      "output": null,
+      "raw_data": {
+        "text": "ร้านนี้เปิดใหม่ ยังไม่ค่อยมีคนมาเท่าไหร่",
+        "sentiment": "neutral"
+      }
+    },
+    {
+      "id": null,
+      "input": null,
+      "output": null,
+      "raw_data": {
+        "text": "ชอบบรรยากาศร้านนี้มาก นั่งทำงานแล้วผ่อนคลาย",
+        "sentiment": "positive"
+      }
+    }
+  ],
+  "quality_report": {
+    "generated_entries": 10,
+    "quality_score": 0.8,
+    "duplicates_removed": 0,
+    "average_length": 76.6,
+    "details": {
+      "total_generated": 10,
+      "valid_entries": 10,
+      "quality_rate": 1.0,
+      "issues_found": 0,
+      "final_count": 10
+    }
+  },
+  "generated_at": "2025-05-29T14:41:11.393527",
+  "task_id": "sentiment_analysis",
+  "count": 10
+}
