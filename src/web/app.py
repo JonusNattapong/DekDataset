@@ -129,8 +129,6 @@ class SimpleDeepseekClient:
     def generate_text(self, prompt: str, max_tokens: int = 1000) -> str:
         """Simple text generation - for demo purposes"""
         try:
-            import requests
-            
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json"
@@ -178,7 +176,7 @@ class SimpleTaskManager:
                         self._tasks = data
                     else:
                         self._tasks = {}
-                logger.info(f"Loaded {len(self._tasks)} tasks")
+                logger.info(f"Loaded {len(self._tasks)} tasks from {self.tasks_file}")
             else:
                 self._tasks = {}
                 logger.info("No tasks file found, starting with empty tasks")
@@ -272,9 +270,6 @@ Return only the JSON array, no additional text.
         
         if response:
             try:
-                # Try to parse JSON response
-                import re
-                
                 # Extract JSON array from response
                 json_match = re.search(r'\[.*\]', response, re.DOTALL)
                 if json_match:
@@ -490,6 +485,21 @@ async def index(request: Request):
     
     logger.info(f"Tasks being passed to template ({len(processed_tasks_data)} tasks)")
     return templates.TemplateResponse("index.html", {"request": request, "tasks": processed_tasks_data})
+
+# Add the missing API endpoint that the frontend is looking for
+@app.get("/api/app-config/tasks.json", summary="Get Tasks JSON", tags=["Tasks API"])
+async def get_tasks_json():
+    """Get tasks configuration as JSON for frontend."""
+    try:
+        if app_config.tasks_json_file.exists():
+            with open(app_config.tasks_json_file, 'r', encoding='utf-8') as f:
+                tasks_data = json.load(f)
+                return JSONResponse(content=tasks_data)
+        else:
+            return JSONResponse(content={})
+    except Exception as e:
+        logger.error(f"Error loading tasks JSON: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/tasks", response_model=TaskListResponse, summary="Get All Tasks", tags=["Tasks API"])
 async def get_tasks_api(tm = Depends(get_task_manager)):
@@ -871,7 +881,7 @@ async def startup_event():
 
 if __name__ == "__main__":
     uvicorn.run(
-        "app_complete:app",
+        "app:app",
         host="127.0.0.1",
         port=8000,
         reload=True,
