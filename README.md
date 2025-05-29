@@ -7,6 +7,8 @@
 ![Mistral OCR](https://img.shields.io/badge/Mistral-OCR-4ECDC4?style=for-the-badge&logo=mistral&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/License-MIT-2ECC71?style=for-the-badge)
 ![Status](https://img.shields.io/badge/Status-Production_Ready-27AE60?style=for-the-badge)
+![Web_Interface](https://img.shields.io/badge/Web_Interface-Available-FF6B6B?style=for-the-badge)
+![API](https://img.shields.io/badge/FastAPI-Ready-4ECDC4?style=for-the-badge)
 
 </div>
 
@@ -52,11 +54,21 @@
 
 ### 🔧 Core Capabilities
 
-- **🎯 Unified Task Schema**: Support for NLP, Vision, OCR, and Multi-modal tasks with centralized schema management
+- **🌐 Web Interface**: Modern FastAPI-based web dashboard for easy dataset generation and management
+- **🎯 Unified Task Schema**: Support for NLP, Vision, OCR, and Multi-modal tasks with centralized schema management  
 - **🤖 Automatic Prompting**: Generate optimized prompts for LLMs (DeepSeek, OpenAI, etc.) automatically
 - **⚡ Batch Generation**: Advanced batch processing with error recovery, quota management, and intelligent retry mechanisms
 - **📊 Data Validation & Metadata**: Complete validation, deduplication, enrichment, label balancing, and metadata export
 - **💾 Flexible Output**: Export to JSONL, Parquet, Arrow, CSV formats compatible with HuggingFace, PyArrow, and Pandas
+
+### 🌐 Web Dashboard Features
+
+- **📋 Task Management**: Browse and select from 34+ pre-configured tasks (sentiment analysis, summarization, Q&A, etc.)
+- **🎛️ Real-time Generation**: Live dataset generation with progress tracking and quality metrics
+- **💾 Multi-format Download**: Export datasets as JSON, CSV, or ZIP archives
+- **🔧 Custom Task Creation**: Create and manage custom tasks through the web interface
+- **📈 API Monitoring**: Real-time DeepSeek API status and configuration management
+- **📊 Quality Control**: Built-in validation, deduplication, and quality scoring
 
 ### 🔍 Advanced OCR & Document Processing
 
@@ -81,6 +93,29 @@
 ---
 
 ## 📦 Installation
+
+### 🚀 Web Interface Setup (Recommended)
+
+1. Install Python dependencies:
+```bash
+pip install -r requirements.txt
+pip install fastapi uvicorn
+```
+
+2. Set up environment variables:
+```bash
+echo "DEEPSEEK_API_KEY=sk-your-deepseek-api-key" > .env
+```
+
+3. Start the web server:
+```bash
+cd src/web
+python app.py
+```
+
+4. Open your browser and navigate to: `http://localhost:8000`
+
+### 🖥️ Command Line Setup
 
 1. Install Python dependencies:
 ```bash
@@ -117,9 +152,50 @@ python src/python/ocr_utils.py --test
 python src/python/ocr_utils.py --test-pdf sample.pdf
 ```
 
-## ⚡ Quick Start Examples
+## ⚡ Quick Start
 
-### Social Media Comment Extraction
+### 🚀 Web Interface (Recommended)
+
+The easiest way to get started is through our user-friendly web interface:
+
+```bash
+# 1. Set up environment variables
+echo "DEEPSEEK_API_KEY=sk-your-deepseek-api-key" > .env
+
+# 2. Start the web server
+cd src/web
+python app.py
+
+# 3. Open browser and navigate to: http://localhost:8000
+```
+
+**Web Interface Features:**
+- 📝 Select from 34+ pre-configured tasks
+- 🎯 Real-time dataset generation with DeepSeek API
+- 📊 Quality control and validation
+- 💾 Download datasets in JSON, CSV, or ZIP formats
+- 🔧 Create and manage custom tasks
+- 📈 API status monitoring
+
+### 🖥️ Command Line Interface
+
+Generate datasets directly from the command line:
+
+```bash
+# Test the system
+python test_system.py
+
+# Generate NLP dataset
+python src/python/generate_dataset.py sentiment_analysis 100 --format jsonl
+
+# Generate dataset from PDF document
+python src/python/generate_dataset.py primary_school_knowledge 50 --input-file document.pdf
+
+# Generate with custom settings
+python src/python/generate_dataset.py medical_text_summarization 25 --delay 2 --format parquet
+```
+
+### 📱 Social Media Comment Extraction
 
 Extract comments from various social media platforms:
 
@@ -132,18 +208,6 @@ python src/python/get_comments.py facebook https://facebook.com/post/123456 --ma
 
 # Extract YouTube comments
 python src/python/get_comments.py youtube https://youtube.com/watch?v=videoId --max_results 200
-```
-
-### Save & Export Options
-
-Save extracted comments in different formats:
-
-```bash
-# Save as JSONL (default)
-python src/python/get_comments.py x https://x.com/post/123 --output comments.jsonl
-
-# Save as CSV
-python src/python/get_comments.py x https://x.com/post/123 --format csv --output comments.csv
 
 # Save with sentiment analysis
 python src/python/get_comments.py x https://x.com/post/123 --sentiment
