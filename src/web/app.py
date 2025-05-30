@@ -1,5 +1,8 @@
+import os
+import json
+
 from fastapi import FastAPI, Request, HTTPException, Depends, Body, Path as FastApiPath, Query, Form, UploadFile, File
-from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
+from fastapi.responses import JSONResponse, HTMLResponse, FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
@@ -17,13 +20,81 @@ from dotenv import load_dotenv
 import traceback
 import requests
 import re
+from io import StringIO
+import pandas as pd
+import csv
 
 # Load environment variables from .env file
 load_dotenv()
 
+def save_dataset_to_cache_sync(task_id, cache_data):
+    """บันทึก cache_data ลงไฟล์ cache/{task_id}.json"""
+    cache_dir = os.path.join(os.path.dirname(__file__), "..", "..", "cache")
+    os.makedirs(cache_dir, exist_ok=True)
+    cache_path = os.path.join(cache_dir, f"{task_id}.json")
+    with open(cache_path, "w", encoding="utf-8") as f:
+        json.dump(cache_data, f, ensure_ascii=False, indent=2)
+
+# Load experiment tracking configuration
+if os.path.exists('.env.tracking'):
+    load_dotenv('.env.tracking')
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Try to import experiment tracking (optional)
+try:
+    # Add the python directory to path for experiment tracking module
+    import sys
+    from pathlib import Path
+    current_dir = Path(__file__).parent
+    python_dir = current_dir.parent / 'python'
+    if str(python_dir) not in sys.path:
+        sys.path.insert(0, str(python_dir))
+    
+    from experiment_tracking import ExperimentTracker
+    EXPERIMENT_TRACKING_AVAILABLE = True
+    logger.info("✓ Experiment tracking module loaded successfully")
+except ImportError as e:
+    EXPERIMENT_TRACKING_AVAILABLE = False
+    logger.warning(f"Experiment tracking module not available: {e}. Install MLflow/wandb packages for experiment tracking.")
+    
+    # Define a dummy class for when experiment tracking is not available
+    class ExperimentTracker:
+        def __init__(self, *args, **kwargs):
+            pass
+        def start_experiment(self, *args, **kwargs):
+            pass
+        def end_experiment(self, *args, **kwargs):
+            pass
+        def log_param(self, *args, **kwargs):
+            pass
+        def log_metric(self, *args, **kwargs):
+            pass
+        def log_dataset_info(self, *args, **kwargs):
+            pass
+        def log_quality_metrics(self, *args, **kwargs):
+            pass
+        def log_cost_metrics(self, *args, **kwargs):
+            pass
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            pass
+            pass
+        def log_parameters(self, *args, **kwargs):
+            pass
+        def log_metrics(self, *args, **kwargs):
+            pass
+        def log_artifact(self, *args, **kwargs):
+            pass
+        def log_dataset_info(self, *args, **kwargs):
+            pass
+        def log_quality_metrics(self, *args, **kwargs):
+            pass
+        def log_cost_tracking(self, *args, **kwargs):
+            pass
 
 # --- Pydantic Models ---
 class TaskBase(BaseModel):
@@ -47,6 +118,7 @@ class TaskListResponse(BaseModel):
 class GenerateRequest(BaseModel):
     task_id: str
     count: int = Field(10, gt=0, le=1000)
+    model: str = Field('deepseek-chat', description="DeepSeek model to use (deepseek-chat or deepseek-reasoner)")
 
 class Entry(BaseModel):
     id: Optional[int] = None
@@ -76,6 +148,7 @@ class GenerateResponse(BaseModel):
 
 class TestGenerationRequest(BaseModel):
     task_id: str
+    model: str = Field('deepseek-chat', description="DeepSeek model to use (deepseek-chat or deepseek-reasoner)")
 
 class TestGenerationResponse(BaseModel):
     test_entries: List[Entry]
@@ -120,11 +193,37 @@ class HealthResponse(BaseModel):
     status: str
     timestamp: datetime
 
+class ExperimentConfig(BaseModel):
+    enable_mlflow: bool = False
+    mlflow_uri: str = "http://localhost:5000"
+    enable_wandb: bool = False
+    wandb_project: str = ""
+    wandb_entity: str = ""
+    auto_log_datasets: bool = True
+    auto_log_quality: bool = True
+    auto_log_costs: bool = True
+
+class ExperimentConfigResponse(BaseModel):
+    config: ExperimentConfig
+
+class TestMLflowRequest(BaseModel):
+    uri: str
+
+class TestWandBRequest(BaseModel):
+    project: str
+    entity: Optional[str] = None
+
+class ExperimentTestResponse(BaseModel):
+    status: str
+    message: str
+    details: Optional[Dict[str, Any]] = None
+
 # --- Simple DeepSeek Client Implementation ---
 class SimpleDeepseekClient:
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, model: str = "deepseek-chat"):
         self.api_key = api_key
         self.base_url = "https://api.deepseek.com/v1"
+        self.model = model
     
     def generate_text(self, prompt: str, max_tokens: int = 1000) -> str:
         """Simple text generation - for demo purposes"""
@@ -133,28 +232,24 @@ class SimpleDeepseekClient:
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json"
             }
-            
             data = {
-                "model": "deepseek-chat",
+                "model": self.model if hasattr(self, 'model') else "deepseek-chat",
                 "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": max_tokens,
                 "temperature": 0.7
             }
-            
             response = requests.post(
                 f"{self.base_url}/chat/completions",
                 headers=headers,
                 json=data,
                 timeout=30
             )
-            
             if response.status_code == 200:
                 result = response.json()
                 return result["choices"][0]["message"]["content"]
             else:
                 logger.error(f"DeepSeek API error: {response.status_code} - {response.text}")
                 return None
-                
         except Exception as e:
             logger.error(f"Error calling DeepSeek API: {e}")
             return None
@@ -249,6 +344,8 @@ def simple_generate_dataset(task: Dict, count: int, client: SimpleDeepseekClient
     task_id = task.get('id', 'unknown')
     prompt_template = task.get('prompt_template', 'Generate data for: {description}')
     description = task.get('description', 'Unknown task')
+    model_name = getattr(client, 'model', 'deepseek-chat')
+    logger.info(f"[simple_generate_dataset] Using model: {model_name}")
     
     logger.info(f"Generating {count} entries for task: {task_id}")
     
@@ -256,6 +353,7 @@ def simple_generate_dataset(task: Dict, count: int, client: SimpleDeepseekClient
         # Create a prompt for generating multiple entries
         batch_prompt = f"""
 Task: {description}
+Model: {model_name}
 
 Please generate {count} entries for this task. Return the data as a JSON array.
 Each entry should be a JSON object with relevant fields.
@@ -414,42 +512,139 @@ def get_deepseek_client_dependency(api_key: str = Depends(get_deepseek_api_key))
 def get_task_manager():
     return task_manager
 
+def create_experiment_tracker():
+    """Create an experiment tracker based on current configuration."""
+    if not EXPERIMENT_TRACKING_AVAILABLE:
+        return None
+    try:
+        config = load_experiment_config_sync()
+        if not config.get('enable_mlflow') and not config.get('enable_wandb'):
+            return None
+        tracker = ExperimentTracker(
+            mlflow_config={
+                'enabled': config.get('enable_mlflow', False),
+                'tracking_uri': config.get('mlflow_uri', 'sqlite:///mlruns/dekdataset.db'),
+                'experiment_name': 'DekDataset'
+            },
+            wandb_config={
+                'enabled': config.get('enable_wandb', False),
+                'project': config.get('wandb_project', 'dekdataset'),
+                'entity': config.get('wandb_entity', None),
+                'run_name': f"DekDataset_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            }
+        )
+        return tracker
+    except Exception as e:
+        logger.error(f"Failed to create experiment tracker: {e}")
+        return None
+
 # --- Helper Functions ---
 def load_quality_config_sync():
     """Load quality control configuration"""
-    default_config_dict = {
-        'min_length': 10,
-        'max_length': 1000,
-        'required_fields': [],
-        'custom_validators': [],
-        'similarity_threshold': 0.8
-    }
-    
     try:
         if app_config.quality_config_file.exists():
             with open(app_config.quality_config_file, 'r') as f:
-                config_data = json.load(f)
-                loaded_config = QualityConfig(**config_data)
-                return loaded_config.model_dump()
+                return json.load(f)
         else:
-            logger.info(f"Quality config file not found. Creating with defaults.")
-            with open(app_config.quality_config_file, 'w') as f:
-                json.dump(default_config_dict, f, indent=2)
-            return default_config_dict
+            return {
+                'min_length': 10,
+                'max_length': 1000,
+                'required_fields': [],
+                'custom_validators': [],
+                'similarity_threshold': 0.8
+            }
     except Exception as e:
-        logger.warning(f"Could not load quality config: {e}. Using defaults.")
-        return default_config_dict
+        logger.error(f"Error loading quality config: {e}")
+        return {
+            'min_length': 10,
+            'max_length': 1000,
+            'required_fields': [],
+            'custom_validators': [],
+            'similarity_threshold': 0.8
+        }
 
-def save_dataset_to_cache_sync(task_id: str, data: Dict[str, Any]):
-    """Save generated dataset to cache"""
-    cache_file = app_config.cache_dir / f'dataset_{task_id}.json'
+def load_experiment_config_sync():
+    """Load experiment tracking configuration"""
+    # Default configuration - safe defaults that don't require external services
+    default_config = {
+        'enable_mlflow': False,
+        'mlflow_uri': 'sqlite:///mlruns/dekdataset.db',  # Use local SQLite by default
+        'enable_wandb': False,
+        'wandb_project': 'dekdataset',
+        'wandb_entity': '',
+        'auto_log_datasets': True,
+        'auto_log_quality': True,
+        'auto_log_costs': True
+    }
+    
     try:
-        with open(cache_file, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-        logger.info(f"Dataset cached at {cache_file}")
-        return str(cache_file)
+        experiment_config_file = app_config.config_dir / 'experiment_config.json'
+        if experiment_config_file.exists():
+            with open(experiment_config_file, 'r') as f:
+                config = json.load(f)
+                # Merge with defaults to ensure all keys are present
+                for key, value in default_config.items():
+                    if key not in config:
+                        config[key] = value
+                return config
+        else:
+            # Check environment variables for initial configuration
+            env_config = default_config.copy()
+            if os.getenv('DEKDATASET_USE_MLFLOW', '').lower() == 'true':
+                env_config['enable_mlflow'] = True
+            if os.getenv('MLFLOW_TRACKING_URI'):
+                env_config['mlflow_uri'] = os.getenv('MLFLOW_TRACKING_URI')
+            if os.getenv('DEKDATASET_USE_WANDB', '').lower() == 'true':
+                env_config['enable_wandb'] = True
+            if os.getenv('WANDB_PROJECT'):
+                env_config['wandb_project'] = os.getenv('WANDB_PROJECT')
+            if os.getenv('WANDB_ENTITY'):
+                env_config['wandb_entity'] = os.getenv('WANDB_ENTITY')
+            
+            return env_config
     except Exception as e:
-        logger.error(f"Failed to cache dataset: {e}")
+        logger.error(f"Error loading experiment config: {e}")
+        return default_config
+
+def save_experiment_config_sync(config_data: Dict[str, Any]):
+    """Save experiment tracking configuration"""
+    try:
+        experiment_config_file = app_config.config_dir / 'experiment_config.json'
+        with open(experiment_config_file, 'w') as f:
+            json.dump(config_data, f, indent=2)
+        return True
+    except Exception as e:
+        logger.error(f"Error saving experiment config: {e}")
+        return False
+
+def get_experiment_tracker(task_id: str, experiment_name: Optional[str] = None) -> Optional[ExperimentTracker]:
+    """Get an experiment tracker instance based on current configuration"""
+    if not EXPERIMENT_TRACKING_AVAILABLE:
+        return None
+    
+    try:
+        config = load_experiment_config_sync()
+        if not config.get('enable_mlflow') and not config.get('enable_wandb'):
+            return None
+        
+        # Create experiment tracker
+        tracker = ExperimentTracker(
+            mlflow_config={
+                'enabled': config.get('enable_mlflow', False),
+                'tracking_uri': config.get('mlflow_uri', 'http://localhost:5000'),
+                'experiment_name': experiment_name or f"DekDataset_{task_id}"
+            },
+            wandb_config={
+                'enabled': config.get('enable_wandb', False),
+                'project': config.get('wandb_project', 'dekdataset'),
+                'entity': config.get('wandb_entity', None),
+                'run_name': f"{task_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            }
+        )
+        
+        return tracker
+    except Exception as e:
+        logger.error(f"Error creating experiment tracker: {e}")
         return None
 
 # --- FastAPI Routes ---
@@ -599,22 +794,43 @@ async def generate_dataset_api(
     if client is None:
         raise HTTPException(status_code=503, detail="DeepSeek client is not available. Check API key configuration.")
 
+    # Initialize experiment tracker
+    tracker = create_experiment_tracker()
+    
     try:
         task = tm.get_task(payload.task_id)
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
-        
-        logger.info(f"Generating {payload.count} entries for task {payload.task_id}")
-        
+
+        logger.info(f"Generating {payload.count} entries for task {payload.task_id} using model {payload.model}")
         if 'id' not in task:
             task['id'] = payload.task_id
 
+        # Start experiment tracking if available
+        if tracker:
+            run_name = f"generate_{payload.task_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            tracker.start_experiment(run_name=run_name)
+            tracker.log_parameters({
+                'task_id': payload.task_id,
+                'task_type': task.get('type', 'custom'),
+                'task_description': task.get('description', ''),
+                'count': payload.count,
+                'model': payload.model,
+                'timestamp': datetime.now().isoformat()
+            })
+
         # Use simple generation function
+        generation_start_time = datetime.now()
+        # Create a new client with the selected model
+        selected_client = SimpleDeepseekClient(api_key=client.api_key)
+        selected_client.base_url = client.base_url
+        selected_client.model = payload.model
         entries_raw, quality_report_raw = simple_generate_dataset(
             task=task,
             count=payload.count,
-            client=client
+            client=selected_client
         )
+        generation_time = (datetime.now() - generation_start_time).total_seconds()
         
         # Process entries for response
         processed_entries = []
@@ -634,10 +850,47 @@ async def generate_dataset_api(
             'count': len(processed_entries)
         }
         
-        # Cache the dataset
-        save_dataset_to_cache_sync(payload.task_id, GenerateResponse(**result_data).model_dump(mode='json'))
-        
-        logger.info(f"Generated {len(processed_entries)} entries for task {payload.task_id}")
+        # Log experiment metrics and results
+        if tracker:
+            # Log generation metrics
+            tracker.log_metrics({
+                'generation_time_seconds': generation_time,
+                'entries_generated': len(processed_entries),
+                'success_rate': 1.0,
+                'avg_generation_time_per_entry': generation_time / max(len(processed_entries), 1)
+            })
+            
+            # Log quality metrics if available
+            if processed_quality_report:
+                quality_metrics = {}
+                if processed_quality_report.quality_score is not None:
+                    quality_metrics['quality_score'] = processed_quality_report.quality_score
+                if processed_quality_report.duplicates_removed is not None:
+                    quality_metrics['duplicates_removed'] = processed_quality_report.duplicates_removed
+                if processed_quality_report.average_length is not None:
+                    quality_metrics['average_length'] = processed_quality_report.average_length
+                
+                if quality_metrics:
+                    tracker.log_quality_metrics(quality_metrics)
+            
+            # Save dataset to cache and log as artifact
+            cache_data = result_data.copy()
+            cache_data['entries'] = [entry.model_dump() for entry in processed_entries]
+            cache_data['quality_report'] = processed_quality_report.model_dump()
+            cache_data['generated_at'] = cache_data['generated_at'].isoformat()
+            
+            save_dataset_to_cache_sync(payload.task_id, cache_data)
+              # End experiment tracking
+            tracker.end_experiment()
+        else:
+            # Save to cache even without tracking
+            cache_data = result_data.copy()
+            cache_data['entries'] = [entry.model_dump() for entry in processed_entries]
+            cache_data['quality_report'] = processed_quality_report.model_dump()
+            cache_data['generated_at'] = cache_data['generated_at'].isoformat()
+            
+            save_dataset_to_cache_sync(payload.task_id, cache_data)
+            logger.info(f"Generated {len(processed_entries)} entries for task {payload.task_id}")
         return GenerateResponse(**result_data)
         
     except HTTPException:
@@ -657,22 +910,41 @@ async def test_generation_api(
     if client is None:
         raise HTTPException(status_code=503, detail="DeepSeek client is not available. Check API key configuration.")
 
+    # Initialize experiment tracker for test
+    tracker = create_experiment_tracker()
+
     try:
         task = tm.get_task(payload.task_id)
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
 
+        logger.info(f"Testing generation for task {payload.task_id} using model {payload.model}")
         if 'id' not in task:
             task['id'] = payload.task_id
 
-        logger.info(f"Testing generation for task {payload.task_id}")
-        
+        # Start experiment tracking for test
+        if tracker:
+            run_name = f"test_{payload.task_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            tracker.start_experiment(run_name=run_name)
+            tracker.log_parameters({
+                'task_id': payload.task_id,
+                'task_type': task.get('type', 'custom'),
+                'test_mode': True,
+                'count': 3,
+                'model': payload.model
+            })
+
         # Generate small test sample
+        generation_start_time = datetime.now()
+        selected_client = SimpleDeepseekClient(api_key=client.api_key)
+        selected_client.base_url = client.base_url
+        selected_client.model = payload.model
         entries_raw, quality_report_raw = simple_generate_dataset(
             task=task,
             count=3,
-            client=client
+            client=selected_client
         )
+        generation_time = (datetime.now() - generation_start_time).total_seconds()
         
         processed_entries = []
         for entry in entries_raw:
@@ -682,6 +954,18 @@ async def test_generation_api(
                 processed_entries.append(Entry(output=str(entry)))
         
         processed_quality_report = QualityReport(**quality_report_raw) if isinstance(quality_report_raw, dict) else QualityReport()
+        
+        # Log test metrics
+        if tracker:
+            tracker.log_metrics({
+                'test_generation_time_seconds': generation_time,
+                'test_entries_generated': len(processed_entries)
+            })
+            
+            if processed_quality_report and processed_quality_report.quality_score is not None:
+                tracker.log_metrics({'test_quality_score': processed_quality_report.quality_score})
+            
+            tracker.end_experiment()
         
         return TestGenerationResponse(
             test_entries=processed_entries,
@@ -726,6 +1010,216 @@ async def update_quality_config_api(config_update: QualityConfig):
         logger.error(f"Error updating quality config: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# --- Experiment Tracking API ---
+
+@app.get("/api/experiment-config", response_model=ExperimentConfigResponse, summary="Get Experiment Config", tags=["Experiment Tracking API"])
+async def get_experiment_config_api():
+    """Get current experiment tracking configuration."""
+    try:
+        config_dict = load_experiment_config_sync()
+        return ExperimentConfigResponse(config=ExperimentConfig(**config_dict))
+    except Exception as e:
+        logger.error(f"Error getting experiment config: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/experiment-config", response_model=MessageResponse, summary="Update Experiment Config", tags=["Experiment Tracking API"])
+async def update_experiment_config_api(config_update: ExperimentConfig):
+    """Update experiment tracking configuration."""
+    try:
+        success = save_experiment_config_sync(config_update.model_dump())
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to save experiment config")
+        
+        logger.info("Experiment config updated")
+        return MessageResponse(
+            message="Experiment tracking configuration saved successfully"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating experiment config: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/test-mlflow", response_model=ExperimentTestResponse, summary="Test MLflow Configuration", tags=["Experiment Tracking API"])
+async def test_mlflow_api(request: TestMLflowRequest):
+    """Test MLflow configuration and connectivity."""
+    try:
+        # Try to import MLflow
+        try:
+            import mlflow
+            from mlflow.tracking import MlflowClient
+        except ImportError:
+            return ExperimentTestResponse(
+                status="error",
+                message="MLflow package not installed. Install with: pip install mlflow"
+            )
+          # Test connection to MLflow server with timeout
+        try:
+            # Set tracking URI
+            mlflow.set_tracking_uri(request.uri)
+            
+            # For remote servers, test connectivity first
+            if request.uri.startswith(('http://', 'https://')):
+                logger.info(f"Testing remote MLflow server connection to {request.uri}")
+                import requests
+                test_url = f"{request.uri.rstrip('/')}/health"
+                try:
+                    # Test with short timeout
+                    response = requests.get(test_url, timeout=10)
+                    if response.status_code != 200:
+                        return ExperimentTestResponse(
+                            status="warning",
+                            message=f"MLflow server at {request.uri} is reachable but health check returned status {response.status_code}",
+                            details={"uri": request.uri, "status_code": response.status_code}
+                        )
+                except requests.exceptions.Timeout:
+                    return ExperimentTestResponse(
+                        status="error",
+                        message=f"Connection to MLflow server at {request.uri} timed out",
+                        details={"uri": request.uri, "error": "Connection timeout"}
+                    )
+                except requests.exceptions.ConnectionError:
+                    return ExperimentTestResponse(
+                        status="error",
+                        message=f"Cannot connect to MLflow server at {request.uri}. Make sure the server is running and accessible.",
+                        details={"uri": request.uri, "error": "Connection refused"}
+                    )
+                except requests.exceptions.RequestException as e:
+                    return ExperimentTestResponse(
+                        status="error",
+                        message=f"Error connecting to MLflow server: {str(e)}",
+                        details={"uri": request.uri, "error": str(e)}
+                    )
+            
+            # Test MLflow client operations
+            client = MlflowClient(tracking_uri=request.uri)
+            
+            # Try to list experiments with timeout handling
+            try:
+                import asyncio
+                import concurrent.futures
+                
+                def test_experiments():
+                    return client.search_experiments(max_results=1)
+                
+                # Run with timeout
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(test_experiments)
+                    try:
+                        experiments = future.result(timeout=15)  # 15 second timeout
+                        
+                        return ExperimentTestResponse(
+                            status="success",
+                            message=f"Successfully connected to MLflow at {request.uri}",
+                            details={
+                                "uri": request.uri,
+                                "experiments_found": len(experiments),
+                                "mlflow_version": mlflow.__version__
+                            }
+                        )
+                    except concurrent.futures.TimeoutError:
+                        return ExperimentTestResponse(
+                            status="error",
+                            message=f"MLflow operations timed out for {request.uri}",
+                            details={"uri": request.uri, "error": "Operation timeout"}
+                        )
+                        
+            except Exception as client_error:
+                return ExperimentTestResponse(
+                    status="error",
+                    message=f"MLflow client error: {str(client_error)}",
+                    details={"uri": request.uri, "error": str(client_error)}
+                )
+            
+        except Exception as mlflow_error:
+            return ExperimentTestResponse(
+                status="error",
+                message=f"Failed to connect to MLflow: {str(mlflow_error)}",
+                details={"uri": request.uri, "error": str(mlflow_error)}
+            )
+            
+    except Exception as e:
+        logger.error(f"Error testing MLflow: {e}")
+        return ExperimentTestResponse(
+            status="error",
+            message=f"Error testing MLflow configuration: {str(e)}"
+        )
+
+@app.post("/api/test-wandb", response_model=ExperimentTestResponse, summary="Test Weights & Biases Configuration", tags=["Experiment Tracking API"])
+async def test_wandb_api(request: TestWandBRequest):
+    """Test Weights & Biases configuration and connectivity."""
+    try:
+        # Try to import wandb
+        try:
+            import wandb
+        except ImportError:
+            return ExperimentTestResponse(
+                status="error",
+                message="Weights & Biases package not installed. Install with: pip install wandb"
+            )
+        
+        # Check if user is logged in
+        try:
+            # Check if API key is configured
+            api_key = wandb.api.api_key
+            if not api_key:
+                return ExperimentTestResponse(
+                    status="error",
+                    message="W&B API key not found. Please run 'wandb login' or set WANDB_API_KEY environment variable"
+                )
+            
+            # Try to access the API
+            api = wandb.Api()
+            
+            # Test project access if entity is provided
+            if request.entity:
+                try:
+                    # This will test if we can access the entity
+                    entity_obj = api.user(request.entity)
+                    return ExperimentTestResponse(
+                        status="success",
+                        message=f"Successfully connected to W&B. Ready to use project '{request.project}' under entity '{request.entity}'",
+                        details={
+                            "project": request.project,
+                            "entity": request.entity,
+                            "wandb_version": wandb.__version__
+                        }
+                    )
+                except Exception as entity_error:
+                    return ExperimentTestResponse(
+                        status="warning",
+                        message=f"Connected to W&B but couldn't access entity '{request.entity}'. The entity might not exist or you might not have access.",
+                        details={
+                            "project": request.project,
+                            "entity": request.entity,
+                            "wandb_version": wandb.__version__,
+                            "entity_error": str(entity_error)
+                        }
+                    )
+            else:
+                return ExperimentTestResponse(
+                    status="success",
+                    message=f"Successfully connected to W&B. Ready to use project '{request.project}'",
+                    details={
+                        "project": request.project,
+                        "wandb_version": wandb.__version__
+                    }
+                )
+                
+        except Exception as wandb_error:
+            return ExperimentTestResponse(
+                status="error",
+                message=f"Failed to connect to W&B: {str(wandb_error)}",
+                details={"error": str(wandb_error)}
+            )
+            
+    except Exception as e:
+        logger.error(f"Error testing W&B: {e}")
+        return ExperimentTestResponse(
+            status="error",
+            message=f"Error testing W&B configuration: {str(e)}"
+        )
+
 @app.get("/api/download/{format}/{task_id}", summary="Download Generated Dataset", tags=["Dataset Download API"])
 async def download_dataset_api(
     format: str = FastApiPath(..., description="Dataset format: 'json', 'csv', or 'zip'"),
@@ -768,7 +1262,7 @@ async def download_dataset_api(
                 elif entry_dict.get("output") is not None:
                     df_data.append({"output": entry_dict.get("output")})
                 else:
-                    df_data.append(entry_dict)
+                    df_data.append(entryDict)
 
             if not df_data:
                 raise HTTPException(status_code=400, detail="No processable data found in entries for CSV export")
@@ -820,6 +1314,91 @@ async def download_dataset_api(
     except Exception as e:
         logger.error(f"Error downloading dataset: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/download/csv/{task_id}")
+async def download_csv(task_id: str):
+    dataset_path = app_config.cache_dir / f"{task_id}.json"
+    if not dataset_path.exists():
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    with open(dataset_path, "r", encoding="utf-8") as f:
+        entries = json.load(f)
+    # Flatten content+metadata for CSV
+    rows = []
+    for entry in entries:
+        row = {"id": entry.get("id", "")}
+        if "content" in entry and isinstance(entry["content"], dict):
+            row.update(entry["content"])
+        row["metadata"] = json.dumps(entry.get("metadata", {}), ensure_ascii=False)
+        rows.append(row)
+    if not rows:
+        raise HTTPException(status_code=404, detail="No data to export")
+    fieldnames = list(rows[0].keys())
+    csv_buffer = StringIO()
+    writer = csv.DictWriter(csv_buffer, fieldnames=fieldnames)
+    writer.writeheader()
+    for row in rows:
+        writer.writerow(row)
+    csv_buffer.seek(0)
+    return StreamingResponse(csv_buffer, media_type="text/csv", headers={
+        "Content-Disposition": f"attachment; filename={task_id}.csv"
+    })
+
+@app.get("/api/download/json/{task_id}")
+async def download_json(task_id: str):
+    dataset_path = app_config.cache_dir / f"{task_id}.json"
+    if not dataset_path.exists():
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    return FileResponse(str(dataset_path), media_type="application/json", filename=f"{task_id}.json")
+
+@app.get("/api/preview/{task_id}", response_class=HTMLResponse)
+async def preview_dataset(task_id: str, limit: int = 20):
+    dataset_path = app_config.cache_dir / f"{task_id}.json"
+    if not dataset_path.exists():
+        return HTMLResponse("<div class='alert alert-warning'>Dataset not found</div>")
+    with open(dataset_path, "r", encoding="utf-8") as f:
+        entries = json.load(f)
+        # รองรับ dict ที่มี key "entries"
+        if isinstance(entries, dict) and "entries" in entries:
+            entries = entries["entries"]
+        if not isinstance(entries, list):
+            entries = list(entries.values())
+        # Flatten for table
+        rows = []
+        for entry in entries[:limit]:
+            if not isinstance(entry, dict):
+                continue
+            row = {}
+            # Always include id if present
+            row["id"] = entry.get("id", "")
+            # Flatten content, raw_data, input, output
+            if "content" in entry and isinstance(entry["content"], dict):
+                row.update(entry["content"])
+            if "raw_data" in entry and isinstance(entry["raw_data"], dict):
+                row.update(entry["raw_data"])
+            # If input/output are not None and not dict, add as columns
+            if entry.get("input") is not None and not isinstance(entry.get("input"), dict):
+                row["input"] = entry["input"]
+            if entry.get("output") is not None and not isinstance(entry.get("output"), dict):
+                row["output"] = entry["output"]
+            # Optionally, include metadata as JSON string
+            if "metadata" in entry:
+                row["metadata"] = json.dumps(entry.get("metadata", {}), ensure_ascii=False)
+            rows.append(row)
+    if not rows:
+        return HTMLResponse("<div class='alert alert-warning'>No data to preview</div>")
+    # Collect all fieldnames from all rows for a complete header
+    fieldnames = set()
+    for row in rows:
+        fieldnames.update(row.keys())
+    fieldnames = list(fieldnames)
+    # Generate HTML table
+    table_html = "<div style='overflow-x:auto'><table class='table table-striped' style='width:100%;border-collapse:collapse;'>"
+    table_html += "<thead><tr>" + "".join(f"<th style='background:#f8f9fa;border:1px solid #dee2e6;padding:8px'>{fn}</th>" for fn in fieldnames) + "</tr></thead>"
+    table_html += "<tbody>"
+    for row in rows:
+        table_html += "<tr>" + "".join(f"<td style='border:1px solid #dee2e6;padding:8px'>{str(row.get(fn, ''))}</td>" for fn in fieldnames) + "</tr>"
+    table_html += "</tbody></table></div>"
+    return HTMLResponse(table_html)
 
 @app.get("/api/status", response_model=StatusResponse, summary="Get API Status", tags=["System"])
 async def get_status_api():

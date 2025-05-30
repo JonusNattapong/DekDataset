@@ -267,14 +267,13 @@ class DatasetGenerator {
             this.showAlert('Please select a task first', 'warning');
             return;
         }
-
+        const model = document.getElementById('modelSelect')?.value || 'deepseek-chat';
         this.showProgress('Testing generation...', 30);
-
         try {
             const response = await fetch('/api/test-generation', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ task_id: this.selectedTaskId })
+                body: JSON.stringify({ task_id: this.selectedTaskId, model })
             });
 
             const result = await response.json();
@@ -299,24 +298,22 @@ class DatasetGenerator {
             this.showAlert('Please select a task first', 'warning');
             return;
         }
-
+        const model = document.getElementById('modelSelect')?.value || 'deepseek-chat';
         const countElement = document.getElementById('entryCount');
         const count = parseInt(countElement?.value || '10');
-
         if (count <= 0 || count > 1000) {
             this.showAlert('Entry count must be between 1 and 1000', 'warning');
             return;
         }
-
         this.showProgress('Generating dataset...', 0);
-
         try {
             const response = await fetch('/api/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     task_id: this.selectedTaskId,
-                    count: count
+                    count: count,
+                    model: model
                 })
             });
 
