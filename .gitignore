@@ -33,3 +33,4 @@ poppler-local/
 test/
 raw_html/
 data/
+cache

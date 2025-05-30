@@ -5,7 +5,7 @@
       "input": null,
       "output": null,
       "raw_data": {
-        "text": "ร้านอาหารนี้บริการดีมาก อาหารอร่อยและราคาไม่แพง",
+        "text": "อาหารอร่อยมากเลยค่ะ พนักงานก็บริการดี",
         "sentiment": "positive"
       }
     },
@@ -14,7 +14,7 @@
       "input": null,
       "output": null,
       "raw_data": {
-        "text": "สินค้าที่สั่งมาชำรุดและคุณภาพไม่ดีเลย",
+        "text": "สินค้าคุณภาพไม่ดีเลย ผิดหวังมาก",
         "sentiment": "negative"
       }
     },
@@ -23,7 +23,7 @@
       "input": null,
       "output": null,
       "raw_data": {
-        "text": "วันนี้อากาศร้อนมาก แต่ก็ยังมีลมพัดเบาๆ",
+        "text": "วันนี้อากาศร้อนมาก แต่ก็ยังโอเค",
         "sentiment": "neutral"
       }
     },
@@ -32,7 +32,7 @@
       "input": null,
       "output": null,
       "raw_data": {
-        "text": "หนังเรื่องนี้สนุกมาก แนะนำให้ดูเลย",
+        "text": "หนังเรื่องนี้สนุกมาก แนะนำให้ดูครับ",
         "sentiment": "positive"
       }
     },
@@ -41,7 +41,7 @@
       "input": null,
       "output": null,
       "raw_data": {
-        "text": "บริการหลังการขายแย่มาก ตอบช้าและไม่แก้ปัญหา",
+        "text": "บริการแย่มาก ต้องรอนานเกินไป",
         "sentiment": "negative"
       }
     },
@@ -50,7 +50,7 @@
       "input": null,
       "output": null,
       "raw_data": {
-        "text": "รถไฟฟ้าวันนี้คนไม่เยอะมาก นั่งสบาย",
+        "text": "ร้านนี้เปิดใหม่ ยังไม่ได้ลอง",
         "sentiment": "neutral"
       }
     },
@@ -59,7 +59,7 @@
       "input": null,
       "output": null,
       "raw_data": {
-        "text": "พนักงานที่นี่เป็นกันเองและช่วยเหลือดีมาก",
+        "text": "ชอบมากเลยค่ะ ที่นี่บรรยากาศดีมาก",
         "sentiment": "positive"
       }
     },
@@ -68,7 +68,7 @@
       "input": null,
       "output": null,
       "raw_data": {
-        "text": "สินค้ามาไม่ตรงตามที่สั่งและแพ็คเกจก็เสียหาย",
+        "text": "สินค้าเสียหายระหว่างการขนส่ง ไม่พอใจเลย",
         "sentiment": "negative"
       }
     },
@@ -77,7 +77,7 @@
       "input": null,
       "output": null,
       "raw_data": {
-        "text": "ร้านนี้เปิดใหม่ ยังไม่ค่อยมีคนมาเท่าไหร่",
+        "text": "รถไฟฟ้าวันนี้คนไม่มาก",
         "sentiment": "neutral"
       }
     },
@@ -86,7 +86,7 @@
       "input": null,
       "output": null,
       "raw_data": {
-        "text": "ชอบบรรยากาศร้านนี้มาก นั่งทำงานแล้วผ่อนคลาย",
+        "text": "ครูสอนเข้าใจง่ายมาก ขอบคุณครับ",
         "sentiment": "positive"
       }
     }
@@ -95,7 +95,7 @@
     "generated_entries": 10,
     "quality_score": 0.8,
     "duplicates_removed": 0,
-    "average_length": 76.6,
+    "average_length": 67.9,
     "details": {
       "total_generated": 10,
       "valid_entries": 10,
@@ -104,7 +104,7 @@
       "final_count": 10
     }
   },
-  "generated_at": "2025-05-29T14:41:11.393527",
+  "generated_at": "2025-05-29T16:02:57.515685",
   "task_id": "sentiment_analysis",
   "count": 10
 }
