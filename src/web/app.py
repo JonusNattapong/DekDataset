@@ -1,8 +1,41 @@
 import os
 import json
+import logging
+import traceback
+import tempfile
+import zipfile
+import requests
+import concurrent.futures
+import re
+import base64
+from pathlib import Path
+from dotenv import load_dotenv
+from fastapi import BackgroundTasks
 
-from fastapi import FastAPI, Request, HTTPException, Depends, Body, Path as FastApiPath, Query, Form, UploadFile, File
-from fastapi.responses import JSONResponse, HTMLResponse, FileResponse, StreamingResponse
+# PDF and OCR dependencies
+try:
+    import pdfplumber
+    import pytesseract
+    from pdf2image import convert_from_path
+    import re
+    OCR_AVAILABLE = True
+    import os
+    # Set tesseract_cmd for Windows if not already set
+    if os.name == "nt":
+        tesseract_path = r"C:\\Program Files\\Tesseract-OCR\\tesseract.exe"
+        if os.path.exists(tesseract_path):
+            pytesseract.pytesseract.tesseract_cmd = tesseract_path
+except ImportError:
+    OCR_AVAILABLE = False
+
+try:
+    from mistralai import Mistral
+    MISTRALAI_AVAILABLE = True
+except ImportError:
+    MISTRALAI_AVAILABLE = False
+
+from fastapi import FastAPI, Request, HTTPException, Depends, Body, Path as FastApiPath, Query, Form, UploadFile, File, Response
+from fastapi.responses import JSONResponse, HTMLResponse, FileResponse, StreamingResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
@@ -11,18 +44,6 @@ import sys
 import os
 import json
 from datetime import datetime
-import tempfile
-import zipfile
-import logging
-from pathlib import Path
-import uvicorn
-from dotenv import load_dotenv
-import traceback
-import requests
-import re
-from io import StringIO
-import pandas as pd
-import csv
 
 # Load environment variables from .env file
 load_dotenv()
@@ -35,66 +56,13 @@ def save_dataset_to_cache_sync(task_id, cache_data):
     with open(cache_path, "w", encoding="utf-8") as f:
         json.dump(cache_data, f, ensure_ascii=False, indent=2)
 
-# Load experiment tracking configuration
-if os.path.exists('.env.tracking'):
-    load_dotenv('.env.tracking')
+# Experiment tracking configuration loading removed
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Try to import experiment tracking (optional)
-try:
-    # Add the python directory to path for experiment tracking module
-    import sys
-    from pathlib import Path
-    current_dir = Path(__file__).parent
-    python_dir = current_dir.parent / 'python'
-    if str(python_dir) not in sys.path:
-        sys.path.insert(0, str(python_dir))
-    
-    from experiment_tracking import ExperimentTracker
-    EXPERIMENT_TRACKING_AVAILABLE = True
-    logger.info("✓ Experiment tracking module loaded successfully")
-except ImportError as e:
-    EXPERIMENT_TRACKING_AVAILABLE = False
-    logger.warning(f"Experiment tracking module not available: {e}. Install MLflow/wandb packages for experiment tracking.")
-    
-    # Define a dummy class for when experiment tracking is not available
-    class ExperimentTracker:
-        def __init__(self, *args, **kwargs):
-            pass
-        def start_experiment(self, *args, **kwargs):
-            pass
-        def end_experiment(self, *args, **kwargs):
-            pass
-        def log_param(self, *args, **kwargs):
-            pass
-        def log_metric(self, *args, **kwargs):
-            pass
-        def log_dataset_info(self, *args, **kwargs):
-            pass
-        def log_quality_metrics(self, *args, **kwargs):
-            pass
-        def log_cost_metrics(self, *args, **kwargs):
-            pass
-        def __enter__(self):
-            return self
-        def __exit__(self, *args):
-            pass
-            pass
-        def log_parameters(self, *args, **kwargs):
-            pass
-        def log_metrics(self, *args, **kwargs):
-            pass
-        def log_artifact(self, *args, **kwargs):
-            pass
-        def log_dataset_info(self, *args, **kwargs):
-            pass
-        def log_quality_metrics(self, *args, **kwargs):
-            pass
-        def log_cost_tracking(self, *args, **kwargs):
-            pass
+# Experiment tracking removed - focusing on core dataset generation functionality
 
 # --- Pydantic Models ---
 class TaskBase(BaseModel):
@@ -193,30 +161,7 @@ class HealthResponse(BaseModel):
     status: str
     timestamp: datetime
 
-class ExperimentConfig(BaseModel):
-    enable_mlflow: bool = False
-    mlflow_uri: str = "http://localhost:5000"
-    enable_wandb: bool = False
-    wandb_project: str = ""
-    wandb_entity: str = ""
-    auto_log_datasets: bool = True
-    auto_log_quality: bool = True
-    auto_log_costs: bool = True
-
-class ExperimentConfigResponse(BaseModel):
-    config: ExperimentConfig
-
-class TestMLflowRequest(BaseModel):
-    uri: str
-
-class TestWandBRequest(BaseModel):
-    project: str
-    entity: Optional[str] = None
-
-class ExperimentTestResponse(BaseModel):
-    status: str
-    message: str
-    details: Optional[Dict[str, Any]] = None
+# Experiment tracking models removed
 
 # --- Simple DeepSeek Client Implementation ---
 class SimpleDeepseekClient:
@@ -337,6 +282,8 @@ class SimpleTaskManager:
             return False
 
 # --- Simple Dataset Generation ---
+from .document_understanding import DocumentUnderstanding, BBoxImageAnnotation, DocumentAnnotation
+
 def simple_generate_dataset(task: Dict, count: int, client: SimpleDeepseekClient) -> tuple:
     """Simple dataset generation function"""
     entries = []
@@ -512,31 +459,7 @@ def get_deepseek_client_dependency(api_key: str = Depends(get_deepseek_api_key))
 def get_task_manager():
     return task_manager
 
-def create_experiment_tracker():
-    """Create an experiment tracker based on current configuration."""
-    if not EXPERIMENT_TRACKING_AVAILABLE:
-        return None
-    try:
-        config = load_experiment_config_sync()
-        if not config.get('enable_mlflow') and not config.get('enable_wandb'):
-            return None
-        tracker = ExperimentTracker(
-            mlflow_config={
-                'enabled': config.get('enable_mlflow', False),
-                'tracking_uri': config.get('mlflow_uri', 'sqlite:///mlruns/dekdataset.db'),
-                'experiment_name': 'DekDataset'
-            },
-            wandb_config={
-                'enabled': config.get('enable_wandb', False),
-                'project': config.get('wandb_project', 'dekdataset'),
-                'entity': config.get('wandb_entity', None),
-                'run_name': f"DekDataset_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            }
-        )
-        return tracker
-    except Exception as e:
-        logger.error(f"Failed to create experiment tracker: {e}")
-        return None
+# Experiment tracking functionality removed
 
 # --- Helper Functions ---
 def load_quality_config_sync():
@@ -563,89 +486,11 @@ def load_quality_config_sync():
             'similarity_threshold': 0.8
         }
 
-def load_experiment_config_sync():
-    """Load experiment tracking configuration"""
-    # Default configuration - safe defaults that don't require external services
-    default_config = {
-        'enable_mlflow': False,
-        'mlflow_uri': 'sqlite:///mlruns/dekdataset.db',  # Use local SQLite by default
-        'enable_wandb': False,
-        'wandb_project': 'dekdataset',
-        'wandb_entity': '',
-        'auto_log_datasets': True,
-        'auto_log_quality': True,
-        'auto_log_costs': True
-    }
-    
-    try:
-        experiment_config_file = app_config.config_dir / 'experiment_config.json'
-        if experiment_config_file.exists():
-            with open(experiment_config_file, 'r') as f:
-                config = json.load(f)
-                # Merge with defaults to ensure all keys are present
-                for key, value in default_config.items():
-                    if key not in config:
-                        config[key] = value
-                return config
-        else:
-            # Check environment variables for initial configuration
-            env_config = default_config.copy()
-            if os.getenv('DEKDATASET_USE_MLFLOW', '').lower() == 'true':
-                env_config['enable_mlflow'] = True
-            if os.getenv('MLFLOW_TRACKING_URI'):
-                env_config['mlflow_uri'] = os.getenv('MLFLOW_TRACKING_URI')
-            if os.getenv('DEKDATASET_USE_WANDB', '').lower() == 'true':
-                env_config['enable_wandb'] = True
-            if os.getenv('WANDB_PROJECT'):
-                env_config['wandb_project'] = os.getenv('WANDB_PROJECT')
-            if os.getenv('WANDB_ENTITY'):
-                env_config['wandb_entity'] = os.getenv('WANDB_ENTITY')
-            
-            return env_config
-    except Exception as e:
-        logger.error(f"Error loading experiment config: {e}")
-        return default_config
+# Experiment tracking functionality removed
 
-def save_experiment_config_sync(config_data: Dict[str, Any]):
-    """Save experiment tracking configuration"""
-    try:
-        experiment_config_file = app_config.config_dir / 'experiment_config.json'
-        with open(experiment_config_file, 'w') as f:
-            json.dump(config_data, f, indent=2)
-        return True
-    except Exception as e:
-        logger.error(f"Error saving experiment config: {e}")
-        return False
+# Experiment tracking functionality removed
 
-def get_experiment_tracker(task_id: str, experiment_name: Optional[str] = None) -> Optional[ExperimentTracker]:
-    """Get an experiment tracker instance based on current configuration"""
-    if not EXPERIMENT_TRACKING_AVAILABLE:
-        return None
-    
-    try:
-        config = load_experiment_config_sync()
-        if not config.get('enable_mlflow') and not config.get('enable_wandb'):
-            return None
-        
-        # Create experiment tracker
-        tracker = ExperimentTracker(
-            mlflow_config={
-                'enabled': config.get('enable_mlflow', False),
-                'tracking_uri': config.get('mlflow_uri', 'http://localhost:5000'),
-                'experiment_name': experiment_name or f"DekDataset_{task_id}"
-            },
-            wandb_config={
-                'enabled': config.get('enable_wandb', False),
-                'project': config.get('wandb_project', 'dekdataset'),
-                'entity': config.get('wandb_entity', None),
-                'run_name': f"{task_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            }
-        )
-        
-        return tracker
-    except Exception as e:
-        logger.error(f"Error creating experiment tracker: {e}")
-        return None
+# Experiment tracking functionality removed
 
 # --- FastAPI Routes ---
 
@@ -792,10 +637,7 @@ async def generate_dataset_api(
 ):
     """Generate dataset based on a task and count."""
     if client is None:
-        raise HTTPException(status_code=503, detail="DeepSeek client is not available. Check API key configuration.")
-
-    # Initialize experiment tracker
-    tracker = create_experiment_tracker()
+        raise HTTPException(status_code=503, detail="DeepSeek client is not available. Check API key configuration.")    # Experiment tracking removed - focusing on core dataset generation functionality
     
     try:
         task = tm.get_task(payload.task_id)
@@ -804,20 +646,7 @@ async def generate_dataset_api(
 
         logger.info(f"Generating {payload.count} entries for task {payload.task_id} using model {payload.model}")
         if 'id' not in task:
-            task['id'] = payload.task_id
-
-        # Start experiment tracking if available
-        if tracker:
-            run_name = f"generate_{payload.task_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            tracker.start_experiment(run_name=run_name)
-            tracker.log_parameters({
-                'task_id': payload.task_id,
-                'task_type': task.get('type', 'custom'),
-                'task_description': task.get('description', ''),
-                'count': payload.count,
-                'model': payload.model,
-                'timestamp': datetime.now().isoformat()
-            })
+            task['id'] = payload.task_id        # Experiment tracking removed - starting direct generation
 
         # Use simple generation function
         generation_start_time = datetime.now()
@@ -849,48 +678,13 @@ async def generate_dataset_api(
             'task_id': payload.task_id,
             'count': len(processed_entries)
         }
-        
-        # Log experiment metrics and results
-        if tracker:
-            # Log generation metrics
-            tracker.log_metrics({
-                'generation_time_seconds': generation_time,
-                'entries_generated': len(processed_entries),
-                'success_rate': 1.0,
-                'avg_generation_time_per_entry': generation_time / max(len(processed_entries), 1)
-            })
-            
-            # Log quality metrics if available
-            if processed_quality_report:
-                quality_metrics = {}
-                if processed_quality_report.quality_score is not None:
-                    quality_metrics['quality_score'] = processed_quality_report.quality_score
-                if processed_quality_report.duplicates_removed is not None:
-                    quality_metrics['duplicates_removed'] = processed_quality_report.duplicates_removed
-                if processed_quality_report.average_length is not None:
-                    quality_metrics['average_length'] = processed_quality_report.average_length
-                
-                if quality_metrics:
-                    tracker.log_quality_metrics(quality_metrics)
-            
-            # Save dataset to cache and log as artifact
-            cache_data = result_data.copy()
-            cache_data['entries'] = [entry.model_dump() for entry in processed_entries]
-            cache_data['quality_report'] = processed_quality_report.model_dump()
-            cache_data['generated_at'] = cache_data['generated_at'].isoformat()
-            
-            save_dataset_to_cache_sync(payload.task_id, cache_data)
-              # End experiment tracking
-            tracker.end_experiment()
-        else:
-            # Save to cache even without tracking
-            cache_data = result_data.copy()
-            cache_data['entries'] = [entry.model_dump() for entry in processed_entries]
-            cache_data['quality_report'] = processed_quality_report.model_dump()
-            cache_data['generated_at'] = cache_data['generated_at'].isoformat()
-            
-            save_dataset_to_cache_sync(payload.task_id, cache_data)
-            logger.info(f"Generated {len(processed_entries)} entries for task {payload.task_id}")
+          # Save dataset to cache
+        cache_data = result_data.copy()
+        cache_data['entries'] = [entry.model_dump() for entry in processed_entries]
+        cache_data['quality_report'] = processed_quality_report.model_dump()
+        cache_data['generated_at'] = cache_data['generated_at'].isoformat()
+        save_dataset_to_cache_sync(payload.task_id, cache_data)
+        logger.info(f"Generated {len(processed_entries)} entries for task {payload.task_id}")
         return GenerateResponse(**result_data)
         
     except HTTPException:
@@ -908,10 +702,7 @@ async def test_generation_api(
 ):
     """Test dataset generation with a small sample."""
     if client is None:
-        raise HTTPException(status_code=503, detail="DeepSeek client is not available. Check API key configuration.")
-
-    # Initialize experiment tracker for test
-    tracker = create_experiment_tracker()
+        raise HTTPException(status_code=503, detail="DeepSeek client is not available. Check API key configuration.")    # Experiment tracking removed - focusing on core test generation functionality
 
     try:
         task = tm.get_task(payload.task_id)
@@ -920,19 +711,7 @@ async def test_generation_api(
 
         logger.info(f"Testing generation for task {payload.task_id} using model {payload.model}")
         if 'id' not in task:
-            task['id'] = payload.task_id
-
-        # Start experiment tracking for test
-        if tracker:
-            run_name = f"test_{payload.task_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            tracker.start_experiment(run_name=run_name)
-            tracker.log_parameters({
-                'task_id': payload.task_id,
-                'task_type': task.get('type', 'custom'),
-                'test_mode': True,
-                'count': 3,
-                'model': payload.model
-            })
+            task['id'] = payload.task_id        # Experiment tracking removed - starting direct test generation
 
         # Generate small test sample
         generation_start_time = datetime.now()
@@ -954,18 +733,7 @@ async def test_generation_api(
                 processed_entries.append(Entry(output=str(entry)))
         
         processed_quality_report = QualityReport(**quality_report_raw) if isinstance(quality_report_raw, dict) else QualityReport()
-        
-        # Log test metrics
-        if tracker:
-            tracker.log_metrics({
-                'test_generation_time_seconds': generation_time,
-                'test_entries_generated': len(processed_entries)
-            })
-            
-            if processed_quality_report and processed_quality_report.quality_score is not None:
-                tracker.log_metrics({'test_quality_score': processed_quality_report.quality_score})
-            
-            tracker.end_experiment()
+          # Test generation completed successfully
         
         return TestGenerationResponse(
             test_entries=processed_entries,
@@ -1012,213 +780,13 @@ async def update_quality_config_api(config_update: QualityConfig):
 
 # --- Experiment Tracking API ---
 
-@app.get("/api/experiment-config", response_model=ExperimentConfigResponse, summary="Get Experiment Config", tags=["Experiment Tracking API"])
-async def get_experiment_config_api():
-    """Get current experiment tracking configuration."""
-    try:
-        config_dict = load_experiment_config_sync()
-        return ExperimentConfigResponse(config=ExperimentConfig(**config_dict))
-    except Exception as e:
-        logger.error(f"Error getting experiment config: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+# Experiment tracking API endpoint removed
 
-@app.post("/api/experiment-config", response_model=MessageResponse, summary="Update Experiment Config", tags=["Experiment Tracking API"])
-async def update_experiment_config_api(config_update: ExperimentConfig):
-    """Update experiment tracking configuration."""
-    try:
-        success = save_experiment_config_sync(config_update.model_dump())
-        if not success:
-            raise HTTPException(status_code=500, detail="Failed to save experiment config")
-        
-        logger.info("Experiment config updated")
-        return MessageResponse(
-            message="Experiment tracking configuration saved successfully"
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error updating experiment config: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+# Experiment tracking API endpoint removed
 
-@app.post("/api/test-mlflow", response_model=ExperimentTestResponse, summary="Test MLflow Configuration", tags=["Experiment Tracking API"])
-async def test_mlflow_api(request: TestMLflowRequest):
-    """Test MLflow configuration and connectivity."""
-    try:
-        # Try to import MLflow
-        try:
-            import mlflow
-            from mlflow.tracking import MlflowClient
-        except ImportError:
-            return ExperimentTestResponse(
-                status="error",
-                message="MLflow package not installed. Install with: pip install mlflow"
-            )
-          # Test connection to MLflow server with timeout
-        try:
-            # Set tracking URI
-            mlflow.set_tracking_uri(request.uri)
-            
-            # For remote servers, test connectivity first
-            if request.uri.startswith(('http://', 'https://')):
-                logger.info(f"Testing remote MLflow server connection to {request.uri}")
-                import requests
-                test_url = f"{request.uri.rstrip('/')}/health"
-                try:
-                    # Test with short timeout
-                    response = requests.get(test_url, timeout=10)
-                    if response.status_code != 200:
-                        return ExperimentTestResponse(
-                            status="warning",
-                            message=f"MLflow server at {request.uri} is reachable but health check returned status {response.status_code}",
-                            details={"uri": request.uri, "status_code": response.status_code}
-                        )
-                except requests.exceptions.Timeout:
-                    return ExperimentTestResponse(
-                        status="error",
-                        message=f"Connection to MLflow server at {request.uri} timed out",
-                        details={"uri": request.uri, "error": "Connection timeout"}
-                    )
-                except requests.exceptions.ConnectionError:
-                    return ExperimentTestResponse(
-                        status="error",
-                        message=f"Cannot connect to MLflow server at {request.uri}. Make sure the server is running and accessible.",
-                        details={"uri": request.uri, "error": "Connection refused"}
-                    )
-                except requests.exceptions.RequestException as e:
-                    return ExperimentTestResponse(
-                        status="error",
-                        message=f"Error connecting to MLflow server: {str(e)}",
-                        details={"uri": request.uri, "error": str(e)}
-                    )
-            
-            # Test MLflow client operations
-            client = MlflowClient(tracking_uri=request.uri)
-            
-            # Try to list experiments with timeout handling
-            try:
-                import asyncio
-                import concurrent.futures
-                
-                def test_experiments():
-                    return client.search_experiments(max_results=1)
-                
-                # Run with timeout
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(test_experiments)
-                    try:
-                        experiments = future.result(timeout=15)  # 15 second timeout
-                        
-                        return ExperimentTestResponse(
-                            status="success",
-                            message=f"Successfully connected to MLflow at {request.uri}",
-                            details={
-                                "uri": request.uri,
-                                "experiments_found": len(experiments),
-                                "mlflow_version": mlflow.__version__
-                            }
-                        )
-                    except concurrent.futures.TimeoutError:
-                        return ExperimentTestResponse(
-                            status="error",
-                            message=f"MLflow operations timed out for {request.uri}",
-                            details={"uri": request.uri, "error": "Operation timeout"}
-                        )
-                        
-            except Exception as client_error:
-                return ExperimentTestResponse(
-                    status="error",
-                    message=f"MLflow client error: {str(client_error)}",
-                    details={"uri": request.uri, "error": str(client_error)}
-                )
-            
-        except Exception as mlflow_error:
-            return ExperimentTestResponse(
-                status="error",
-                message=f"Failed to connect to MLflow: {str(mlflow_error)}",
-                details={"uri": request.uri, "error": str(mlflow_error)}
-            )
-            
-    except Exception as e:
-        logger.error(f"Error testing MLflow: {e}")
-        return ExperimentTestResponse(
-            status="error",
-            message=f"Error testing MLflow configuration: {str(e)}"
-        )
+# Experiment tracking API endpoint removed
 
-@app.post("/api/test-wandb", response_model=ExperimentTestResponse, summary="Test Weights & Biases Configuration", tags=["Experiment Tracking API"])
-async def test_wandb_api(request: TestWandBRequest):
-    """Test Weights & Biases configuration and connectivity."""
-    try:
-        # Try to import wandb
-        try:
-            import wandb
-        except ImportError:
-            return ExperimentTestResponse(
-                status="error",
-                message="Weights & Biases package not installed. Install with: pip install wandb"
-            )
-        
-        # Check if user is logged in
-        try:
-            # Check if API key is configured
-            api_key = wandb.api.api_key
-            if not api_key:
-                return ExperimentTestResponse(
-                    status="error",
-                    message="W&B API key not found. Please run 'wandb login' or set WANDB_API_KEY environment variable"
-                )
-            
-            # Try to access the API
-            api = wandb.Api()
-            
-            # Test project access if entity is provided
-            if request.entity:
-                try:
-                    # This will test if we can access the entity
-                    entity_obj = api.user(request.entity)
-                    return ExperimentTestResponse(
-                        status="success",
-                        message=f"Successfully connected to W&B. Ready to use project '{request.project}' under entity '{request.entity}'",
-                        details={
-                            "project": request.project,
-                            "entity": request.entity,
-                            "wandb_version": wandb.__version__
-                        }
-                    )
-                except Exception as entity_error:
-                    return ExperimentTestResponse(
-                        status="warning",
-                        message=f"Connected to W&B but couldn't access entity '{request.entity}'. The entity might not exist or you might not have access.",
-                        details={
-                            "project": request.project,
-                            "entity": request.entity,
-                            "wandb_version": wandb.__version__,
-                            "entity_error": str(entity_error)
-                        }
-                    )
-            else:
-                return ExperimentTestResponse(
-                    status="success",
-                    message=f"Successfully connected to W&B. Ready to use project '{request.project}'",
-                    details={
-                        "project": request.project,
-                        "wandb_version": wandb.__version__
-                    }
-                )
-                
-        except Exception as wandb_error:
-            return ExperimentTestResponse(
-                status="error",
-                message=f"Failed to connect to W&B: {str(wandb_error)}",
-                details={"error": str(wandb_error)}
-            )
-            
-    except Exception as e:
-        logger.error(f"Error testing W&B: {e}")
-        return ExperimentTestResponse(
-            status="error",
-            message=f"Error testing W&B configuration: {str(e)}"
-        )
+# Experiment tracking API endpoint removed
 
 @app.get("/api/download/{format}/{task_id}", summary="Download Generated Dataset", tags=["Dataset Download API"])
 async def download_dataset_api(
@@ -1229,240 +797,353 @@ async def download_dataset_api(
     valid_formats = ['json', 'csv', 'zip']
     if format not in valid_formats:
         raise HTTPException(status_code=400, detail=f"Unsupported format. Use one of: {valid_formats}")
-    
     cache_file = app_config.cache_dir / f'dataset_{task_id}.json'
     if not cache_file.exists():
         raise HTTPException(status_code=404, detail="Dataset not found. Generate dataset first.")
-    
     try:
         with open(cache_file, 'r', encoding='utf-8') as f:
-            data_from_cache = json.load(f)
-            
+            data = json.load(f)
         if format == 'json':
-            return FileResponse(
-                cache_file,
-                media_type='application/json',
-                filename=f'dataset_{task_id}.json'
-            )
-        
+            return JSONResponse(content=data)
         elif format == 'csv':
-            try:
-                import pandas as pd
-            except ImportError:
-                raise HTTPException(status_code=501, detail="pandas is required for CSV export")
-
-            entries_for_csv = data_from_cache.get('entries', [])
-            if not entries_for_csv:
-                raise HTTPException(status_code=400, detail="No entries found in dataset for CSV export")
-            
-            df_data = []
-            for entry_dict in entries_for_csv:
-                if isinstance(entry_dict.get("raw_data"), dict):
-                    df_data.append(entry_dict["raw_data"])
-                elif entry_dict.get("output") is not None:
-                    df_data.append({"output": entry_dict.get("output")})
-                else:
-                    df_data.append(entryDict)
-
-            if not df_data:
-                raise HTTPException(status_code=400, detail="No processable data found in entries for CSV export")
-
-            df = pd.DataFrame(df_data)
-            
-            temp_file = tempfile.NamedTemporaryFile(mode='w+', suffix='.csv', delete=False, encoding='utf-8')
-            df.to_csv(temp_file.name, index=False)
-            temp_file.close()
-            
-            return FileResponse(
-                temp_file.name,
-                media_type='text/csv',
-                filename=f'dataset_{task_id}.csv'
-            )
-
+            import csv
+            from io import StringIO
+            entries = data.get('entries', [])
+            if not entries:
+                raise HTTPException(status_code=404, detail="No entries found in dataset.")
+            output = StringIO()
+            fieldnames = set()
+            for entry in entries:
+                fieldnames.update(entry.keys())
+            fieldnames = list(fieldnames)
+            writer = csv.DictWriter(output, fieldnames=fieldnames)
+            writer.writeheader()
+            for entry in entries:
+                writer.writerow(entry)
+            output.seek(0)
+            return Response(content=output.read(), media_type='text/csv', headers={
+                'Content-Disposition': f'attachment; filename="dataset_{task_id}.csv"'
+            })
         elif format == 'zip':
-            temp_zip = tempfile.NamedTemporaryFile(suffix='.zip', delete=False)
-            temp_zip.close()
-            
-            with zipfile.ZipFile(temp_zip.name, 'w', zipfile.ZIP_DEFLATED) as zf:
-                # Add main dataset JSON
-                zf.writestr(f'{task_id}_dataset.json', 
-                           json.dumps(data_from_cache, indent=2, ensure_ascii=False))
-                
-                # Add quality report
-                if 'quality_report' in data_from_cache:
-                    zf.writestr(f'{task_id}_quality_report.json', 
-                               json.dumps(data_from_cache['quality_report'], indent=2, ensure_ascii=False))
-                
-                # Add metadata
-                metadata = {
-                    'task_id': task_id,
-                    'generated_at': data_from_cache.get('generated_at'),
-                    'entry_count': data_from_cache.get('count', len(data_from_cache.get('entries', []))),
-                    'download_timestamp': datetime.now().isoformat()
-                }
-                zf.writestr(f'{task_id}_metadata.json',
-                           json.dumps(metadata, indent=2))
-            
-            return FileResponse(
-                temp_zip.name,
-                media_type='application/zip',
-                filename=f'dataset_{task_id}.zip'
-            )
-            
+            import zipfile
+            from io import BytesIO
+            entries = data.get('entries', [])
+            if not entries:
+                raise HTTPException(status_code=404, detail="No entries found in dataset.")
+            mem_zip = BytesIO()
+            with zipfile.ZipFile(mem_zip, mode='w', compression=zipfile.ZIP_DEFLATED) as zf:
+                zf.writestr(f'dataset_{task_id}.json', json.dumps(data, ensure_ascii=False, indent=2))
+            mem_zip.seek(0)
+            return Response(content=mem_zip.read(), media_type='application/zip', headers={
+                'Content-Disposition': f'attachment; filename="dataset_{task_id}.zip"'
+            })
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error downloading dataset: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/download/csv/{task_id}")
-async def download_csv(task_id: str):
-    dataset_path = app_config.cache_dir / f"{task_id}.json"
-    if not dataset_path.exists():
-        raise HTTPException(status_code=404, detail="Dataset not found")
-    with open(dataset_path, "r", encoding="utf-8") as f:
-        entries = json.load(f)
-    # Flatten content+metadata for CSV
-    rows = []
-    for entry in entries:
-        row = {"id": entry.get("id", "")}
-        if "content" in entry and isinstance(entry["content"], dict):
-            row.update(entry["content"])
-        row["metadata"] = json.dumps(entry.get("metadata", {}), ensure_ascii=False)
-        rows.append(row)
-    if not rows:
-        raise HTTPException(status_code=404, detail="No data to export")
-    fieldnames = list(rows[0].keys())
-    csv_buffer = StringIO()
-    writer = csv.DictWriter(csv_buffer, fieldnames=fieldnames)
-    writer.writeheader()
-    for row in rows:
-        writer.writerow(row)
-    csv_buffer.seek(0)
-    return StreamingResponse(csv_buffer, media_type="text/csv", headers={
-        "Content-Disposition": f"attachment; filename={task_id}.csv"
-    })
-
-@app.get("/api/download/json/{task_id}")
-async def download_json(task_id: str):
-    dataset_path = app_config.cache_dir / f"{task_id}.json"
-    if not dataset_path.exists():
-        raise HTTPException(status_code=404, detail="Dataset not found")
-    return FileResponse(str(dataset_path), media_type="application/json", filename=f"{task_id}.json")
-
-@app.get("/api/preview/{task_id}", response_class=HTMLResponse)
-async def preview_dataset(task_id: str, limit: int = 20):
-    dataset_path = app_config.cache_dir / f"{task_id}.json"
-    if not dataset_path.exists():
-        return HTMLResponse("<div class='alert alert-warning'>Dataset not found</div>")
-    with open(dataset_path, "r", encoding="utf-8") as f:
-        entries = json.load(f)
-        # รองรับ dict ที่มี key "entries"
-        if isinstance(entries, dict) and "entries" in entries:
-            entries = entries["entries"]
-        if not isinstance(entries, list):
-            entries = list(entries.values())
-        # Flatten for table
-        rows = []
-        for entry in entries[:limit]:
-            if not isinstance(entry, dict):
-                continue
-            row = {}
-            # Always include id if present
-            row["id"] = entry.get("id", "")
-            # Flatten content, raw_data, input, output
-            if "content" in entry and isinstance(entry["content"], dict):
-                row.update(entry["content"])
-            if "raw_data" in entry and isinstance(entry["raw_data"], dict):
-                row.update(entry["raw_data"])
-            # If input/output are not None and not dict, add as columns
-            if entry.get("input") is not None and not isinstance(entry.get("input"), dict):
-                row["input"] = entry["input"]
-            if entry.get("output") is not None and not isinstance(entry.get("output"), dict):
-                row["output"] = entry["output"]
-            # Optionally, include metadata as JSON string
-            if "metadata" in entry:
-                row["metadata"] = json.dumps(entry.get("metadata", {}), ensure_ascii=False)
-            rows.append(row)
-    if not rows:
-        return HTMLResponse("<div class='alert alert-warning'>No data to preview</div>")
-    # Collect all fieldnames from all rows for a complete header
-    fieldnames = set()
-    for row in rows:
-        fieldnames.update(row.keys())
-    fieldnames = list(fieldnames)
-    # Generate HTML table
-    table_html = "<div style='overflow-x:auto'><table class='table table-striped' style='width:100%;border-collapse:collapse;'>"
-    table_html += "<thead><tr>" + "".join(f"<th style='background:#f8f9fa;border:1px solid #dee2e6;padding:8px'>{fn}</th>" for fn in fieldnames) + "</tr></thead>"
-    table_html += "<tbody>"
-    for row in rows:
-        table_html += "<tr>" + "".join(f"<td style='border:1px solid #dee2e6;padding:8px'>{str(row.get(fn, ''))}</td>" for fn in fieldnames) + "</tr>"
-    table_html += "</tbody></table></div>"
-    return HTMLResponse(table_html)
-
-@app.get("/api/status", response_model=StatusResponse, summary="Get API Status", tags=["System"])
-async def get_status_api():
-    """Get current API status and configuration."""
+@app.post("/api/upload-pdf", summary="Upload PDF and extract dataset entries", tags=["Dataset Generation API"])
+async def upload_pdf_and_extract_dataset(
+    file: UploadFile = File(..., description="PDF file to extract dataset from"),
+    tm = Depends(get_task_manager)
+):
+    """Upload a PDF file, extract text, auto-create dataset & task, and return info."""
     try:
-        tasks_count = 0
+        if not file.filename.lower().endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="Only PDF files are supported.")
+        # Save uploaded file temporarily
+        temp_path = app_config.cache_dir / f"temp_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        with open(temp_path, "wb") as f_out:
+            f_out.write(await file.read())
+        # Extract text from PDF (try pdfplumber first)
+        entries = []
+        fallback_to_ocr = False
         try:
-            if app_config.tasks_json_file.exists():
-                with open(app_config.tasks_json_file, 'r') as f:
-                    tasks_data = json.load(f)
-                    if isinstance(tasks_data, dict):
-                        tasks_count = len(tasks_data)
-                    elif isinstance(tasks_data, list):
-                        tasks_count = len(tasks_data)
-        except:
-            pass
-        
-        api_key = os.getenv('DEEPSEEK_API_KEY')
-        deepseek_configured = bool(api_key and api_key.strip())
-        
-        return StatusResponse(
-            status="operational",
-            timestamp=datetime.now(),
-            tasks_count=tasks_count,
-            cache_dir=str(app_config.cache_dir),
-            deepseek_api_configured=deepseek_configured,
-            python_path=str(app_config.python_dir),
-            version="1.0.0"
-        )
+            with pdfplumber.open(str(temp_path)) as pdf:
+                for page_num, page in enumerate(pdf.pages, 1):
+                    text = page.extract_text()
+                    if text and not is_garbled_thai(text):
+                        for line in text.splitlines():
+                            line = line.strip()
+                            if line:
+                                entries.append({
+                                    "input": line,
+                                    "output": "",
+                                    "page": page_num
+                                })
+                    else:
+                        fallback_to_ocr = True
+        except Exception as e:
+            fallback_to_ocr = True
+        # If no entries or garbled, try Mistral OCR fallback
+        if not entries or fallback_to_ocr:
+            try:
+                entries = extract_text_with_mistral_ocr(str(temp_path), lang='tha')
+            except Exception as ocr_err:
+                temp_path.unlink(missing_ok=True)
+                raise HTTPException(status_code=500, detail=f"PDF text extraction failed and Mistral OCR fallback also failed: {ocr_err}")
+        temp_path.unlink(missing_ok=True)
+        if not entries:
+            raise HTTPException(status_code=422, detail="No text could be extracted from the PDF (even with OCR). Please check the file or install OCR dependencies.")
+        # Auto-create new task
+        task_id = f"pdf_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        task_data = {
+            "id": task_id,
+            "type": "classification",
+            "description": f"Dataset imported from PDF: {file.filename}",
+            "prompt_template": "Classify the following text:",
+            "created_at": datetime.now().isoformat()
+        }
+        tm.add_custom_task(task_data)
+        # Save dataset to cache
+        cache_data = {
+            "task_id": task_id,
+            "generated_at": datetime.now().isoformat(),
+            "entries": entries,
+            "entry_count": len(entries),
+            "source": file.filename
+        }
+        save_dataset_to_cache_sync(task_id, cache_data)
+        return {
+            "task_id": task_id,
+            "task": task_data,
+            "count": len(entries),
+            "entries_preview": entries[:10]
+        }
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error getting status: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error extracting PDF: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to extract PDF: {e}")
 
-@app.get("/health", response_model=HealthResponse, summary="Health Check", tags=["System"])
-async def health_check():
-    """Simple health check endpoint."""
-    return HealthResponse(
-        status="healthy",
-        timestamp=datetime.now()
+def is_garbled_thai(text: str, threshold: float = 0.3) -> bool:
+    """
+    Returns True if the text is likely garbled for Thai (too few Thai characters or too many replacement chars).
+    threshold: minimum ratio of Thai chars to total chars to consider as NOT garbled.
+    """
+    if not text or not isinstance(text, str):
+        return True
+    # Count Thai characters
+    thai_chars = re.findall(r'[\u0E00-\u0E7F]', text)
+    thai_ratio = len(thai_chars) / max(len(text), 1)
+    # Count replacement chars (�)
+    replacement_count = text.count('�')
+    replacement_ratio = replacement_count / max(len(text), 1)
+    # Heuristic: too few Thai chars or too many replacement chars
+    if thai_ratio < threshold or replacement_ratio > 0.1:
+        return True
+    return False
+
+def extract_text_with_ocr(pdf_path: str, lang: str = 'tha+eng') -> list:
+    """
+    Extract text from a PDF using OCR (pytesseract + pdf2image).
+    Returns a list of entries: [{"input": ..., "output": "", "page": ...}]
+    """
+    if not OCR_AVAILABLE:
+        raise RuntimeError("OCR dependencies are not installed. Please install pytesseract and pdf2image.")
+    # Check if tesseract executable is available
+    tesseract_cmd = getattr(pytesseract.pytesseract, 'tesseract_cmd', 'tesseract')
+    if not (os.path.exists(tesseract_cmd) or tesseract_cmd == 'tesseract'):
+        raise RuntimeError(
+            "Tesseract OCR is not installed or not found. Please install Tesseract from https://github.com/UB-Mannheim/tesseract/wiki and ensure it's in your PATH or set the correct path in the code."
+        )
+    entries = []
+    # Set your local poppler path here
+    poppler_path = r"D:\Github\DekDataset\poppler-local\Library\bin"
+    try:
+        images = convert_from_path(pdf_path, poppler_path=poppler_path)
+        for page_num, image in enumerate(images, 1):
+            text = pytesseract.image_to_string(image, lang=lang)
+            for line in text.splitlines():
+                line = line.strip()
+                if line:
+                    entries.append({
+                        "input": line,
+                        "output": "",
+                        "page": page_num
+                    })
+        return entries
+    except Exception as e:
+        raise RuntimeError(f"OCR extraction failed: {e}")
+
+def extract_text_with_mistral_ocr(pdf_path: str, lang: str = 'tha') -> list:
+    """
+    Extract text from a PDF using Mistral Document AI API (mistral-ocr-latest model).
+    Returns a list of entries: [{"input": ..., "output": "", "page": ...}]
+    """
+    if not MISTRALAI_AVAILABLE:
+        raise RuntimeError("mistralai package is not installed. Please install with: pip install mistralai")
+    api_key = os.getenv('MISTRAL_API_KEY')
+    if not api_key:
+        raise RuntimeError("MISTRAL_API_KEY is not set in environment variables.")
+    client = Mistral(api_key=api_key)
+    # Encode PDF to base64
+    with open(pdf_path, "rb") as f:
+        base64_pdf = base64.b64encode(f.read()).decode('utf-8')
+    # Use data:application/pdf;base64,... as document_url
+    document_url = f"data:application/pdf;base64,{base64_pdf}"
+    ocr_response = client.ocr.process(
+        model="mistral-ocr-latest",
+        document={
+            "type": "document_url",
+            "document_url": document_url
+        },
+        include_image_base64=False
     )
+    # The response contains 'markdown' with the extracted text
+    markdown = getattr(ocr_response, 'markdown', None)
+    if not markdown:
+        raise RuntimeError("No markdown text returned from Mistral OCR API.")
+    # Split markdown into lines and pages (simple heuristic: page breaks as '---' or '\f')
+    entries = []
+    page_num = 1
+    for line in markdown.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line in ('---', '\f'):
+            page_num += 1
+            continue
+        entries.append({
+            "input": line,
+            "output": "",
+            "page": page_num
+        })
+    return entries
 
-@app.on_event("startup")
-async def startup_event():
-    """Log startup information."""
-    logger.info("=== DekDataset API Starting ===")
-    logger.info(f"Project root: {app_config.project_root}")
-    logger.info(f"Python modules path: {app_config.python_dir}")
-    logger.info(f"Tasks file: {app_config.tasks_json_file}")
-    logger.info(f"Cache directory: {app_config.cache_dir}")
-    
-    # Check API key
-    api_key = os.getenv('DEEPSEEK_API_KEY')
-    if api_key and api_key.strip():
-        logger.info("✓ DEEPSEEK_API_KEY is configured")
-    else:
-        logger.warning("⚠ DEEPSEEK_API_KEY is not set - dataset generation will be unavailable")
-    
-    logger.info("=== DekDataset API Ready ===")
+# --- Mistral API Key Management (in-memory for demo, can be improved) ---
+MISTRAL_API_KEY: Optional[str] = None
 
-if __name__ == "__main__":
-    uvicorn.run(
-        "app:app",
-        host="127.0.0.1",
-        port=8000,
-        reload=True,
-        log_level="info"
+def set_mistral_api_key(api_key: str):
+    global MISTRAL_API_KEY
+    MISTRAL_API_KEY = api_key
+
+def get_mistral_api_key() -> Optional[str]:
+    global MISTRAL_API_KEY
+    if MISTRAL_API_KEY:
+        return MISTRAL_API_KEY
+    return os.getenv('MISTRAL_API_KEY')
+
+@app.post("/api/set-mistral-api-key", tags=["Document AI"])
+async def set_mistral_api_key_api(data: Dict[str, str]):
+    api_key = data.get("api_key")
+    if not api_key or not api_key.startswith("sk-"):
+        return JSONResponse(status_code=400, content={"message": "Invalid API key format."})
+    set_mistral_api_key(api_key)
+    return {"message": "Mistral API key set successfully."}
+
+@app.post("/api/document-ocr-annotation", tags=["Document AI"])
+async def document_ocr_annotation(
+    file: UploadFile = File(...),
+    bbox: bool = Form(False),
+    doc: bool = Form(False),
+    pages: Optional[str] = Form(None),
+    tm = Depends(get_task_manager)
+):
+    """
+    Upload a PDF and run OCR + (optional) annotation using Mistral Document AI.
+    The result will be auto-saved as a new dataset and registered as a new Task.
+    """
+    import tempfile, shutil, uuid
+    api_key = get_mistral_api_key()
+    if not api_key:
+        raise HTTPException(status_code=400, detail="Mistral API key not set.")
+    # Save uploaded file to temp
+    temp_dir = tempfile.mkdtemp()
+    temp_path = os.path.join(temp_dir, file.filename)
+    with open(temp_path, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    # Upload to Mistral and get signed url
+    doc_ai = DocumentUnderstanding(api_key=api_key)
+    signed_url = doc_ai.upload_document(temp_path)
+    # Parse pages
+    page_list = None
+    if pages:
+        try:
+            page_list = [int(p.strip()) for p in pages.split(",") if p.strip().isdigit()]
+        except Exception:
+            page_list = None
+    # Prepare annotation models
+    bbox_model = BBoxImageAnnotation if bbox else None
+    doc_model = DocumentAnnotation if doc else None
+    # Run OCR + annotation
+    result = doc_ai.process_with_annotations(
+        document_url=signed_url,
+        pages=page_list,
+        bbox_annotation_model=bbox_model,
+        document_annotation_model=doc_model,
+        include_image_base64=False
     )
+    # Extract entries for dataset (simple: use markdown or annotation result)
+    entries = []
+    if hasattr(result, 'markdown') and result.markdown:
+        # Split markdown by lines/pages
+        for i, line in enumerate(result.markdown.splitlines()):
+            if line.strip():
+                entries.append({"input": line.strip(), "output": "", "page": i+1})
+    elif hasattr(result, 'document_annotation') and result.document_annotation:
+        # Use document annotation as entries
+        entries.append(result.document_annotation)
+    elif hasattr(result, 'bbox_annotations') and result.bbox_annotations:
+        for ann in result.bbox_annotations:
+            entries.append(ann)
+    # Fallback: try to use any 'entries' key
+    elif isinstance(result, dict) and 'entries' in result:
+        entries = result['entries']
+    # Auto-generate a new task id
+    task_id = f"pdf_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}"
+    # Register as a new Task
+    task_data = {
+        "id": task_id,
+        "type": "ocr_pdf",
+        "description": f"Auto-imported from PDF: {file.filename}",
+        "prompt_template": "OCR/Annotation from PDF",
+        "created_at": datetime.now().isoformat()
+    }
+    tm.add_custom_task(task_data)
+    # Save dataset to cache
+    cache_data = {
+        "task_id": task_id,
+        "generated_at": datetime.now().isoformat(),
+        "entry_count": len(entries),
+        "entries": entries[:1000],
+        "source": "mistral-ocr",
+        "file_name": file.filename
+    }
+    save_dataset_to_cache_sync(task_id, cache_data)
+    # Return preview and info
+    return {
+        "task_id": task_id,
+        "count": len(entries),
+        "entries_preview": entries[:10],
+        "message": f"PDF imported and dataset created as task {task_id}"
+    }
+
+# Experiment tracking API endpoint removed
+
+# Experiment tracking API endpoint removed
+
+@app.get("/api/preview/{task_id}", summary="Preview generated dataset", tags=["Dataset Preview"])
+async def preview_dataset_api(task_id: str = FastApiPath(..., description="ID of the task")):
+    """Return a preview (first 10 entries) of the generated dataset for a task."""
+    cache_file = app_config.cache_dir / f'dataset_{task_id}.json'
+    if not cache_file.exists():
+        # Try fallback: look for CSV in downloads (for demo)
+        import glob
+        import csv
+        import os
+        downloads = os.path.expanduser('~/Downloads')
+        csv_files = glob.glob(os.path.join(downloads, f"dataset_{task_id}*.csv"))
+        if csv_files:
+            with open(csv_files[0], encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                rows = list(reader)[:10]
+            return {"entries": rows, "count": len(rows)}
+        raise HTTPException(status_code=404, detail="Dataset not found. Generate dataset first.")
+    import json
+    with open(cache_file, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    entries = data.get('entries', [])
+    preview = entries[:10]
+    return {"entries": preview, "count": len(entries)}

@@ -351,7 +351,6 @@ class DatasetGenerator {
         if (!resultsSection) return;
 
         const entries = result.entries || result.test_entries || [];
-        
         // Show quality report
         if (qualityReport) {
             const report = result.quality_report || {};
@@ -381,41 +380,79 @@ class DatasetGenerator {
             if (entries.length === 0) {
                 datasetPreview.innerHTML = '<div class="alert alert-warning">No entries generated</div>';
             } else {
-                datasetPreview.innerHTML = `
-                    <div class="card">
-                        <div class="card-header">
-                            <h6 class="mb-0">Dataset Preview</h6>
-                        </div>
-                        <div class="card-body">
-                            <div class="table-responsive">
-                                <table class="table table-sm table-striped">
-                                    <thead>
-                                        <tr>
-                                            <th>#</th>
-                                            <th>Content</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        ${entries.slice(0, 5).map((entry, idx) => `
-                                            <tr>
-                                                <td>${idx + 1}</td>
-                                                <td>
-                                                    <pre class="mb-0" style="max-height: 100px; overflow-y: auto;">${this.escapeHtml(JSON.stringify(entry, null, 2))}</pre>
-                                                </td>
-                                            </tr>
-                                        `).join('')}
-                                    </tbody>
-                                </table>
-                                ${entries.length > 5 ? `<small class="text-muted">Showing 5 of ${entries.length} entries</small>` : ''}
-                            </div>
-                        </div>
-                    </div>
-                `;
+                // Try to infer columns from the first entry
+                const columns = this.getPreviewColumns(entries);
+                let html = `<div class="card"><div class="card-header"><h6 class="mb-0">Dataset Preview</h6></div><div class="card-body"><div class="table-responsive"><table class="table table-sm table-striped"><thead><tr>`;
+                columns.forEach(col => {
+                    html += `<th>${this.escapeHtml(col.header)}</th>`;
+                });
+                html += '</tr></thead><tbody>';
+                entries.slice(0, 10).forEach((entry, idx) => {
+                    html += '<tr>';
+                    columns.forEach(col => {
+                        let val = col.getter(entry, idx);
+                        if (typeof val === 'object' && val !== null) val = JSON.stringify(val);
+                        html += `<td style="max-width:320px;white-space:pre-wrap;">${this.escapeHtml(val == null ? '' : String(val))}</td>`;
+                    });
+                    html += '</tr>';
+                });
+                html += '</tbody></table>';
+                if (entries.length > 10) html += `<div style=\"color:#888;font-size:0.9em;\">...and ${entries.length-10} more</div>`;
+                html += '</div></div></div>';
+                datasetPreview.innerHTML = html;
             }
         }
 
         resultsSection.style.display = 'block';
         resultsSection.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    /**
+     * Try to infer the best columns for preview from the dataset entries.
+     * Returns an array of {header, getter} objects.
+     */
+    getPreviewColumns(entries) {
+        if (!entries || entries.length === 0) return [
+            { header: '#', getter: (e, i) => i + 1 },
+            { header: 'Content', getter: e => JSON.stringify(e) }
+        ];
+        const first = entries[0];
+        // Common field sets
+        const fieldSets = [
+            // QA
+            ['context', 'question', 'answer'],
+            // Classification
+            ['text', 'label'],
+            // OCR/Doc
+            ['input', 'output', 'bbox', 'page'],
+            // Token classification
+            ['tokens', 'labels'],
+            // Generic
+            ['content', 'label'],
+        ];
+        let chosen = null;
+        for (const fields of fieldSets) {
+            if (fields.every(f => f in first)) {
+                chosen = fields;
+                break;
+            }
+        }
+        if (!chosen) {
+            // Fallback: use up to 4 top-level keys
+            const keys = Object.keys(first).slice(0, 4);
+            chosen = keys.length ? keys : null;
+        }
+        if (chosen) {
+            return [
+                { header: '#', getter: (e, i) => i + 1 },
+                ...chosen.map(key => ({ header: key.charAt(0).toUpperCase() + key.slice(1), getter: e => e[key] }))
+            ];
+        }
+        // Fallback: just show JSON
+        return [
+            { header: '#', getter: (e, i) => i + 1 },
+            { header: 'Content', getter: e => JSON.stringify(e) }
+        ];
     }
 
     async loadQualityConfig() {
@@ -590,7 +627,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Debug helper
     window.debugDatasetGenerator = () => {
         console.log('Dataset Generator Status:', window.datasetGenerator.getStatus());
-    };
+    };    // Experiment tracking functionality removed
 });
 
 // Add global error handler

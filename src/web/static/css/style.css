@@ -421,6 +421,8 @@ body {
   color: #d35400;
 }
 
+/* Experiment tracking styles removed */
+
 @media (max-width: 1024px) {
   .main-content {
     grid-template-columns: 1fr;

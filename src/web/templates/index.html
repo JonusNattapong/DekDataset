@@ -6,6 +6,24 @@
     <title>DekDataset - AI Dataset Generator</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        .pdf-drop-zone {
+            border: 2px dashed #888;
+            border-radius: 8px;
+            padding: 2rem 1rem;
+            text-align: center;
+            color: #888;
+            background: #fafbfc;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+            margin-bottom: 1rem;
+        }
+        .pdf-drop-zone.dragover {
+            border-color: #007bff;
+            background: #e6f0ff;
+            color: #007bff;
+        }
+    </style>
 </head>
 <body>
     <div class="bg-animation"></div>
@@ -100,15 +118,43 @@
                         </button>
                         <button class="btn btn-secondary" id="qualityBtn">
                             <i class="fas fa-shield-alt"></i>Quality Settings
-                        </button>
-                        <button class="btn btn-info" id="apiConfigBtn">
+                        </button>                        <button class="btn btn-info" id="apiConfigBtn">
                             <i class="fas fa-key"></i>API Config
-                        </button>
-                        <button class="btn btn-success" id="experimentConfigBtn">
-                            <i class="fas fa-chart-line"></i>Experiment Tracking
                         </button>
                     </div>
                 </div>
+
+                <!-- PDF Upload Panel -->
+                <div class="card" id="pdfUploadCard" style="margin-top:2rem;">
+                    <div class="card-header" style="background:#f8f9fa;border-bottom:1px solid #eee;display:flex;align-items:center;gap:0.5rem;">
+                        <i class="fas fa-file-pdf" style="color:#e74c3c;"></i>
+                        <span style="font-weight:600;">Import Dataset from PDF (Mistral Document AI)</span>
+                    </div>
+                    <div class="pdf-upload-panel" style="padding:1.5rem 1rem 1rem 1rem;">
+                        <div id="pdfDropZone" class="pdf-drop-zone" style="margin-bottom:1rem;">
+                            <span id="pdfDropText"><i class="fas fa-upload"></i> Drag & drop PDF file here or click to select</span>
+                            <input type="file" id="pdfFileInput" accept="application/pdf" style="display:none;" />
+                        </div>
+                        <div class="form-group" style="margin-bottom:0.5rem;">
+                            <label class="form-label" style="font-weight:500;">Mistral API Key</label>
+                            <input type="password" class="form-control" id="mistralApiKey" placeholder="sk-..." style="max-width:350px;">
+                        </div>
+                        <div class="form-group" style="margin-bottom:0.5rem;">
+                            <label class="form-label" style="font-weight:500;">Annotation Options</label>
+                            <div style="display:flex;gap:1.5rem;align-items:center;flex-wrap:wrap;">
+                                <label style="margin-bottom:0;"><input type="checkbox" id="bboxAnnotation"> BBox Annotation</label>
+                                <label style="margin-bottom:0;"><input type="checkbox" id="docAnnotation"> Document Annotation</label>
+                                <label style="margin-bottom:0;">Pages: <input type="text" id="ocrPages" style="width:80px;" placeholder="e.g. 1,2,3"></label>
+                            </div>
+                        </div>
+                        <button class="btn btn-primary" id="uploadPdfBtn" style="margin-top:1rem;width:100%;font-weight:600;font-size:1.1em;">
+                            <i class="fas fa-magic"></i> Upload PDF & OCR
+                        </button>
+                        <div id="pdfUploadStatus" style="margin-top:1rem;"></div>
+                        <div id="pdfEntriesPreview" style="margin-top:1rem;"></div>
+                    </div>
+                </div>
+                <!-- End PDF Upload Panel -->
 
                 <!-- Progress Section -->
                 <div id="progressSection" style="display: none;">
@@ -245,11 +291,19 @@
                 </div>
                 <div class="form-group">
                     <label class="form-label">Validation Rules (JSON array)</label>
-                    <textarea class="form-control" id="validationRules" rows="2" placeholder='e.g. ["no_empty_output", "no_special_chars"]'></textarea>
+                    <textarea class="form-control" id="validationRules" rows="3" placeholder='["no_empty_output", "no_special_chars", "has_bbox", "has_label", "valid_page_number"]'>["no_empty_output", "no_special_chars", "has_bbox", "has_label", "valid_page_number"]</textarea>
+                    <small style="color: var(--text-secondary);">
+                        Examples: "no_empty_output", "no_special_chars", "has_bbox", "has_label", "valid_page_number"<br>
+                        <span style="color:#e67e22;font-weight:500;">* ต้องกรอกเป็น JSON array เช่น ["rule1", "rule2"] เท่านั้น หากไม่ต้องการ validation ให้ใส่ []</span>
+                    </small>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Custom Validators (JSON array)</label>
-                    <textarea class="form-control" id="customValidators" rows="2" placeholder='e.g. ["my_custom_validator"]'></textarea>
+                    <textarea class="form-control" id="customValidators" rows="3" placeholder='["bbox_format_validator", "label_consistency_validator", "ocr_text_quality_validator"]'>["bbox_format_validator", "label_consistency_validator", "ocr_text_quality_validator"]</textarea>
+                    <small style="color: var(--text-secondary);">
+                        Examples: "bbox_format_validator", "label_consistency_validator", "ocr_text_quality_validator"<br>
+                        <span style="color:#e67e22;font-weight:500;">* ต้องกรอกเป็น JSON array เช่น ["validator1", "validator2"] เท่านั้น หากไม่ต้องการ validator ให้ใส่ []</span>
+                    </small>
                 </div>
             </div>
             <div class="modal-footer">
@@ -258,132 +312,9 @@
                     <i class="fas fa-save"></i>Save Settings
                 </button>
             </div>
-        </div>
-    </div>    
+        </div>    </div>    
 
-    <!-- Experiment Tracking Modal -->
-    <div class="modal" id="experimentModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Experiment Tracking Configuration</h3>
-                <button class="close-btn" id="closeExperimentModal">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <div class="modal-body">
-                <div class="alert alert-info">
-                    <i class="fas fa-info-circle"></i>
-                    <strong>Experiment Tracking:</strong> Track dataset generation metrics, quality scores, and costs using MLflow and/or Weights & Biases.
-                </div>
-                
-                <!-- MLflow Configuration -->
-                <div class="form-group">
-                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;">
-                        <input type="checkbox" id="enableMLflow" checked>
-                        <label for="enableMLflow" class="form-label" style="margin: 0;">
-                            <i class="fas fa-database"></i> Enable MLflow Tracking
-                        </label>
-                    </div>
-                    <div id="mlflowConfig" style="margin-left: 1.5rem;">
-                        <div class="form-group">
-                            <label class="form-label">MLflow Tracking URI</label>
-                            <input type="text" class="form-control" id="mlflowUri" 
-                                   placeholder="sqlite:///mlruns/dekdataset.db" 
-                                   value="sqlite:///mlruns/dekdataset.db">
-                            <small style="color: var(--text-secondary);">Local SQLite database for experiment storage</small>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Weights & Biases Configuration -->
-                <div class="form-group">
-                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;">
-                        <input type="checkbox" id="enableWandB">
-                        <label for="enableWandB" class="form-label" style="margin: 0;">
-                            <i class="fas fa-cloud"></i> Enable Weights & Biases
-                        </label>
-                    </div>
-                    <div id="wandbConfig" style="margin-left: 1.5rem; display: none;">
-                        <div class="form-group">
-                            <label class="form-label">W&B Project Name</label>
-                            <input type="text" class="form-control" id="wandbProject" 
-                                   value="dekdataset" placeholder="dekdataset">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">W&B Entity (Optional)</label>
-                            <input type="text" class="form-control" id="wandbEntity" 
-                                   placeholder="your-username-or-team">
-                        </div>
-                        <div class="alert alert-warning">
-                            <i class="fas fa-exclamation-triangle"></i>
-                            <strong>Note:</strong> You need to login to W&B first: <code>wandb login</code>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- MLflow UI Quick Access -->
-                <div class="form-group">
-                    <label class="form-label">MLflow UI</label>
-                    <div>
-                        <a href="http://localhost:5000" target="_blank" class="btn btn-outline-primary" style="margin-top: 0.5rem;">
-                            <i class="fas fa-external-link-alt"></i> เปิด MLflow UI
-                        </a>
-                        <small style="color: var(--text-secondary); display: block;">MLflow UI ต้องรันคำสั่ง <code>mlflow ui</code> ในเครื่องนี้ก่อน</small>
-                    </div>
-                </div>
-                <!-- End MLflow UI Quick Access -->
-                
-                <!-- W&B Dashboard Quick Access -->
-                <div class="form-group">
-                    <label class="form-label">Weights & Biases Dashboard</label>
-                    <div>
-                        <a id="wandbDashboardLink" href="https://wandb.ai/dekdataset" target="_blank" class="btn btn-outline-warning" style="margin-top: 0.5rem;">
-                            <i class="fas fa-external-link-alt"></i> เปิด W&B Dashboard
-                        </a>
-                        <small style="color: var(--text-secondary); display: block;">ลิงก์นี้จะเปิดหน้าโปรเจกต์ W&B ตามชื่อที่ตั้งไว้</small>
-                    </div>
-                </div>
-                <!-- End W&B Dashboard Quick Access -->
-                
-                <!-- Tracking Options -->
-                <div class="form-group">
-                    <label class="form-label">Tracking Options</label>
-                    <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-left: 1rem;">
-                        <div>
-                            <input type="checkbox" id="autoLogDatasets" checked>
-                            <label for="autoLogArtifacts">Auto-log Generated Datasets</label>
-                        </div>
-                        <div>
-                            <input type="checkbox" id="autoLogQuality" checked>
-                            <label for="autoLogQuality">Auto-log Quality Metrics</label>
-                        </div>
-                        <div>
-                            <input type="checkbox" id="autoLogCosts" checked>
-                            <label for="autoLogCosts">Auto-log Cost Metrics</label>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Experiment Status -->
-                <div class="form-group">
-                    <label class="form-label">Experiment Status</label>
-                    <div id="experimentStatus" class="alert alert-secondary">
-                        <i class="fas fa-question-circle"></i>
-                        Click "Test Configuration" to check experiment tracking status
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" id="testExperimentBtn">
-                    <i class="fas fa-flask"></i>Test Configuration
-                </button>
-                <button class="btn btn-success" id="saveExperimentConfig">
-                    <i class="fas fa-save"></i>Save & Apply
-                </button>
-                <button class="btn btn-secondary" id="cancelExperimentConfig">Cancel</button>
-            </div>
-        </div>
-    </div>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         // Load data from tasks.json
         let tasksArray = [];
@@ -464,23 +395,223 @@
 
         function renderTaskList() {
             taskList.innerHTML = '';
-            tasksArray.forEach(task => {
-                const taskItem = document.createElement('div');
-                taskItem.className = 'task-item';
-                taskItem.innerHTML = `
-                    <h6><span class="status-indicator status-active"></span>${task.id}</h6>
-                    <small>${task.type}</small>
-                    <div class="task-actions">
-                        <button class="btn btn-primary btn-sm select-task" data-task-id="${task.id}">
-                            <i class="fas fa-check"></i> Select
-                        </button>
-                        <button class="btn btn-danger btn-sm delete-task" data-task-id="${task.id}">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                `;
-                taskList.appendChild(taskItem);
+            
+            // Add modern scrollable container with better styling
+            taskList.style.maxHeight = '720px';
+            taskList.style.overflowY = 'auto';
+            taskList.style.padding = '0';
+            taskList.style.gap = '0';
+            
+            if (tasksArray.length === 0) {
+            taskList.innerHTML = `
+            <div style="
+            text-align: center;
+            padding: 3rem 1rem;
+            color: #6c757d;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 12px;
+            border: 2px dashed #dee2e6;
+            ">
+            <i class="fas fa-tasks" style="font-size: 2.5rem; margin-bottom: 1rem; opacity: 0.5;"></i>
+            <div style="font-size: 1.1rem; font-weight: 500;">No tasks available</div>
+            <div style="font-size: 0.9rem; margin-top: 0.5rem;">Create your first task to get started</div>
+            </div>
+            `;
+            return;
+            }
+            
+            tasksArray.forEach((task, index) => {
+            const taskItem = document.createElement('div');
+            taskItem.className = 'task-item-modern';
+            taskItem.dataset.taskId = task.id;
+            
+            // Modern card design with gradient and animations
+            taskItem.style = `
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+            border: 1px solid #e3e6ea;
+            border-radius: 16px;
+            margin-bottom: 12px;
+            padding: 1.2rem 1.5rem;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+            `;
+            
+            // Determine task type icon and color
+            const taskTypeConfig = {
+            'qa': { icon: 'fa-question-circle', color: '#3498db', bgColor: '#ebf3fd' },
+            'classification': { icon: 'fa-tags', color: '#e74c3c', bgColor: '#fdf2f2' },
+            'generation': { icon: 'fa-magic', color: '#9b59b6', bgColor: '#f8f4fd' },
+            'custom': { icon: 'fa-cog', color: '#34495e', bgColor: '#f4f6f7' }
+            };
+            
+            const config = taskTypeConfig[task.type] || taskTypeConfig['custom'];
+            
+            taskItem.innerHTML = `
+            <!-- Background decorative element -->
+            <div style="
+            position: absolute;
+            top: -20px;
+            right: -20px;
+            width: 80px;
+            height: 80px;
+            background: ${config.bgColor};
+            border-radius: 50%;
+            opacity: 0.3;
+            "></div>
+            
+            <!-- Main content -->
+            <div style="position: relative; z-index: 2;">
+            <!-- Header -->
+            <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.8rem;">
+                <div style="
+                width: 42px;
+                height: 42px;
+                background: ${config.color};
+                border-radius: 12px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: white;
+                font-size: 1.2rem;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+                ">
+                <i class="fas ${config.icon}"></i>
+                </div>
+                <div style="flex: 1;">
+                <div style="
+                font-weight: 700;
+                font-size: 1.1rem;
+                color: #2c3e50;
+                margin-bottom: 0.2rem;
+                ">${task.id}</div>
+                <div style="
+                color: #7f8c8d;
+                font-size: 0.85rem;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                font-weight: 600;
+                ">${task.type}</div>
+                <!-- Status badge moved here -->
+                <div style="
+                display: inline-block;
+                background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+                color: white;
+                padding: 0.2rem 0.6rem;
+                border-radius: 20px;
+                font-size: 0.7rem;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                box-shadow: 0 2px 6px rgba(39, 174, 96, 0.3);
+                margin-top: 0.3rem;
+                ">
+                <i class="fas fa-check-circle" style="margin-right: 0.3rem;"></i>
+                Active
+                </div>
+                </div>
+            </div>
+            
+            <!-- Description -->
+            <div style="
+                color: #5a6c7d;
+                font-size: 0.9rem;
+                line-height: 1.5;
+                margin-bottom: 1rem;
+                max-height: 3rem;
+                overflow: hidden;
+                display: -webkit-box;
+                -webkit-line-clamp: 2;
+                -webkit-box-orient: vertical;
+            ">
+                ${task.description || task.name || 'No description available'}
+            </div>
+            
+            <!-- Action buttons -->
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <button class="btn select-task" data-task-id="${task.id}" style="
+                background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+                border: none;
+                color: white;
+                padding: 0.5rem 1.2rem;
+                border-radius: 10px;
+                font-size: 0.85rem;
+                font-weight: 600;
+                transition: all 0.2s ease;
+                box-shadow: 0 3px 8px rgba(52, 152, 219, 0.3);
+                flex: 1;
+                " onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 4px 12px rgba(52, 152, 219, 0.4)'" 
+                   onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 3px 8px rgba(52, 152, 219, 0.3)'">
+                <i class="fas fa-play" style="margin-right: 0.5rem;"></i>
+                Select Task
+                </button>
+                
+                <button class="btn delete-task" data-task-id="${task.id}" style="
+                background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+                border: none;
+                color: white;
+                padding: 0.5rem 0.8rem;
+                border-radius: 10px;
+                font-size: 0.85rem;
+                transition: all 0.2s ease;
+                box-shadow: 0 3px 8px rgba(231, 76, 60, 0.3);
+                " onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 4px 12px rgba(231, 76, 60, 0.4)'" 
+                   onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 3px 8px rgba(231, 76, 60, 0.3)'">
+                <i class="fas fa-trash"></i>
+                </button>
+            </div>
+            </div>
+            `;
+            
+            // Add hover effects
+            taskItem.addEventListener('mouseenter', function() {
+            this.style.transform = 'translateY(-3px)';
+            this.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.1)';
+            this.style.borderColor = config.color;
             });
+            
+            taskItem.addEventListener('mouseleave', function() {
+            this.style.transform = 'translateY(0)';
+            this.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.04)';
+            this.style.borderColor = '#e3e6ea';
+            });
+            
+            // Add click effect
+            taskItem.addEventListener('mousedown', function() {
+            this.style.transform = 'translateY(-1px) scale(0.98)';
+            });
+            
+            taskItem.addEventListener('mouseup', function() {
+            this.style.transform = 'translateY(-3px) scale(1)';
+            });
+            
+            taskList.appendChild(taskItem);
+            });
+            
+            // Add custom scrollbar styling
+            const style = document.createElement('style');
+            style.textContent = `
+            #taskList::-webkit-scrollbar {
+            width: 6px;
+            }
+            #taskList::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+            }
+            #taskList::-webkit-scrollbar-thumb {
+            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+            border-radius: 10px;
+            }
+            #taskList::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(135deg, #2980b9 0%, #3498db 100%);
+            }
+            `;
+            if (!document.getElementById('taskListScrollbarStyle')) {
+            style.id = 'taskListScrollbarStyle';
+            document.head.appendChild(style);
+            }
         }
 
         function showTaskJson(taskId) {
@@ -562,13 +693,10 @@
             setupGenerationControls();
         }
 
-        function setupModalControls() {
-            const createTaskBtn = document.getElementById('createTaskBtn');
+        function setupModalControls() {            const createTaskBtn = document.getElementById('createTaskBtn');
             const createTaskModal = document.getElementById('createTaskModal');
             const qualityBtn = document.getElementById('qualityBtn');
             const qualityModal = document.getElementById('qualityModal');
-            const experimentConfigBtn = document.getElementById('experimentConfigBtn');
-            const experimentModal = document.getElementById('experimentModal');
 
             createTaskBtn.addEventListener('click', () => {
                 createTaskModal.classList.add('show');
@@ -589,36 +717,20 @@
                     }
                 } catch (error) {
                     console.error('Error loading quality config:', error);
-                }
-                qualityModal.classList.add('show');
-            });            experimentConfigBtn.addEventListener('click', async () => {
-                await loadExperimentConfig();
-                experimentModal.classList.add('show');
+                }                qualityModal.classList.add('show');
             });
 
             // Close modal handlers
             document.getElementById('closeCreateModal').addEventListener('click', () => {
                 createTaskModal.classList.remove('show');
-            });
-
-            document.getElementById('closeQualityModal').addEventListener('click', () => {
+            });            document.getElementById('closeQualityModal').addEventListener('click', () => {
                 qualityModal.classList.remove('show');
-            });
-
-            document.getElementById('closeExperimentModal').addEventListener('click', () => {
-                experimentModal.classList.remove('show');
             });
 
             document.getElementById('cancelCreateTask').addEventListener('click', () => {
                 createTaskModal.classList.remove('show');
-            });
-
-            document.getElementById('cancelQuality').addEventListener('click', () => {
+            });            document.getElementById('cancelQuality').addEventListener('click', () => {
                 qualityModal.classList.remove('show');
-            });
-
-            document.getElementById('cancelExperimentConfig').addEventListener('click', () => {
-                experimentModal.classList.remove('show');
             });
 
             // Save handlers
@@ -697,104 +809,11 @@
                         throw new Error(errorData.detail || 'Failed to save quality config');
                     }
                     qualityModal.classList.remove('show');
-                    showAlert('Quality settings saved successfully!', 'success');
-                } catch (error) {
+                    showAlert('Quality settings saved successfully!', 'success');                } catch (error) {
                     showAlert('Error saving quality settings: ' + error.message, 'error');
                 }
-            });
-
-            // Experiment tracking settings
-            document.getElementById('enableWandB').addEventListener('change', function() {
-                const isChecked = this.checked;
-                document.getElementById('wandbConfig').style.display = isChecked ? 'block' : 'none';
-            });
-
-            document.getElementById('testExperimentBtn').addEventListener('click', async () => {
-                const mlflowUri = document.getElementById('mlflowUri').value;
-                const enableMLflow = document.getElementById('enableMLflow').checked;
-                const enableWandB = document.getElementById('enableWandB').checked;
-                const wandbProject = document.getElementById('wandbProject').value;
-                const wandbEntity = document.getElementById('wandbEntity').value;
-
-                // Simple validation
-                if (enableWandB && !wandbProject) {
-                    return showAlert('Please enter a W&B project name', 'error');
-                }
-
-                try {
-                    // Test MLflow configuration
-                    if (enableMLflow) {
-                        const mlflowResponse = await fetch('/api/test-mlflow', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({ uri: mlflowUri })
-                        });
-
-                        if (!mlflowResponse.ok) {
-                            const errorData = await mlflowResponse.json();
-                            throw new Error(errorData.detail || 'MLflow configuration test failed');
-                        }
-                    }
-
-                    // Test Weights & Biases configuration
-                    if (enableWandB) {
-                        const wandbResponse = await fetch('/api/test-wandb', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({ project: wandbProject, entity: wandbEntity })
-                        });
-
-                        if (!wandbResponse.ok) {
-                            const errorData = await wandbResponse.json();
-                            throw new Error(errorData.detail || 'Weights & Biases configuration test failed');
-                        }
-                    }
-
-                    showAlert('Configuration tested successfully!', 'success');
-                } catch (error) {
-                    console.error('Error testing configuration:', error);
-                    showAlert('Configuration test failed: ' + error.message, 'error');
-                }
-            });            document.getElementById('saveExperimentConfig').addEventListener('click', async () => {
-                try {
-                    const configData = {
-                        enable_mlflow: document.getElementById('enableMLflow').checked,
-                        mlflow_uri: document.getElementById('mlflowUri').value || 'http://localhost:5000',
-                        enable_wandb: document.getElementById('enableWandB').checked,
-                        wandb_project: document.getElementById('wandbProject').value || '',
-                        wandb_entity: document.getElementById('wandbEntity').value || '',
-                        auto_log_datasets: document.getElementById('autoLogDatasets').checked,
-                        auto_log_quality: document.getElementById('autoLogQuality').checked,
-                        auto_log_costs: document.getElementById('autoLogCosts').checked
-                    };
-
-                    const response = await fetch('/api/experiment-config', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(configData)
-                    });
-
-                    if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(errorData.detail || 'Failed to save experiment configuration');
-                    }
-
-                    experimentModal.classList.remove('show');
-                    showAlert('Experiment tracking settings saved successfully!', 'success');
-                } catch (error) {
-                    console.error('Error saving experiment configuration:', error);
-                    showAlert('Error saving configuration: ' + error.message, 'error');
-                }
-            });
-
-            // Close modals when clicking outside
-            [createTaskModal, qualityModal, experimentModal].forEach(modal => {
+            });            // Close modals when clicking outside
+            [createTaskModal, qualityModal].forEach(modal => {
                 modal.addEventListener('click', (e) => {
                     if (e.target === modal) {
                         modal.classList.remove('show');
@@ -1111,60 +1130,7 @@
                 
             } catch (error) {
                 showAlert('Error saving API key: ' + error.message, 'error');
-            }
-        }
-
-        async function loadExperimentConfig() {
-            try {
-                const response = await fetch('/api/experiment-config');
-                if (response.ok) {
-                    const data = await response.json();
-                    const config = data.config;
-                    
-                    // Populate form fields
-                    document.getElementById('enableMLflow').checked = config.enable_mlflow;
-                    document.getElementById('mlflowUri').value = config.mlflow_uri;
-                    document.getElementById('enableWandB').checked = config.enable_wandb;
-                    document.getElementById('wandbProject').value = config.wandb_project;
-                    document.getElementById('wandbEntity').value = config.wandb_entity;
-                    document.getElementById('autoLogDatasets').checked = config.auto_log_datasets;
-                    document.getElementById('autoLogQuality').checked = config.auto_log_quality;
-                    document.getElementById('autoLogCosts').checked = config.auto_log_costs;
-                    
-                    // Show/hide W&B config section
-                    document.getElementById('wandbConfig').style.display = config.enable_wandb ? 'block' : 'none';
-                    
-                    // Update status
-                    updateExperimentStatus(config);
-                } else {
-                    console.error('Failed to load experiment config');
-                }
-            } catch (error) {
-                console.error('Error loading experiment config:', error);
-            }
-        }
-
-        function updateExperimentStatus(config) {
-            const statusDiv = document.getElementById('experimentStatus');
-            
-            if (config.enable_mlflow || config.enable_wandb) {
-                const enabledServices = [];
-                if (config.enable_mlflow) enabledServices.push('MLflow');
-                if (config.enable_wandb) enabledServices.push('Weights & Biases');
-                
-                statusDiv.className = 'alert alert-success';
-                statusDiv.innerHTML = `
-                    <i class="fas fa-check-circle"></i>
-                    Experiment tracking enabled: ${enabledServices.join(', ')}
-                `;
-            } else {
-                statusDiv.className = 'alert alert-warning';
-                statusDiv.innerHTML = `
-                    <i class="fas fa-exclamation-triangle"></i>
-                    No experiment tracking services enabled
-                `;
-            }
-        }
+            }        }
 
         // Initialize the application
         init();
@@ -1196,6 +1162,108 @@
                 updateWandbLink();
             }
         });
+
+        // --- PDF Upload Drag & Drop ---
+        const pdfDropZone = document.getElementById('pdfDropZone');
+        const pdfFileInput = document.getElementById('pdfFileInput');
+        const uploadPdfBtn = document.getElementById('uploadPdfBtn');
+        const pdfUploadStatus = document.getElementById('pdfUploadStatus');
+        const pdfEntriesPreview = document.getElementById('pdfEntriesPreview');
+        let selectedPdfFile = null;
+
+        pdfDropZone.addEventListener('click', () => pdfFileInput.click());
+        pdfDropZone.addEventListener('dragover', e => {
+            e.preventDefault();
+            pdfDropZone.classList.add('dragover');
+        });
+        pdfDropZone.addEventListener('dragleave', e => {
+            e.preventDefault();
+            pdfDropZone.classList.remove('dragover');
+        });
+        pdfDropZone.addEventListener('drop', e => {
+            e.preventDefault();
+            pdfDropZone.classList.remove('dragover');
+            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                handlePdfFile(e.dataTransfer.files[0]);
+            }
+        });
+        pdfFileInput.addEventListener('change', e => {
+            if (e.target.files && e.target.files[0]) {
+                handlePdfFile(e.target.files[0]);
+            }
+        });
+        function handlePdfFile(file) {
+            if (!file.name.toLowerCase().endsWith('.pdf')) {
+                pdfUploadStatus.innerHTML = '<span class="text-danger">Only PDF files are allowed.</span>';
+                selectedPdfFile = null;
+                return;
+            }
+            selectedPdfFile = file;
+            pdfUploadStatus.innerHTML = `<span class="text-info">Selected: ${file.name}</span>`;
+        }
+        uploadPdfBtn.addEventListener('click', async () => {
+            if (!selectedPdfFile) {
+                pdfUploadStatus.innerHTML = '<span class="text-danger"><i class="fas fa-exclamation-circle"></i> Please select a PDF file first.</span>';
+                return;
+            }
+            const mistralApiKey = document.getElementById('mistralApiKey').value.trim();
+            if (!mistralApiKey || !mistralApiKey.startsWith('sk-')) {
+                pdfUploadStatus.innerHTML = '<span class="text-danger"><i class="fas fa-exclamation-circle"></i> Please enter a valid Mistral API Key (sk-...)</span>';
+                return;
+            }
+            pdfUploadStatus.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin"></i> Uploading and processing PDF...</span>';
+            pdfEntriesPreview.innerHTML = '';
+            // Set API key to backend
+            await fetch('/api/set-mistral-api-key', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ api_key: mistralApiKey })
+            });
+            const formData = new FormData();
+            formData.append('file', selectedPdfFile);
+            // Annotation options
+            const bbox = document.getElementById('bboxAnnotation').checked;
+            const doc = document.getElementById('docAnnotation').checked;
+            const pages = document.getElementById('ocrPages').value;
+            formData.append('bbox', bbox);
+            formData.append('doc', doc);
+            if (pages) formData.append('pages', pages);
+            try {
+                const res = await fetch('/api/document-ocr-annotation', {
+                    method: 'POST',
+                    body: formData
+                });
+                if (!res.ok) {
+                    const err = await res.json();
+                    pdfUploadStatus.innerHTML = `<span class="text-danger"><i class="fas fa-times-circle"></i> ${err.detail || 'Upload failed.'}</span>`;
+                    return;
+                }
+                const data = await res.json();
+                pdfUploadStatus.innerHTML = `<span class="text-success"><i class="fas fa-check-circle"></i> PDF imported and dataset created as <b>${data.task_id}</b>.<br>Preview below.</span>`;
+                // Show preview (first 10 entries)
+                if (data.entries_preview && data.entries_preview.length > 0) {
+                    let html = '<div style="max-height:220px;overflow:auto;"><table class="table table-sm table-bordered"><thead><tr><th>#</th><th>Input</th></tr></thead><tbody>';
+                    data.entries_preview.forEach((entry, i) => {
+                        html += `<tr><td>${i+1}</td><td style=\"max-width:400px;white-space:pre-wrap;\">${entry.input || JSON.stringify(entry)}</td></tr>`;
+                    });
+                    html += '</tbody></table>';
+                    if (data.count > 10) html += `<div style=\"color:#888;font-size:0.9em;\">...and ${data.count-10} more</div>`;
+                    html += '</div>';
+                    pdfEntriesPreview.innerHTML = html;
+                } else {
+                    pdfEntriesPreview.innerHTML = '<span class="text-warning">No entries extracted.</span>';
+                }
+                // Reload tasks so new task appears in dropdown
+                await loadTasks();
+                // Auto-select new task
+                document.getElementById('taskDropdown').value = data.task_id;
+                document.getElementById('selectedTask').value = data.task_id;
+                showTaskJson(data.task_id);
+            } catch (e) {
+                pdfUploadStatus.innerHTML = `<span class="text-danger"><i class="fas fa-times-circle"></i> Error: ${e}</span>`;
+            }        });
+        // --- End PDF Upload Drag & Drop ---
+
     </script>
 </body>
 </html>
