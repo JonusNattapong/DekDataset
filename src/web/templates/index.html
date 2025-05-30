@@ -82,6 +82,13 @@
                         <label class="form-label">Number of Entries</label>
                         <input type="number" class="form-control" id="entryCount" value="10" min="1" max="1000">
                     </div>
+                    <div class="form-group">
+                        <label class="form-label">Model</label>
+                        <select class="form-select" id="modelSelect">
+                            <option value="deepseek-chat">DeepSeek-V3-0324 (deepseek-chat)</option>
+                            <option value="deepseek-reasoner">DeepSeek-R1-0528 (deepseek-reasoner)</option>
+                        </select>
+                    </div>
                 </div>
                   <div style="margin-bottom: 2rem;">
                     <div class="btn-group">
@@ -96,6 +103,9 @@
                         </button>
                         <button class="btn btn-info" id="apiConfigBtn">
                             <i class="fas fa-key"></i>API Config
+                        </button>
+                        <button class="btn btn-success" id="experimentConfigBtn">
+                            <i class="fas fa-chart-line"></i>Experiment Tracking
                         </button>
                     </div>
                 </div>
@@ -233,6 +243,14 @@
                     <input type="range" class="form-range" id="similarityThreshold" min="0" max="1" step="0.1" value="0.8">
                     <small style="color: var(--text-secondary);">Current: <span id="thresholdValue">0.8</span></small>
                 </div>
+                <div class="form-group">
+                    <label class="form-label">Validation Rules (JSON array)</label>
+                    <textarea class="form-control" id="validationRules" rows="2" placeholder='e.g. ["no_empty_output", "no_special_chars"]'></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Custom Validators (JSON array)</label>
+                    <textarea class="form-control" id="customValidators" rows="2" placeholder='e.g. ["my_custom_validator"]'></textarea>
+                </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" id="cancelQuality">Cancel</button>
@@ -241,7 +259,132 @@
                 </button>
             </div>
         </div>
-    </div>    <script>
+    </div>    
+
+    <!-- Experiment Tracking Modal -->
+    <div class="modal" id="experimentModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Experiment Tracking Configuration</h3>
+                <button class="close-btn" id="closeExperimentModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    <strong>Experiment Tracking:</strong> Track dataset generation metrics, quality scores, and costs using MLflow and/or Weights & Biases.
+                </div>
+                
+                <!-- MLflow Configuration -->
+                <div class="form-group">
+                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;">
+                        <input type="checkbox" id="enableMLflow" checked>
+                        <label for="enableMLflow" class="form-label" style="margin: 0;">
+                            <i class="fas fa-database"></i> Enable MLflow Tracking
+                        </label>
+                    </div>
+                    <div id="mlflowConfig" style="margin-left: 1.5rem;">
+                        <div class="form-group">
+                            <label class="form-label">MLflow Tracking URI</label>
+                            <input type="text" class="form-control" id="mlflowUri" 
+                                   placeholder="sqlite:///mlruns/dekdataset.db" 
+                                   value="sqlite:///mlruns/dekdataset.db">
+                            <small style="color: var(--text-secondary);">Local SQLite database for experiment storage</small>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Weights & Biases Configuration -->
+                <div class="form-group">
+                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;">
+                        <input type="checkbox" id="enableWandB">
+                        <label for="enableWandB" class="form-label" style="margin: 0;">
+                            <i class="fas fa-cloud"></i> Enable Weights & Biases
+                        </label>
+                    </div>
+                    <div id="wandbConfig" style="margin-left: 1.5rem; display: none;">
+                        <div class="form-group">
+                            <label class="form-label">W&B Project Name</label>
+                            <input type="text" class="form-control" id="wandbProject" 
+                                   value="dekdataset" placeholder="dekdataset">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">W&B Entity (Optional)</label>
+                            <input type="text" class="form-control" id="wandbEntity" 
+                                   placeholder="your-username-or-team">
+                        </div>
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <strong>Note:</strong> You need to login to W&B first: <code>wandb login</code>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- MLflow UI Quick Access -->
+                <div class="form-group">
+                    <label class="form-label">MLflow UI</label>
+                    <div>
+                        <a href="http://localhost:5000" target="_blank" class="btn btn-outline-primary" style="margin-top: 0.5rem;">
+                            <i class="fas fa-external-link-alt"></i> เปิด MLflow UI
+                        </a>
+                        <small style="color: var(--text-secondary); display: block;">MLflow UI ต้องรันคำสั่ง <code>mlflow ui</code> ในเครื่องนี้ก่อน</small>
+                    </div>
+                </div>
+                <!-- End MLflow UI Quick Access -->
+                
+                <!-- W&B Dashboard Quick Access -->
+                <div class="form-group">
+                    <label class="form-label">Weights & Biases Dashboard</label>
+                    <div>
+                        <a id="wandbDashboardLink" href="https://wandb.ai/dekdataset" target="_blank" class="btn btn-outline-warning" style="margin-top: 0.5rem;">
+                            <i class="fas fa-external-link-alt"></i> เปิด W&B Dashboard
+                        </a>
+                        <small style="color: var(--text-secondary); display: block;">ลิงก์นี้จะเปิดหน้าโปรเจกต์ W&B ตามชื่อที่ตั้งไว้</small>
+                    </div>
+                </div>
+                <!-- End W&B Dashboard Quick Access -->
+                
+                <!-- Tracking Options -->
+                <div class="form-group">
+                    <label class="form-label">Tracking Options</label>
+                    <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-left: 1rem;">
+                        <div>
+                            <input type="checkbox" id="autoLogDatasets" checked>
+                            <label for="autoLogArtifacts">Auto-log Generated Datasets</label>
+                        </div>
+                        <div>
+                            <input type="checkbox" id="autoLogQuality" checked>
+                            <label for="autoLogQuality">Auto-log Quality Metrics</label>
+                        </div>
+                        <div>
+                            <input type="checkbox" id="autoLogCosts" checked>
+                            <label for="autoLogCosts">Auto-log Cost Metrics</label>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Experiment Status -->
+                <div class="form-group">
+                    <label class="form-label">Experiment Status</label>
+                    <div id="experimentStatus" class="alert alert-secondary">
+                        <i class="fas fa-question-circle"></i>
+                        Click "Test Configuration" to check experiment tracking status
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="testExperimentBtn">
+                    <i class="fas fa-flask"></i>Test Configuration
+                </button>
+                <button class="btn btn-success" id="saveExperimentConfig">
+                    <i class="fas fa-save"></i>Save & Apply
+                </button>
+                <button class="btn btn-secondary" id="cancelExperimentConfig">Cancel</button>
+            </div>
+        </div>
+    </div>
+    <script>
         // Load data from tasks.json
         let tasksArray = [];
         let tasks = {};
@@ -424,13 +567,33 @@
             const createTaskModal = document.getElementById('createTaskModal');
             const qualityBtn = document.getElementById('qualityBtn');
             const qualityModal = document.getElementById('qualityModal');
+            const experimentConfigBtn = document.getElementById('experimentConfigBtn');
+            const experimentModal = document.getElementById('experimentModal');
 
             createTaskBtn.addEventListener('click', () => {
                 createTaskModal.classList.add('show');
             });
 
-            qualityBtn.addEventListener('click', () => {
+            qualityBtn.addEventListener('click', async () => {
+                try {
+                    const response = await fetch('/api/quality-config');
+                    if (response.ok) {
+                        const data = await response.json();
+                        const config = data.config;
+                        document.getElementById('minLength').value = config.min_length;
+                        document.getElementById('maxLength').value = config.max_length;
+                        document.getElementById('similarityThreshold').value = config.similarity_threshold;
+                        document.getElementById('thresholdValue').textContent = config.similarity_threshold;
+                        document.getElementById('validationRules').value = JSON.stringify(config.required_fields || []);
+                        document.getElementById('customValidators').value = JSON.stringify(config.custom_validators || []);
+                    }
+                } catch (error) {
+                    console.error('Error loading quality config:', error);
+                }
                 qualityModal.classList.add('show');
+            });            experimentConfigBtn.addEventListener('click', async () => {
+                await loadExperimentConfig();
+                experimentModal.classList.add('show');
             });
 
             // Close modal handlers
@@ -442,12 +605,20 @@
                 qualityModal.classList.remove('show');
             });
 
+            document.getElementById('closeExperimentModal').addEventListener('click', () => {
+                experimentModal.classList.remove('show');
+            });
+
             document.getElementById('cancelCreateTask').addEventListener('click', () => {
                 createTaskModal.classList.remove('show');
             });
 
             document.getElementById('cancelQuality').addEventListener('click', () => {
                 qualityModal.classList.remove('show');
+            });
+
+            document.getElementById('cancelExperimentConfig').addEventListener('click', () => {
+                experimentModal.classList.remove('show');
             });
 
             // Save handlers
@@ -483,7 +654,7 @@
                 // Clear form
                 document.getElementById('taskId').value = '';
                 document.getElementById('taskDescription').value = '';
-                document.getElementById('promptTemplate').value = '';
+                document.getElementById('taskPrompt').value = '';
             });
 
             // Quality settings
@@ -494,14 +665,136 @@
                 thresholdValue.textContent = similarityThreshold.value;
             });
 
-            document.getElementById('saveQuality').addEventListener('click', () => {
-                // Save quality settings logic here
-                qualityModal.classList.remove('show');
-                showAlert('Quality settings saved successfully!', 'success');
+            document.getElementById('saveQuality').addEventListener('click', async () => {
+                try {
+                    const minLength = parseInt(document.getElementById('minLength').value, 10);
+                    const maxLength = parseInt(document.getElementById('maxLength').value, 10);
+                    const similarityThreshold = parseFloat(document.getElementById('similarityThreshold').value);
+                    let requiredFields = [];
+                    let customValidators = [];
+                    try {
+                        requiredFields = JSON.parse(document.getElementById('validationRules').value || '[]');
+                    } catch (e) { requiredFields = []; }
+                    try {
+                        customValidators = JSON.parse(document.getElementById('customValidators').value || '[]');
+                    } catch (e) { customValidators = []; }
+
+                    const configData = {
+                        min_length: minLength,
+                        max_length: maxLength,
+                        similarity_threshold: similarityThreshold,
+                        required_fields: requiredFields,
+                        custom_validators: customValidators
+                    };
+
+                    const response = await fetch('/api/quality-config', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(configData)
+                    });
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.detail || 'Failed to save quality config');
+                    }
+                    qualityModal.classList.remove('show');
+                    showAlert('Quality settings saved successfully!', 'success');
+                } catch (error) {
+                    showAlert('Error saving quality settings: ' + error.message, 'error');
+                }
+            });
+
+            // Experiment tracking settings
+            document.getElementById('enableWandB').addEventListener('change', function() {
+                const isChecked = this.checked;
+                document.getElementById('wandbConfig').style.display = isChecked ? 'block' : 'none';
+            });
+
+            document.getElementById('testExperimentBtn').addEventListener('click', async () => {
+                const mlflowUri = document.getElementById('mlflowUri').value;
+                const enableMLflow = document.getElementById('enableMLflow').checked;
+                const enableWandB = document.getElementById('enableWandB').checked;
+                const wandbProject = document.getElementById('wandbProject').value;
+                const wandbEntity = document.getElementById('wandbEntity').value;
+
+                // Simple validation
+                if (enableWandB && !wandbProject) {
+                    return showAlert('Please enter a W&B project name', 'error');
+                }
+
+                try {
+                    // Test MLflow configuration
+                    if (enableMLflow) {
+                        const mlflowResponse = await fetch('/api/test-mlflow', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ uri: mlflowUri })
+                        });
+
+                        if (!mlflowResponse.ok) {
+                            const errorData = await mlflowResponse.json();
+                            throw new Error(errorData.detail || 'MLflow configuration test failed');
+                        }
+                    }
+
+                    // Test Weights & Biases configuration
+                    if (enableWandB) {
+                        const wandbResponse = await fetch('/api/test-wandb', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ project: wandbProject, entity: wandbEntity })
+                        });
+
+                        if (!wandbResponse.ok) {
+                            const errorData = await wandbResponse.json();
+                            throw new Error(errorData.detail || 'Weights & Biases configuration test failed');
+                        }
+                    }
+
+                    showAlert('Configuration tested successfully!', 'success');
+                } catch (error) {
+                    console.error('Error testing configuration:', error);
+                    showAlert('Configuration test failed: ' + error.message, 'error');
+                }
+            });            document.getElementById('saveExperimentConfig').addEventListener('click', async () => {
+                try {
+                    const configData = {
+                        enable_mlflow: document.getElementById('enableMLflow').checked,
+                        mlflow_uri: document.getElementById('mlflowUri').value || 'http://localhost:5000',
+                        enable_wandb: document.getElementById('enableWandB').checked,
+                        wandb_project: document.getElementById('wandbProject').value || '',
+                        wandb_entity: document.getElementById('wandbEntity').value || '',
+                        auto_log_datasets: document.getElementById('autoLogDatasets').checked,
+                        auto_log_quality: document.getElementById('autoLogQuality').checked,
+                        auto_log_costs: document.getElementById('autoLogCosts').checked
+                    };
+
+                    const response = await fetch('/api/experiment-config', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(configData)
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.detail || 'Failed to save experiment configuration');
+                    }
+
+                    experimentModal.classList.remove('show');
+                    showAlert('Experiment tracking settings saved successfully!', 'success');
+                } catch (error) {
+                    console.error('Error saving experiment configuration:', error);
+                    showAlert('Error saving configuration: ' + error.message, 'error');
+                }
             });
 
             // Close modals when clicking outside
-            [createTaskModal, qualityModal].forEach(modal => {
+            [createTaskModal, qualityModal, experimentModal].forEach(modal => {
                 modal.addEventListener('click', (e) => {
                     if (e.target === modal) {
                         modal.classList.remove('show');
@@ -631,7 +924,23 @@
                     }
                 }
             });
-        }        function showTestResults(result) {
+        }        async function showDatasetPreviewTable(taskId) {
+            const datasetPreview = document.getElementById('datasetPreview');
+            datasetPreview.innerHTML = '<div style="color:#aaa">Loading preview...</div>';
+            try {
+                const response = await fetch(`/api/preview/${taskId}`);
+                if (response.ok) {
+                    const html = await response.text();
+                    datasetPreview.innerHTML = html;
+                } else {
+                    datasetPreview.innerHTML = '<div class="alert alert-warning">No preview available</div>';
+                }
+            } catch (e) {
+                datasetPreview.innerHTML = '<div class="alert alert-danger">Error loading preview</div>';
+            }
+        }
+
+        function showTestResults(result) {
             const resultsSection = document.getElementById('resultsSection');
             const qualityReport = document.getElementById('qualityReport');
             const datasetPreview = document.getElementById('datasetPreview');
@@ -644,16 +953,12 @@
                 • Task ID: ${result.task_id}
             `;
 
-            // Show first few test entries
-            const previewData = result.test_entries ? result.test_entries.slice(0, 3) : [];
-            datasetPreview.innerHTML = `
-                <div style="background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 8px; font-family: monospace; max-height: 300px; overflow-y: auto;">
-                    <div style="color: #10b981; margin-bottom: 0.5rem;">[Test Generated Data - First 3 Entries]</div>
-                    <div style="color: #e2e8f0;">
-                        ${JSON.stringify(previewData, null, 2)}
-                    </div>
-                </div>
-            `;
+            // Show preview as table
+            if (result.task_id) {
+                showDatasetPreviewTable(result.task_id);
+            } else {
+                datasetPreview.innerHTML = '<div class="alert alert-warning">No preview available</div>';
+            }
 
             resultsSection.style.display = 'block';
         }
@@ -677,16 +982,12 @@
                 • Generated at: ${new Date(result.generated_at).toLocaleString()}
             `;
 
-            // Show first few entries
-            const previewData = result.entries ? result.entries.slice(0, 5) : [];
-            datasetPreview.innerHTML = `
-                <div style="background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 8px; font-family: monospace; max-height: 300px; overflow-y: auto;">
-                    <div style="color: #10b981; margin-bottom: 0.5rem;">[Generated Dataset Preview - First 5 Entries]</div>
-                    <div style="color: #e2e8f0;">
-                        ${JSON.stringify(previewData, null, 2)}
-                    </div>
-                </div>
-            `;
+            // Show preview as table
+            if (taskId) {
+                showDatasetPreviewTable(taskId);
+            } else {
+                datasetPreview.innerHTML = '<div class="alert alert-warning">No preview available</div>';
+            }
 
             resultsSection.style.display = 'block';
         }
@@ -813,12 +1114,88 @@
             }
         }
 
+        async function loadExperimentConfig() {
+            try {
+                const response = await fetch('/api/experiment-config');
+                if (response.ok) {
+                    const data = await response.json();
+                    const config = data.config;
+                    
+                    // Populate form fields
+                    document.getElementById('enableMLflow').checked = config.enable_mlflow;
+                    document.getElementById('mlflowUri').value = config.mlflow_uri;
+                    document.getElementById('enableWandB').checked = config.enable_wandb;
+                    document.getElementById('wandbProject').value = config.wandb_project;
+                    document.getElementById('wandbEntity').value = config.wandb_entity;
+                    document.getElementById('autoLogDatasets').checked = config.auto_log_datasets;
+                    document.getElementById('autoLogQuality').checked = config.auto_log_quality;
+                    document.getElementById('autoLogCosts').checked = config.auto_log_costs;
+                    
+                    // Show/hide W&B config section
+                    document.getElementById('wandbConfig').style.display = config.enable_wandb ? 'block' : 'none';
+                    
+                    // Update status
+                    updateExperimentStatus(config);
+                } else {
+                    console.error('Failed to load experiment config');
+                }
+            } catch (error) {
+                console.error('Error loading experiment config:', error);
+            }
+        }
+
+        function updateExperimentStatus(config) {
+            const statusDiv = document.getElementById('experimentStatus');
+            
+            if (config.enable_mlflow || config.enable_wandb) {
+                const enabledServices = [];
+                if (config.enable_mlflow) enabledServices.push('MLflow');
+                if (config.enable_wandb) enabledServices.push('Weights & Biases');
+                
+                statusDiv.className = 'alert alert-success';
+                statusDiv.innerHTML = `
+                    <i class="fas fa-check-circle"></i>
+                    Experiment tracking enabled: ${enabledServices.join(', ')}
+                `;
+            } else {
+                statusDiv.className = 'alert alert-warning';
+                statusDiv.innerHTML = `
+                    <i class="fas fa-exclamation-triangle"></i>
+                    No experiment tracking services enabled
+                `;
+            }
+        }
+
         // Initialize the application
         init();
 
         // Add some interactive animations
 
         // createParticles(); // Commented out as it's not defined
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Dynamically update W&B dashboard link based on project/entity
+            const wandbProjectInput = document.getElementById('wandbProject');
+            const wandbEntityInput = document.getElementById('wandbEntity');
+            const wandbDashboardLink = document.getElementById('wandbDashboardLink');
+            function updateWandbLink() {
+                const project = wandbProjectInput?.value?.trim() || 'dekdataset';
+                const entity = wandbEntityInput?.value?.trim();
+                let url = 'https://wandb.ai/';
+                if (entity) {
+                    url += encodeURIComponent(entity) + '/';
+                }
+                url += encodeURIComponent(project);
+                if (wandbDashboardLink) {
+                    wandbDashboardLink.href = url;
+                }
+            }
+            if (wandbProjectInput && wandbEntityInput && wandbDashboardLink) {
+                wandbProjectInput.addEventListener('input', updateWandbLink);
+                wandbEntityInput.addEventListener('input', updateWandbLink);
+                updateWandbLink();
+            }
+        });
     </script>
 </body>
 </html>
