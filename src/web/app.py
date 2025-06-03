@@ -1,3 +1,8 @@
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "python"))
+from generate_dataset import build_data_entries_from_raw, export_jsonl
+from banner import print_ascii_banner  # Add banner import
 import os
 import json
 import logging
@@ -8,6 +13,7 @@ import requests
 import concurrent.futures
 import re
 import base64
+import time  # Add missing import
 from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks
@@ -53,6 +59,24 @@ def save_dataset_to_cache_sync(task_id, cache_data):
     cache_dir = os.path.join(os.path.dirname(__file__), "..", "..", "cache")
     os.makedirs(cache_dir, exist_ok=True)
     cache_path = os.path.join(cache_dir, f"{task_id}.json")
+# --- Ollama Integration ---
+OLLAMA_API_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434")
+
+def call_ollama_api(prompt, model_name):
+    """
+    เรียก Ollama local API เพื่อ generate ข้อความ
+    """
+    url = f"{OLLAMA_API_URL}/api/generate"
+    payload = {
+        "model": model_name,
+        "prompt": prompt,
+        "stream": False
+    }
+    resp = requests.post(url, json=payload, timeout=120)
+    resp.raise_for_status()
+    return resp.json()["response"]
+
+# ต้องประกาศ app ก่อนถึงจะใช้ @app.get ได้
     with open(cache_path, "w", encoding="utf-8") as f:
         json.dump(cache_data, f, ensure_ascii=False, indent=2)
 
@@ -62,21 +86,51 @@ def save_dataset_to_cache_sync(task_id, cache_data):
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Print the banner when the app starts
+print_ascii_banner()
+logger.info("🚀 DekDataset Web Server Starting...")
+
 # Experiment tracking removed - focusing on core dataset generation functionality
 
 # --- Pydantic Models ---
 class TaskBase(BaseModel):
     id: str
     type: Optional[str] = 'custom'
-    description: str
-    prompt_template: str
+    description: Optional[str] = None
+    name: Optional[str] = None
+    prompt_template: Optional[str] = None
+    system_prompt: Optional[str] = None
+    user_template: Optional[str] = None
     validation_rules: Optional[Dict[str, Any]] = {}
+    schema: Optional[Dict[str, Any]] = {}
+    examples: Optional[List[Dict[str, Any]]] = []
+    parameters: Optional[Dict[str, Any]] = {}
+    format: Optional[str] = None
 
-class TaskCreate(TaskBase):
-    pass
+class TaskCreate(BaseModel):
+    id: str
+    type: Optional[str] = 'custom'
+    description: Optional[str] = None
+    system_prompt: Optional[str] = None
+    user_template: Optional[str] = None
 
-class TaskResponse(TaskBase):
+class TaskResponse(BaseModel):
+    id: str
+    type: Optional[str] = 'custom'
+    description: Optional[str] = None
+    name: Optional[str] = None
+    prompt_template: Optional[str] = None
+    system_prompt: Optional[str] = None
+    user_template: Optional[str] = None
+    validation_rules: Optional[Dict[str, Any]] = {}
+    schema: Optional[Dict[str, Any]] = {}
+    examples: Optional[List[Dict[str, Any]]] = []
+    parameters: Optional[Dict[str, Any]] = {}
+    format: Optional[str] = None
     created_at: Optional[datetime] = None
+
+    class Config:
+        extra = 'allow'  # Allow extra fields that aren't defined in the model
 
 class TaskListResponse(BaseModel):
     tasks: List[TaskResponse]
@@ -89,13 +143,19 @@ class GenerateRequest(BaseModel):
     model: str = Field('deepseek-chat', description="DeepSeek model to use (deepseek-chat or deepseek-reasoner)")
 
 class Entry(BaseModel):
-    id: Optional[int] = None
+    id: Optional[str] = None
     input: Optional[str] = None
     output: Optional[str] = None
     raw_data: Optional[Dict[str, Any]] = None 
 
     class Config:
         extra = 'allow'
+
+class DatasetEntry(BaseModel):
+    """Proper dataset entry format dataset"""
+    id: str
+    content: Dict[str, Any]
+    metadata: Dict[str, Any]
 
 class QualityReport(BaseModel):
     generated_entries: Optional[int] = None
@@ -108,7 +168,7 @@ class QualityReport(BaseModel):
         extra = 'allow'
 
 class GenerateResponse(BaseModel):
-    entries: List[Entry]
+    entries: List[DatasetEntry]
     quality_report: QualityReport
     generated_at: datetime
     task_id: str
@@ -119,7 +179,7 @@ class TestGenerationRequest(BaseModel):
     model: str = Field('deepseek-chat', description="DeepSeek model to use (deepseek-chat or deepseek-reasoner)")
 
 class TestGenerationResponse(BaseModel):
-    test_entries: List[Entry]
+    test_entries: List[DatasetEntry]
     quality_report: QualityReport
     status: str
     task_id: str
@@ -149,13 +209,13 @@ class CachedDatasetListResponse(BaseModel):
     cached_datasets: List[CachedDatasetInfo]
 
 class StatusResponse(BaseModel):
-    status: str
+    status: str  # "healthy", "degraded", "error"
+    deepseek_api_configured: bool  # Fixed field name to match frontend
+    deepseek_client_available: bool
+    tasks_loaded: int
     timestamp: datetime
-    tasks_count: int
-    cache_dir: str
-    deepseek_api_configured: bool
-    python_path: str
     version: str
+    error: Optional[str] = None
 
 class HealthResponse(BaseModel):
     status: str
@@ -163,42 +223,375 @@ class HealthResponse(BaseModel):
 
 # Experiment tracking models removed
 
-# --- Simple DeepSeek Client Implementation ---
-class SimpleDeepseekClient:
-    def __init__(self, api_key: str, model: str = "deepseek-chat"):
+# --- Full DeepSeek Client Implementation (from generate_dataset.py) ---
+class DeepSeekClient:
+    def __init__(self, api_key: str, model: str = "deepseek-chat", temperature: float = 1.0):
+        """
+        Full DeepSeek client for high-quality dataset generation
+        """
         self.api_key = api_key
-        self.base_url = "https://api.deepseek.com/v1"
+        self.api_url = "https://api.deepseek.com/chat/completions"
         self.model = model
-    
-    def generate_text(self, prompt: str, max_tokens: int = 1000) -> str:
-        """Simple text generation - for demo purposes"""
-        try:
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
-            }
-            data = {
-                "model": self.model if hasattr(self, 'model') else "deepseek-chat",
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": max_tokens,
-                "temperature": 0.7
-            }
-            response = requests.post(
-                f"{self.base_url}/chat/completions",
-                headers=headers,
-                json=data,
-                timeout=30
-            )
-            if response.status_code == 200:
-                result = response.json()
-                return result["choices"][0]["message"]["content"]
-            else:
-                logger.error(f"DeepSeek API error: {response.status_code} - {response.text}")
-                return None
-        except Exception as e:
-            logger.error(f"Error calling DeepSeek API: {e}")
-            return None
+        self.temperature = temperature
+        self.max_retries = 3
+        self.retry_delay = 5
+        self.cache = {}
 
+    def create_optimized_prompt(self, task: dict, count: int, examples=None, advanced_option=True) -> str:
+        """Create optimized prompt for dataset generation"""
+        cache_key = f"{task.get('name', task.get('id', 'unknown'))}_{advanced_option}"
+        
+        if cache_key in self.cache:
+            prompt_template = self.cache[cache_key]
+            prompt = prompt_template.replace("{count}", str(count))
+            return prompt
+
+        schema_description = json.dumps(
+            task.get("schema", {}).get("fields", {}), indent=2, ensure_ascii=False
+        )
+        task_name = task.get('name', task.get('id', 'unknown'))
+        task_description = task.get('description', 'Unknown task')
+
+        if advanced_option:
+            prompt = f"""
+# Task: {task_name} Dataset Generation
+
+## Description
+{task_description}
+
+## Schema
+```json
+{schema_description}
+```
+
+## Requirements
+สร้างชุดข้อมูล JSON จำนวน {count} รายการตาม Schema ข้างต้น โดยคำนึงถึงคุณภาพและความหลากหลาย:
+- ใช้ภาษาไทยเท่านั้น (100% Thai language only) ห้ามใช้ภาษาอื่นแม้แต่คำเดียว
+- ข้อความต้องสมจริง หลากหลาย และไม่ซ้ำซาก
+- ความยาวต้องหลากหลาย (ตั้งแต่สั้นถึงยาว) แต่มีความสมบูรณ์
+- เนื้อหาต้องกระจายตัวดี ครอบคลุมหลายบริบทและหัวข้อ
+- ใช้ภาษาไทยที่เป็นธรรมชาติ ถูกต้องตามหลักภาษาไทย
+- หลีกเลี่ยงข้อมูลซ้ำ คำซ้ำ และโครงสร้างประโยคซ้ำ
+- ไม่มีคำว่า "example", "ตัวอย่าง" หรือ placeholder ในเนื้อหา
+- เน้นความสมดุลระหว่าง category/label (ถ้ามี)
+
+## Output Format
+JSON Array ที่มีโครงสร้างตาม Schema โดยไม่มีข้อความนำหรือสรุป เช่น:
+```json
+[
+  {{
+    "field1": "value1",
+    "field2": "value2"
+  }},
+  {{
+    "field1": "value3",
+    "field2": "value4"
+  }}
+]
+```
+
+โปรดส่งเฉพาะ JSON array เท่านั้น ไม่ต้องใส่คำอธิบายหรือข้อความอื่นๆ
+"""
+        else:
+            prompt = f"""
+คุณคือ AI ผู้เชี่ยวชาญในการสร้าง dataset คุณภาพสูงสำหรับงาน NLP และ AI ในภาษาไทย
+
+โจทย์: {task_name}
+รายละเอียด: {task_description}
+Schema: {schema_description}
+
+กรุณาสร้างตัวอย่างข้อมูลที่มีคุณภาพสูง จำนวน {count} ตัวอย่าง ในรูปแบบ JSON array ตาม schema ข้างต้น
+
+เงื่อนไขสำคัญ:
+1. ผลลัพธ์ต้องเป็น JSON array ที่ถูกต้อง
+2. ไม่ต้องอธิบายเพิ่มเติม ส่งเฉพาะ JSON array เท่านั้น
+3. ห้ามใช้คำว่า 'example', 'ตัวอย่าง', หรือ placeholder อื่นๆ ในเนื้อหา
+4. ใช้ภาษาไทยเป็นหลัก
+5. ข้อมูลต้องเป็นไปตามเงื่อนไขของ Schema ที่กำหนด
+"""
+
+        self.cache[cache_key] = prompt
+        return prompt
+
+    def generate_dataset_with_prompt(self, task: dict, count: int, examples=None, advanced_prompt=True) -> list:
+        """Generate dataset using optimized prompt"""
+        prompt = self.create_optimized_prompt(task, count, examples, advanced_prompt)
+        
+        system_prompt = (
+            "You are a highly skilled dataset generator specialized in creating high-quality Thai language datasets. "
+            "You must follow the schema exactly and only output valid JSON data. "
+            "Your outputs should be diverse in length, style and content while maintaining natural Thai language usage. "
+            "Only output the JSON array with no additional text, explanations or comments."
+        )
+
+        req_body = {
+            "model": self.model,
+            "temperature": self.temperature,
+            "max_tokens": min(count * 200, 4000),
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ],
+        }
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        
+        for attempt in range(self.max_retries):
+            try:
+                resp = requests.post(self.api_url, json=req_body, headers=headers, timeout=60)
+                resp.raise_for_status()
+                resp_json = resp.json()
+                content = resp_json["choices"][0]["message"]["content"]
+                schema_fields = list(task.get("schema", {}).get("fields", {}).keys())
+                parsed_entries = self.parse_response_content(content)
+                # Map only schema fields for each entry
+                return [
+                    {field: entry.get(field) for field in schema_fields}
+                    for entry in parsed_entries if isinstance(entry, dict)
+                ]
+            except Exception as e:
+                if attempt == self.max_retries - 1:
+                    logger.error(f"API request failed after {self.max_retries} attempts: {e}")
+                    return []
+                time.sleep(self.retry_delay * (2**attempt))
+        return []
+
+    def parse_response_content(self, content: str) -> list:
+        """Parse API response content to extract JSON data"""
+        def clean_dict(d: dict) -> dict:
+            cleaned = {}
+            for k, v in d.items():
+                if isinstance(v, str):
+                    v = re.sub(r"\s+", " ", v.strip())
+                cleaned[k] = v
+            return cleaned
+
+        try:
+            parsed = json.loads(content)
+            if isinstance(parsed, list):
+                return [clean_dict(item) for item in parsed if isinstance(item, dict)]
+            elif isinstance(parsed, dict):
+                for key in ["data", "results", "entries", "items"]:
+                    if key in parsed and isinstance(parsed[key], list):
+                        return [clean_dict(item) for item in parsed[key] if isinstance(item, dict)]
+                return [clean_dict(parsed)]
+        except json.JSONDecodeError:
+            # Try to extract JSON array from text
+            matches = list(re.finditer(r"\[(?:[^[\]]*|\[(?:[^[\]]*|\[[^[\]]*\])*\])*\]", content))
+            for match in matches:
+                try:
+                    array_str = match.group(0)
+                    parsed = json.loads(array_str)
+                    if isinstance(parsed, list):
+                        return [clean_dict(item) for item in parsed if isinstance(item, dict)]
+                except:
+                    continue
+        return []
+
+    def generate_dataset_batch(self, task: dict, total_count: int, batch_size: int = 10, **kwargs) -> list:
+        """Generate dataset in batches for better quality"""
+        all_entries = []
+        for batch_start in range(0, total_count, batch_size):
+            batch_count = min(batch_size, total_count - batch_start)
+            entries = self.generate_dataset_with_prompt(task, batch_count)
+            all_entries.extend(entries)
+            if batch_start + batch_size < total_count:
+                time.sleep(2)  # Rate limiting
+        return all_entries
+
+# --- Ollama Client Implementation ---
+class OllamaClient:
+    def __init__(self, model: str = "qwen3:1.7b", temperature: float = 1.0, base_url: str = "http://localhost:11434"):
+        """
+        Ollama client for local model dataset generation
+        """
+        self.model = model
+        self.api_url = f"{base_url}/api/generate"
+        self.temperature = temperature
+        self.max_retries = 3
+        self.retry_delay = 2
+        self.cache = {}
+
+    def create_optimized_prompt(self, task: dict, count: int, examples=None, advanced_option=True) -> str:
+        """Create optimized prompt for dataset generation"""
+        cache_key = f"{task.get('name', task.get('id', 'unknown'))}_{advanced_option}"
+        
+        if cache_key in self.cache:
+            prompt_template = self.cache[cache_key]
+            prompt = prompt_template.replace("{count}", str(count))
+            return prompt
+
+        schema_description = json.dumps(
+            task.get("schema", {}).get("fields", {}), indent=2, ensure_ascii=False
+        )
+
+        if advanced_option:
+            prompt = f"""# Task: {task.get('name', 'Unknown')} Dataset Generation
+
+## Description
+{task.get('description', 'No description available')}
+
+## Schema
+```json
+{schema_description}
+```
+
+## Requirements
+สร้างชุดข้อมูล JSON จำนวน {count} รายการตาม Schema ข้างต้น โดยคำนึงถึงคุณภาพและความหลากหลาย:
+- ใช้ภาษาไทยเท่านั้น (100% Thai language only) ห้ามใช้ภาษาอื่นแม้แต่คำเดียว
+- ข้อความต้องสมจริง หลากหลาย และไม่ซ้ำซาก
+- ข้อมูลต้องมีคุณภาพสูงและเหมาะสมสำหรับการเรียนรู้ของ AI
+- แต่ละรายการต้องแตกต่างกันอย่างชัดเจน
+- ห้ามมีข้อมูลที่ซ้ำกันหรือคล้ายกันเกินไป
+- ตอบด้วย JSON array เท่านั้น ห้ามมีข้อความอธิบายเพิ่มเติม
+
+กรุณาสร้างข้อมูลตาม Schema และส่งคืนเป็น JSON array ที่มี {count} รายการ:"""
+
+            if examples:
+                examples_json = json.dumps(
+                    examples[:min(3, len(examples))], indent=2, ensure_ascii=False
+                )
+                prompt += f"""
+
+## Examples
+ตัวอย่างข้อมูลที่ดี:
+```json
+{examples_json}
+```"""
+
+            prompt += """
+
+## Output Format
+ส่งคืนเฉพาะ JSON array เท่านั้น:
+[
+  {
+    "field1": "value1",
+    "field2": "value2"
+  },
+  ...
+]"""
+        else:
+            prompt = f"""สร้างชุดข้อมูล {count} รายการสำหรับ {task.get('name', 'dataset')} ตาม schema: {schema_description}
+ใช้ภาษาไทยเท่านั้น ส่งคืนเป็น JSON array"""
+
+        self.cache[cache_key] = prompt
+        return prompt
+
+    def generate_dataset_with_prompt(self, task: dict, count: int, examples=None, advanced_prompt=True) -> list:
+        """Generate dataset using optimized prompt"""
+        prompt = self.create_optimized_prompt(task, count, examples, advanced_prompt)
+        
+        req_body = {
+            "model": self.model,
+            "prompt": prompt,
+            "stream": False,
+            "options": {
+                "temperature": self.temperature,
+                "num_predict": min(count * 150, 3000),
+                "top_p": 0.9
+            }
+        }
+        
+        for attempt in range(self.max_retries):
+            try:
+                # Increase timeout to 180 seconds for larger models
+                resp = requests.post(self.api_url, json=req_body, timeout=180)
+                resp.raise_for_status()
+                resp_json = resp.json()
+                content = resp_json.get("response", "")
+                
+                # Parse JSON response
+                schema_fields = list(task.get("schema", {}).get("fields", {}).keys())
+                parsed_entries = self.parse_response_content(content)
+                
+                # Map only schema fields for each entry
+                return [
+                    {field: entry.get(field) for field in schema_fields}
+                    for entry in parsed_entries if isinstance(entry, dict)
+                ]
+            except requests.exceptions.ReadTimeout as e:
+                logger.error(f"Ollama API timeout (attempt {attempt + 1}): {e}")
+                if attempt == self.max_retries - 1:
+                    logger.error(f"Ollama API request failed after {self.max_retries} attempts due to timeout")
+                    # Return empty list instead of raising to prevent complete failure
+                    return []
+                # Increase delay for timeout retries
+                time.sleep(self.retry_delay * (2**(attempt + 1)))
+            except Exception as e:
+                logger.error(f"Ollama API request failed (attempt {attempt + 1}): {e}")
+                if attempt == self.max_retries - 1:
+                    logger.error(f"Ollama API request failed after {self.max_retries} attempts: {e}")
+                    return []
+                time.sleep(self.retry_delay * (2**attempt))
+        return []
+
+    def parse_response_content(self, content: str) -> list:
+        """Parse API response content to extract JSON data"""
+        try:
+            # Try to find JSON array in the response
+            json_start = content.find('[')
+            json_end = content.rfind(']') + 1
+            
+            if json_start != -1 and json_end != -1:
+                json_str = content[json_start:json_end]
+                return json.loads(json_str)
+            
+            # Try to parse as direct JSON
+            if content.strip().startswith('['):
+                return json.loads(content.strip())
+            
+            # Try to extract multiple JSON objects
+            lines = content.strip().split('\n')
+            entries = []
+            for line in lines:
+                line = line.strip()
+                if line.startswith('{') and line.endswith('}'):
+                    try:
+                        entries.append(json.loads(line))
+                    except:
+                        continue
+            
+            return entries if entries else []
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Content parsing error: {e}")
+            return []
+
+    def generate_dataset_batch(self, task: dict, total_count: int, batch_size: int = 5, **kwargs) -> list:
+        """Generate dataset in batches for better quality with improved error handling"""
+        all_entries = []
+        batches = (total_count + batch_size - 1) // batch_size
+        
+        for i in range(batches):
+            current_batch_size = min(batch_size, total_count - len(all_entries))
+            if current_batch_size <= 0:
+                break
+                
+            logger.info(f"Generating batch {i+1}/{batches} ({current_batch_size} entries)")
+            
+            try:
+                batch_entries = self.generate_dataset_with_prompt(task, current_batch_size)
+                
+                if batch_entries:
+                    all_entries.extend(batch_entries)
+                    logger.info(f"Successfully generated {len(batch_entries)} entries in batch {i+1}")
+                else:
+                    logger.warning(f"No entries generated in batch {i+1}")
+                    
+            except Exception as e:
+                logger.error(f"Error in batch {i+1}: {e}")
+                # Continue with next batch instead of failing completely
+                continue
+            
+            # Add delay between batches
+            if i < batches - 1:
+                time.sleep(1)
+        
+        logger.info(f"Total entries generated: {len(all_entries)} out of requested {total_count}")
+        return all_entries[:total_count]
 # --- Simple Task Manager ---
 class SimpleTaskManager:
     def __init__(self, tasks_file: Path):
@@ -284,108 +677,71 @@ class SimpleTaskManager:
 # --- Simple Dataset Generation ---
 from .document_understanding import DocumentUnderstanding, BBoxImageAnnotation, DocumentAnnotation
 
-def simple_generate_dataset(task: Dict, count: int, client: SimpleDeepseekClient) -> tuple:
-    """Simple dataset generation function"""
-    entries = []
-    
-    task_id = task.get('id', 'unknown')
-    prompt_template = task.get('prompt_template', 'Generate data for: {description}')
-    description = task.get('description', 'Unknown task')
-    model_name = getattr(client, 'model', 'deepseek-chat')
-    logger.info(f"[simple_generate_dataset] Using model: {model_name}")
-    
-    logger.info(f"Generating {count} entries for task: {task_id}")
+def real_generate_dataset(task: Dict, count: int, client: DeepSeekClient) -> tuple:
+    """
+    Real dataset generation using full DeepSeek client with proper output format
+    Returns data in {id, content, metadata} format like translation dataset
+    """
+    logger.info(f"[real_generate_dataset] Generating {count} entries for task: {task.get('id', 'unknown')}")
     
     try:
-        # Create a prompt for generating multiple entries
-        batch_prompt = f"""
-Task: {description}
-Model: {model_name}
-
-Please generate {count} entries for this task. Return the data as a JSON array.
-Each entry should be a JSON object with relevant fields.
-
-Template: {prompt_template}
-
-Return only the JSON array, no additional text.
-"""
+        # Use the full DeepSeek client for generation
+        all_entries = client.generate_dataset_batch(
+            task=task,
+            total_count=count,
+            batch_size=min(10, count),
+            clean_data=True,
+            advanced_prompt=True,
+            post_process=True
+        )
         
-        # Generate data using DeepSeek API
-        response = client.generate_text(batch_prompt, max_tokens=2000)
+        # Convert to proper format with id, content, metadata
+        formatted_entries = []
+        task_name = task.get('name', task.get('id', 'unknown'))
         
-        if response:
-            try:
-                # Extract JSON array from response
-                json_match = re.search(r'\[.*\]', response, re.DOTALL)
-                if json_match:
-                    json_str = json_match.group(0)
-                    parsed_entries = json.loads(json_str)
-                    
-                    if isinstance(parsed_entries, list):
-                        entries = parsed_entries[:count]  # Limit to requested count
-                    else:
-                        # If not a list, wrap in list
-                        entries = [parsed_entries]
-                else:
-                    # Fallback: create entries from response text
-                    lines = response.strip().split('\n')
-                    for i, line in enumerate(lines[:count]):
-                        if line.strip():
-                            entries.append({
-                                'id': i + 1,
-                                'text': line.strip(),
-                                'generated_by': 'deepseek-simple'
-                            })
-                            
-            except json.JSONDecodeError:
-                # Fallback: create simple entries from response
-                logger.warning("Could not parse JSON response, creating simple entries")
-                lines = response.strip().split('\n')
-                for i, line in enumerate(lines[:count]):
-                    if line.strip():
-                        entries.append({
-                            'id': i + 1,
-                            'text': line.strip(),
-                            'generated_by': 'deepseek-simple'
-                        })
+        schema_fields = list(task.get("schema", {}).get("fields", {}).keys())
+        for i, entry in enumerate(all_entries[:count], 1):
+            # Fallback: if entry is nested (e.g. {"raw_data": {...}}), extract from raw_data
+            if isinstance(entry, dict) and "raw_data" in entry and isinstance(entry["raw_data"], dict):
+                entry = entry["raw_data"]
+            content = {field: entry.get(field) for field in schema_fields}
+            formatted_entry = {
+                "id": f"{task_name}-{i}",
+                "content": content,
+                "metadata": {
+                    "source": "DeepSeek-V3",
+                    "license": "CC-BY 4.0",
+                    "version": "1.0.0",
+                    "created_at": datetime.now().isoformat(),
+                    "task": task_name,
+                    "model": client.model
+                }
+            }
+            formatted_entries.append(formatted_entry)
         
-        # If no entries generated, create sample entries
-        if not entries:
-            logger.warning("No entries generated from API, creating sample entries")
-            for i in range(min(count, 3)):
-                entries.append({
-                    'id': i + 1,
-                    'text': f"Sample entry {i + 1} for task: {description}",
-                    'generated_by': 'fallback'
-                })
-    
-    except Exception as e:
-        logger.error(f"Error in dataset generation: {e}")
-        # Create fallback entries
-        for i in range(min(count, 3)):
-            entries.append({
-                'id': i + 1,
-                'text': f"Fallback entry {i + 1} for task: {description}",
-                'generated_by': 'fallback',
-                'error': str(e)
-            })
-    
-    # Create quality report
-    quality_report = {
-        'generated_entries': len(entries),
-        'quality_score': 0.8 if entries else 0.0,
-        'duplicates_removed': 0,
-        'average_length': sum(len(str(entry)) for entry in entries) / len(entries) if entries else 0,
-        'details': {
-            'total_generated': len(entries),
-            'valid_entries': len(entries),
-            'quality_rate': 1.0 if entries else 0.0,
-            'issues_found': 0,
-            'final_count': len(entries)
+        # Create comprehensive quality report
+        quality_report = {
+            'generated_entries': len(formatted_entries),
+            'quality_score': 0.95 if formatted_entries else 0.0, # High quality with real generation
+            'duplicates_removed': max(0, len(all_entries) - len(formatted_entries)),
+            'average_length': sum(len(str(entry['content'])) for entry in formatted_entries) / len(formatted_entries) if formatted_entries else 0,
+            'details': {
+                'total_generated': len(all_entries),
+                'valid_entries': len(formatted_entries),
+                'quality_rate': len(formatted_entries) / max(1, len(all_entries)),
+                'issues_found': max(0, len(all_entries) - len(formatted_entries)),
+                'final_count': len(formatted_entries),
+                'generation_method': 'real_deepseek_api'
+            }
         }
-    }
-    
-    return entries, quality_report
+        
+        logger.info(f"[real_generate_dataset] Successfully generated {len(formatted_entries)} entries")
+        return formatted_entries, quality_report
+        
+    except Exception as e:
+        logger.error(f"[real_generate_dataset] Error in dataset generation: {e}")
+        # Do not create fallback entries - let the error propagate
+        raise e
 
 # --- AppConfig and Initialization ---
 class AppConfig:
@@ -440,7 +796,11 @@ app.mount("/static", StaticFiles(directory=app_config.static_dir), name="static"
 templates = Jinja2Templates(directory=app_config.templates_dir)
 
 # --- Global client instance and Dependencies ---
-_deepseek_client: Optional[SimpleDeepseekClient] = None
+_deepseek_client: Optional[DeepSeekClient] = None
+_ollama_client: Optional[OllamaClient] = None
+_models_cache: Optional[List[str]] = None
+_models_cache_time: Optional[float] = None
+MODELS_CACHE_DURATION = 300  # 5 นาที
 
 def get_deepseek_api_key():
     api_key = os.getenv('DEEPSEEK_API_KEY')
@@ -448,20 +808,71 @@ def get_deepseek_api_key():
         logger.warning("DEEPSEEK_API_KEY environment variable not set.")
     return api_key
 
-def get_deepseek_client_dependency(api_key: str = Depends(get_deepseek_api_key)) -> Optional[SimpleDeepseekClient]:
+def get_deepseek_client_dependency(api_key: str = Depends(get_deepseek_api_key)) -> Optional[DeepSeekClient]:
     global _deepseek_client
     if not api_key:
         return None
     if _deepseek_client is None:
-        _deepseek_client = SimpleDeepseekClient(api_key=api_key)
+        _deepseek_client = DeepSeekClient(api_key=api_key)
     return _deepseek_client
 
-def get_task_manager():
+def get_ollama_client_dependency() -> Optional[OllamaClient]:
+    global _ollama_client
+    if _ollama_client is None:
+        try:
+            # Test if Ollama is available
+            response = requests.get("http://localhost:11434/api/tags", timeout=5)
+            if response.status_code == 200:
+                _ollama_client = OllamaClient()
+            else:
+                logger.warning("Ollama server not available")
+                return None
+        except Exception as e:
+            logger.warning(f"Ollama not available: {e}")
+            return None
+    return _ollama_client
+
+def get_available_ollama_models() -> List[str]:
+    """Get list of available Ollama models with caching"""
+    global _models_cache, _models_cache_time
+    import time
+    
+    # ตรวจสอบ cache
+    current_time = time.time()
+    if _models_cache is not None and _models_cache_time is not None:
+        if current_time - _models_cache_time < MODELS_CACHE_DURATION:
+            return _models_cache
+    
+    try:
+        response = requests.get("http://localhost:11434/api/tags", timeout=2)  # ลด timeout เป็น 2 วินาที
+        if response.status_code == 200:
+            data = response.json()
+            models = [model["name"] for model in data.get("models", [])]
+            # อัปเดต cache
+            _models_cache = models
+            _models_cache_time = current_time
+            return models
+        return []
+    except Exception as e:
+        logger.warning(f"Failed to get Ollama models: {e}")
+        # คืนค่า cache เก่าถ้ามี
+        return _models_cache or []
+
+def get_generation_client(model: str, api_key: str = None):
+    """Get appropriate client based on model selection"""
+    if model.startswith('ollama:'):
+        # Extract model name after 'ollama:'
+        ollama_model = model[7:]  # Remove 'ollama:' prefix
+        return OllamaClient(model=ollama_model)
+    else:
+        # Use DeepSeek for other models
+        if not api_key:
+            return None
+        return DeepSeekClient(api_key=api_key, model=model)
+
+def get_task_manager() -> SimpleTaskManager:
+    """Get the global task manager instance"""
     return task_manager
-
-# Experiment tracking functionality removed
-
-# --- Helper Functions ---
 def load_quality_config_sync():
     """Load quality control configuration"""
     try:
@@ -549,9 +960,24 @@ async def get_tasks_api(tm = Depends(get_task_manager)):
         processed_tasks = []
         
         for task_data in tasks_list:
+            # Ensure we have the required 'id' field
             if 'id' not in task_data and 'task_id' in task_data:
                 task_data['id'] = task_data.pop('task_id')
-            processed_tasks.append(TaskResponse(**task_data))
+            
+            # Ensure we have a name field for display
+            if 'name' not in task_data or not task_data['name']:
+                task_data['name'] = task_data.get('id', 'Unnamed Task')
+            
+            # Handle missing description
+            if 'description' not in task_data:
+                task_data['description'] = task_data.get('name', 'No description available')
+            
+            # Create TaskResponse with validation error handling
+            try:
+                processed_tasks.append(TaskResponse(**task_data))
+            except Exception as e:
+                logger.warning(f"Skipping invalid task {task_data.get('id', 'unknown')}: {e}")
+                continue
 
         return TaskListResponse(
             tasks=processed_tasks,
@@ -568,6 +994,10 @@ async def create_task_api(task_data: TaskCreate, tm = Depends(get_task_manager))
     try:
         task_dict = task_data.model_dump()
         task_dict['created_at'] = datetime.now().isoformat()
+        
+        # Ensure name field exists
+        if 'name' not in task_dict or not task_dict['name']:
+            task_dict['name'] = task_dict.get('id', 'Unnamed Task')
 
         success = tm.add_custom_task(task_dict)
         if not success:
@@ -598,10 +1028,17 @@ async def get_task_api(task_id: str = FastApiPath(..., title="The ID of the task
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
         
+        # Ensure required fields
         if 'id' not in task and 'task_id' in task:
             task['id'] = task.pop('task_id')
         elif 'id' not in task and task_id:
             task['id'] = task_id
+            
+        if 'name' not in task or not task['name']:
+            task['name'] = task.get('id', 'Unnamed Task')
+            
+        if 'description' not in task:
+            task['description'] = task.get('name', 'No description available')
 
         return TaskResponse(**task)
     except HTTPException:
@@ -633,12 +1070,9 @@ async def delete_task_api(task_id: str = FastApiPath(..., title="The ID of the t
 async def generate_dataset_api(
     payload: GenerateRequest,
     tm = Depends(get_task_manager),
-    client: Optional[SimpleDeepseekClient] = Depends(get_deepseek_client_dependency)
+    api_key: str = Depends(get_deepseek_api_key)
 ):
-    """Generate dataset based on a task and count."""
-    if client is None:
-        raise HTTPException(status_code=503, detail="DeepSeek client is not available. Check API key configuration.")    # Experiment tracking removed - focusing on core dataset generation functionality
-    
+    """Generate dataset based on model selection (DeepSeek or Ollama)."""
     try:
         task = tm.get_task(payload.task_id)
         if not task:
@@ -646,28 +1080,130 @@ async def generate_dataset_api(
 
         logger.info(f"Generating {payload.count} entries for task {payload.task_id} using model {payload.model}")
         if 'id' not in task:
-            task['id'] = payload.task_id        # Experiment tracking removed - starting direct generation
+            task['id'] = payload.task_id
 
-        # Use simple generation function
-        generation_start_time = datetime.now()
-        # Create a new client with the selected model
-        selected_client = SimpleDeepseekClient(api_key=client.api_key)
-        selected_client.base_url = client.base_url
-        selected_client.model = payload.model
-        entries_raw, quality_report_raw = simple_generate_dataset(
-            task=task,
-            count=payload.count,
-            client=selected_client
-        )
-        generation_time = (datetime.now() - generation_start_time).total_seconds()
+        # Get appropriate client based on model selection
+        client = get_generation_client(payload.model, api_key)
+        if client is None:
+            if payload.model.startswith('ollama:'):
+                raise HTTPException(status_code=503, detail="Ollama server is not available. Please ensure Ollama is running on localhost:11434")
+            else:
+                raise HTTPException(status_code=503, detail="DeepSeek client is not available. Check API key configuration.")
+
+        # Set model on client (for DeepSeek clients)
+        if hasattr(client, 'model'):
+            if payload.model.startswith('ollama:'):
+                # For Ollama, the model is already set in the constructor
+                pass
+            else:
+                client.model = payload.model
         
-        # Process entries for response
+        # Use real generation function with proper format
+        generation_start_time = datetime.now()
+        
+        # Use appropriate generation method based on client type
+        if isinstance(client, OllamaClient):
+            # Use Ollama client with better error handling
+            try:
+                all_entries = client.generate_dataset_batch(
+                    task=task,
+                    total_count=payload.count,
+                    batch_size=min(3, payload.count)  # Even smaller batches for Ollama to reduce timeout risk
+                )
+            except requests.exceptions.ReadTimeout:
+                # Handle timeout gracefully
+                logger.warning("Ollama generation timed out")
+                raise HTTPException(
+                    status_code=408, 
+                    detail="Generation timed out. The model might be taking too long to respond. Try reducing the number of entries or check if the model is available."
+                )
+            except Exception as e:
+                logger.error(f"Ollama generation failed: {e}")
+                # If Ollama completely fails, provide a helpful error message
+                raise HTTPException(
+                    status_code=503, 
+                    detail=f"Ollama generation failed: {str(e)}. Please check if Ollama is running and the model '{client.model}' is available."
+                )
+            
+            # Convert to proper format with id, content, metadata
+            formatted_entries = []
+            task_name = task.get('name', task.get('id', 'unknown'))
+            schema_fields = list(task.get("schema", {}).get("fields", {}).keys())
+            
+            for i, entry in enumerate(all_entries[:payload.count], 1):
+                if isinstance(entry, dict):
+                    formatted_entries.append({
+                        'id': f"{task_name}-ollama-{i}",
+                        'content': {field: entry.get(field) for field in schema_fields} if schema_fields else entry,
+                        'metadata': {
+                            'source': f"Ollama-{client.model}",
+                            'generated_at': datetime.now().isoformat(),
+                            'task_id': payload.task_id,
+                            'generation_method': 'ollama_batch'
+                        }
+                    })
+            
+            # If no entries were generated, provide fallback
+            if not formatted_entries:
+                logger.warning("No entries generated by Ollama, creating minimal fallback")
+                formatted_entries = [{
+                    'id': f"{task_name}-fallback-1",
+                    'content': {'error': 'Ollama generation failed - timeout or model issue'},
+                    'metadata': {
+                        'source': f"Ollama-{client.model}",
+                        'generated_at': datetime.now().isoformat(),
+                        'task_id': payload.task_id,
+                        'generation_method': 'ollama_fallback',
+                        'error': 'Generation timeout or failure'
+                    }
+                }]
+            
+            entries_raw = formatted_entries
+            quality_report_raw = {
+                'generated_entries': len(entries_raw), 
+                'quality_score': 0.8 if len([e for e in entries_raw if 'error' not in e.get('content', {})]) > 0 else 0.0,
+                'duplicates_removed': 0,
+                'average_length': sum(len(str(entry['content'])) for entry in entries_raw) / len(entries_raw) if entries_raw else 0,
+                'details': {
+                    'total_generated': len(entries_raw),
+                    'valid_entries': len([e for e in entries_raw if 'error' not in e.get('content', {})]),
+                    'error_rate': len([e for e in entries_raw if 'error' in e.get('content', {})]) / max(1, len(entries_raw)),
+                    'generation_time': (datetime.now() - generation_start_time).total_seconds(),
+                    'generation_method': 'ollama_batch'
+                }
+            }
+        else:
+            # Use DeepSeek client with timeout handling
+            try:
+                entries_raw, quality_report_raw = real_generate_dataset(
+                    task=task,
+                    count=payload.count,
+                    client=client
+                )
+            except requests.exceptions.ReadTimeout:
+                logger.warning("DeepSeek generation timed out")
+                raise HTTPException(
+                    status_code=408, 
+                    detail="Generation timed out. The API might be experiencing high load. Please try again with fewer entries."
+                )
+
+        # Convert to DatasetEntry format (entries_raw should already be in proper format)
         processed_entries = []
         for entry in entries_raw:
-            if isinstance(entry, dict):
-                processed_entries.append(Entry(raw_data=entry))
+            if isinstance(entry, dict) and 'id' in entry and 'content' in entry and 'metadata' in entry:
+                # Already in proper format
+                processed_entries.append(DatasetEntry(**entry))
             else:
-                processed_entries.append(Entry(output=str(entry)))
+                # Fallback: create proper format from raw entry
+                processed_entries.append(DatasetEntry(
+                    id=entry.get('id', f"entry-{len(processed_entries)+1}"),
+                    content=entry.get('content', entry),
+                    metadata=entry.get('metadata', {
+                        "source": client.model if hasattr(client, 'model') else "Unknown", 
+                        "generated_at": datetime.now().isoformat(),
+                        "task_id": payload.task_id
+                    })
+                ))
         
         processed_quality_report = QualityReport(**quality_report_raw) if isinstance(quality_report_raw, dict) else QualityReport()
 
@@ -678,13 +1214,15 @@ async def generate_dataset_api(
             'task_id': payload.task_id,
             'count': len(processed_entries)
         }
-          # Save dataset to cache
+
+        # Save dataset to cache with proper format
         cache_data = result_data.copy()
-        cache_data['entries'] = [entry.model_dump() for entry in processed_entries]
+        cache_data['entries'] = [entry.model_dump() for entry in processed_entries]  # Save the proper format to cache
         cache_data['quality_report'] = processed_quality_report.model_dump()
         cache_data['generated_at'] = cache_data['generated_at'].isoformat()
         save_dataset_to_cache_sync(payload.task_id, cache_data)
-        logger.info(f"Generated {len(processed_entries)} entries for task {payload.task_id}")
+        
+        logger.info(f"Generated {len(processed_entries)} entries for task {payload.task_id} with real generation")
         return GenerateResponse(**result_data)
         
     except HTTPException:
@@ -692,18 +1230,15 @@ async def generate_dataset_api(
     except Exception as e:
         logger.error(f"Error generating dataset: {e}")
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Dataset generation failed: {str(e)}")
 
 @app.post("/api/test-generation", response_model=TestGenerationResponse, summary="Test Dataset Generation", tags=["Dataset Generation API"])
 async def test_generation_api(
     payload: TestGenerationRequest,
     tm = Depends(get_task_manager),
-    client: Optional[SimpleDeepseekClient] = Depends(get_deepseek_client_dependency)
+    api_key: str = Depends(get_deepseek_api_key)
 ):
-    """Test dataset generation with a small sample."""
-    if client is None:
-        raise HTTPException(status_code=503, detail="DeepSeek client is not available. Check API key configuration.")    # Experiment tracking removed - focusing on core test generation functionality
-
+    """Test dataset generation with a small sample using selected model (DeepSeek or Ollama)."""
     try:
         task = tm.get_task(payload.task_id)
         if not task:
@@ -711,29 +1246,103 @@ async def test_generation_api(
 
         logger.info(f"Testing generation for task {payload.task_id} using model {payload.model}")
         if 'id' not in task:
-            task['id'] = payload.task_id        # Experiment tracking removed - starting direct test generation
+            task['id'] = payload.task_id
 
-        # Generate small test sample
-        generation_start_time = datetime.now()
-        selected_client = SimpleDeepseekClient(api_key=client.api_key)
-        selected_client.base_url = client.base_url
-        selected_client.model = payload.model
-        entries_raw, quality_report_raw = simple_generate_dataset(
-            task=task,
-            count=3,
-            client=selected_client
-        )
-        generation_time = (datetime.now() - generation_start_time).total_seconds()
+        # Get appropriate client based on model selection
+        client = get_generation_client(payload.model, api_key)
+        if client is None:
+            if payload.model.startswith('ollama:'):
+                raise HTTPException(status_code=503, detail="Ollama server is not available. Please ensure Ollama is running on localhost:11434")
+            else:
+                raise HTTPException(status_code=503, detail="DeepSeek client is not available. Check API key configuration.")
+
+        # Set model on client (for DeepSeek clients)
+        if hasattr(client, 'model') and not payload.model.startswith('ollama:'):
+            client.model = payload.model
         
+        # Generate small test sample with appropriate client
+        generation_start_time = datetime.now()
+        
+        if isinstance(client, OllamaClient):
+            # Use Ollama client for test generation with shorter timeout
+            try:
+                test_entries = client.generate_dataset_with_prompt(
+                    task=task,
+                    count=3
+                )
+            except requests.exceptions.ReadTimeout:
+                raise HTTPException(
+                    status_code=408, 
+                    detail="Test generation timed out. The model might be taking too long to respond."
+                )
+            
+            # Convert to proper format
+            formatted_entries = []
+            task_name = task.get('name', task.get('id', 'unknown'))
+            schema_fields = list(task.get("schema", {}).get("fields", {}).keys())
+            
+            for i, entry in enumerate(test_entries[:3], 1):
+                if isinstance(entry, dict):
+                    formatted_entries.append({
+                        'id': f"test-{task_name}-ollama-{i}",
+                        'content': {field: entry.get(field) for field in schema_fields} if schema_fields else entry,
+                        'metadata': {
+                            'source': f"Ollama-{client.model}",
+                            'generated_at': datetime.now().isoformat(),
+                            'task_id': payload.task_id,
+                            'test': True,
+                            'generation_method': 'ollama'
+                        }
+                    })
+            
+            entries_raw = formatted_entries
+            quality_report_raw = {
+                'generated_entries': len(entries_raw), 
+                'quality_score': 0.8,
+                'duplicates_removed': 0,
+                'average_length': sum(len(str(entry['content'])) for entry in entries_raw) / len(entries_raw) if entries_raw else 0,
+                'details': {
+                    'total_generated': len(entries_raw),
+                    'valid_entries': len(entries_raw),
+                    'error_rate': 0.0,
+                    'generation_time': (datetime.now() - generation_start_time).total_seconds(),
+                    'test_mode': True
+                }
+            }
+        else:
+            # Use DeepSeek client with timeout handling
+            try:
+                entries_raw, quality_report_raw = real_generate_dataset(
+                    task=task,
+                    count=3,
+                    client=client
+                )
+            except requests.exceptions.ReadTimeout:
+                raise HTTPException(
+                    status_code=408, 
+                    detail="Test generation timed out. Please try again or check your connection."
+                )
+        
+        # Convert to DatasetEntry format
         processed_entries = []
         for entry in entries_raw:
-            if isinstance(entry, dict):
-                processed_entries.append(Entry(raw_data=entry))
+            if isinstance(entry, dict) and 'id' in entry and 'content' in entry and 'metadata' in entry:
+                # Already in proper format
+                processed_entries.append(DatasetEntry(**entry))
             else:
-                processed_entries.append(Entry(output=str(entry)))
+                # Fallback: create proper format from raw entry
+                processed_entries.append(DatasetEntry(
+                    id=entry.get('id', f"test-entry-{len(processed_entries)+1}"),
+                    content=entry.get('content', entry),
+                    metadata=entry.get('metadata', {
+                        "source": client.model if hasattr(client, 'model') else "Unknown", 
+                        "generated_at": datetime.now().isoformat(),
+                        "task_id": payload.task_id,
+                        "test": True
+                    })
+                ))
         
         processed_quality_report = QualityReport(**quality_report_raw) if isinstance(quality_report_raw, dict) else QualityReport()
-          # Test generation completed successfully
         
         return TestGenerationResponse(
             test_entries=processed_entries,
@@ -745,7 +1354,7 @@ async def test_generation_api(
         raise
     except Exception as e:
         logger.error(f"Error in test generation: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Test generation failed: {str(e)}")
 
 @app.get("/api/quality-config", response_model=QualityConfigResponse, summary="Get Quality Config", tags=["Quality Control API"])
 async def get_quality_config_api():
@@ -778,15 +1387,39 @@ async def update_quality_config_api(config_update: QualityConfig):
         logger.error(f"Error updating quality config: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# --- Experiment Tracking API ---
-
-# Experiment tracking API endpoint removed
-
-# Experiment tracking API endpoint removed
-
-# Experiment tracking API endpoint removed
-
-# Experiment tracking API endpoint removed
+@app.get("/api/status", response_model=StatusResponse, summary="API Status Check", tags=["System API"])
+async def get_api_status():
+    """Get API status and health information."""
+    try:
+        # Check if we can create a DeepSeek client
+        api_key = get_deepseek_api_key()
+        client_available = api_key is not None
+        
+        # Check if tasks are loaded
+        tm = get_task_manager()
+        tasks_count = len(tm.list_tasks())
+        
+        status = {
+            "status": "healthy" if client_available else "degraded",
+            "deepseek_api_configured": client_available,  # For frontend compatibility
+            "deepseek_client_available": client_available,
+            "tasks_loaded": tasks_count,
+            "timestamp": datetime.now(),
+            "version": "1.0.0"
+        }
+        
+        return StatusResponse(**status)
+    except Exception as e:
+        logger.error(f"Error checking API status: {e}")
+        return StatusResponse(
+            status="error",
+            deepseek_api_configured=False,
+            deepseek_client_available=False,
+            tasks_loaded=0,
+            timestamp=datetime.now(),
+            version="1.0.0",
+            error=str(e)
+        )
 
 @app.get("/api/download/{format}/{task_id}", summary="Download Generated Dataset", tags=["Dataset Download API"])
 async def download_dataset_api(
@@ -797,14 +1430,39 @@ async def download_dataset_api(
     valid_formats = ['json', 'csv', 'zip']
     if format not in valid_formats:
         raise HTTPException(status_code=400, detail=f"Unsupported format. Use one of: {valid_formats}")
-    cache_file = app_config.cache_dir / f'dataset_{task_id}.json'
+    
+    cache_file = app_config.cache_dir / f'{task_id}.json'
     if not cache_file.exists():
         raise HTTPException(status_code=404, detail="Dataset not found. Generate dataset first.")
+    
     try:
         with open(cache_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
+            
         if format == 'json':
-            return JSONResponse(content=data)
+            # Export as JSONL format (JSON Lines) - each entry on separate line
+            entries = data.get('entries', [])
+            if not entries:
+                raise HTTPException(status_code=404, detail="No entries found in dataset.")
+            
+            jsonl_lines = []
+            for entry in entries:
+                # Reorder to put id first, then content, then metadata
+                ordered_entry = {
+                    "id": entry.get("id"),
+                    "content": entry.get("content"),
+                    "metadata": entry.get("metadata")
+                }
+                jsonl_lines.append(json.dumps(ordered_entry, ensure_ascii=False))
+            
+            jsonl_content = '\n'.join(jsonl_lines)
+            return Response(
+                content=jsonl_content, 
+                media_type='application/json',
+                headers={
+                    'Content-Disposition': f'attachment; filename="dataset_{task_id}.jsonl"'
+                }
+            )
         elif format == 'csv':
             import csv
             from io import StringIO
@@ -812,13 +1470,42 @@ async def download_dataset_api(
             if not entries:
                 raise HTTPException(status_code=404, detail="No entries found in dataset.")
             output = StringIO()
-            fieldnames = set()
+            
+            # Handle DatasetEntry format with id, content, metadata structure
+            flattened_entries = []
+            fieldnames = set(['id'])  # Always include id
+            
             for entry in entries:
-                fieldnames.update(entry.keys())
-            fieldnames = list(fieldnames)
+                flat_entry = {'id': entry.get('id', '')}
+                
+                # Flatten content fields
+                content = entry.get('content', {})
+                if isinstance(content, dict):
+                    for key, value in content.items():
+                        field_name = f"content_{key}"
+                        flat_entry[field_name] = str(value) if value is not None else ''
+                        fieldnames.add(field_name)
+                else:
+                    flat_entry['content'] = str(content) if content is not None else ''
+                    fieldnames.add('content')
+                
+                # Flatten key metadata fields
+                metadata = entry.get('metadata', {})
+                if isinstance(metadata, dict):
+                    # Only include important metadata fields to keep CSV readable
+                    important_fields = ['source', 'task', 'model', 'created_at']
+                    for key in important_fields:
+                        if key in metadata:
+                            field_name = f"metadata_{key}"
+                            flat_entry[field_name] = str(metadata[key]) if metadata[key] is not None else ''
+                            fieldnames.add(field_name)
+                
+                flattened_entries.append(flat_entry)
+            
+            fieldnames = sorted(list(fieldnames))  # Sort for consistent column order
             writer = csv.DictWriter(output, fieldnames=fieldnames)
             writer.writeheader()
-            for entry in entries:
+            for entry in flattened_entries:
                 writer.writerow(entry)
             output.seek(0)
             return Response(content=output.read(), media_type='text/csv', headers={
@@ -843,307 +1530,58 @@ async def download_dataset_api(
         logger.error(f"Error downloading dataset: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/upload-pdf", summary="Upload PDF and extract dataset entries", tags=["Dataset Generation API"])
-async def upload_pdf_and_extract_dataset(
-    file: UploadFile = File(..., description="PDF file to extract dataset from"),
-    tm = Depends(get_task_manager)
-):
-    """Upload a PDF file, extract text, auto-create dataset & task, and return info."""
+@app.get("/api/models/ollama", summary="Get Available Ollama Models", tags=["Models API"])
+async def get_ollama_models_api():
+    """Get list of available Ollama models."""
     try:
-        if not file.filename.lower().endswith('.pdf'):
-            raise HTTPException(status_code=400, detail="Only PDF files are supported.")
-        # Save uploaded file temporarily
-        temp_path = app_config.cache_dir / f"temp_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-        with open(temp_path, "wb") as f_out:
-            f_out.write(await file.read())
-        # Extract text from PDF (try pdfplumber first)
-        entries = []
-        fallback_to_ocr = False
-        try:
-            with pdfplumber.open(str(temp_path)) as pdf:
-                for page_num, page in enumerate(pdf.pages, 1):
-                    text = page.extract_text()
-                    if text and not is_garbled_thai(text):
-                        for line in text.splitlines():
-                            line = line.strip()
-                            if line:
-                                entries.append({
-                                    "input": line,
-                                    "output": "",
-                                    "page": page_num
-                                })
-                    else:
-                        fallback_to_ocr = True
-        except Exception as e:
-            fallback_to_ocr = True
-        # If no entries or garbled, try Mistral OCR fallback
-        if not entries or fallback_to_ocr:
-            try:
-                entries = extract_text_with_mistral_ocr(str(temp_path), lang='tha')
-            except Exception as ocr_err:
-                temp_path.unlink(missing_ok=True)
-                raise HTTPException(status_code=500, detail=f"PDF text extraction failed and Mistral OCR fallback also failed: {ocr_err}")
-        temp_path.unlink(missing_ok=True)
-        if not entries:
-            raise HTTPException(status_code=422, detail="No text could be extracted from the PDF (even with OCR). Please check the file or install OCR dependencies.")
-        # Auto-create new task
-        task_id = f"pdf_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        task_data = {
-            "id": task_id,
-            "type": "classification",
-            "description": f"Dataset imported from PDF: {file.filename}",
-            "prompt_template": "Classify the following text:",
-            "created_at": datetime.now().isoformat()
-        }
-        tm.add_custom_task(task_data)
-        # Save dataset to cache
-        cache_data = {
-            "task_id": task_id,
-            "generated_at": datetime.now().isoformat(),
-            "entries": entries,
-            "entry_count": len(entries),
-            "source": file.filename
-        }
-        save_dataset_to_cache_sync(task_id, cache_data)
+        models = get_available_ollama_models()
         return {
-            "task_id": task_id,
-            "task": task_data,
-            "count": len(entries),
-            "entries_preview": entries[:10]
+            "models": models,
+            "count": len(models),
+            "server_available": len(models) > 0,
+            "endpoint": "http://localhost:11434"
         }
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error(f"Error extracting PDF: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to extract PDF: {e}")
+        logger.error(f"Error getting Ollama models: {e}")
+        return {
+            "models": [],
+            "count": 0,
+            "server_available": False,
+            "error": str(e)
+        }
 
-def is_garbled_thai(text: str, threshold: float = 0.3) -> bool:
-    """
-    Returns True if the text is likely garbled for Thai (too few Thai characters or too many replacement chars).
-    threshold: minimum ratio of Thai chars to total chars to consider as NOT garbled.
-    """
-    if not text or not isinstance(text, str):
-        return True
-    # Count Thai characters
-    thai_chars = re.findall(r'[\u0E00-\u0E7F]', text)
-    thai_ratio = len(thai_chars) / max(len(text), 1)
-    # Count replacement chars (�)
-    replacement_count = text.count('�')
-    replacement_ratio = replacement_count / max(len(text), 1)
-    # Heuristic: too few Thai chars or too many replacement chars
-    if thai_ratio < threshold or replacement_ratio > 0.1:
-        return True
-    return False
-
-def extract_text_with_ocr(pdf_path: str, lang: str = 'tha+eng') -> list:
-    """
-    Extract text from a PDF using OCR (pytesseract + pdf2image).
-    Returns a list of entries: [{"input": ..., "output": "", "page": ...}]
-    """
-    if not OCR_AVAILABLE:
-        raise RuntimeError("OCR dependencies are not installed. Please install pytesseract and pdf2image.")
-    # Check if tesseract executable is available
-    tesseract_cmd = getattr(pytesseract.pytesseract, 'tesseract_cmd', 'tesseract')
-    if not (os.path.exists(tesseract_cmd) or tesseract_cmd == 'tesseract'):
-        raise RuntimeError(
-            "Tesseract OCR is not installed or not found. Please install Tesseract from https://github.com/UB-Mannheim/tesseract/wiki and ensure it's in your PATH or set the correct path in the code."
-        )
-    entries = []
-    # Set your local poppler path here
-    poppler_path = r"D:\Github\DekDataset\poppler-local\Library\bin"
+@app.get("/api/models/all", summary="Get All Available Models", tags=["Models API"])
+async def get_all_models_api():
+    """Get all available models from both DeepSeek and Ollama."""
     try:
-        images = convert_from_path(pdf_path, poppler_path=poppler_path)
-        for page_num, image in enumerate(images, 1):
-            text = pytesseract.image_to_string(image, lang=lang)
-            for line in text.splitlines():
-                line = line.strip()
-                if line:
-                    entries.append({
-                        "input": line,
-                        "output": "",
-                        "page": page_num
-                    })
-        return entries
-    except Exception as e:
-        raise RuntimeError(f"OCR extraction failed: {e}")
-
-def extract_text_with_mistral_ocr(pdf_path: str, lang: str = 'tha') -> list:
-    """
-    Extract text from a PDF using Mistral Document AI API (mistral-ocr-latest model).
-    Returns a list of entries: [{"input": ..., "output": "", "page": ...}]
-    """
-    if not MISTRALAI_AVAILABLE:
-        raise RuntimeError("mistralai package is not installed. Please install with: pip install mistralai")
-    api_key = os.getenv('MISTRAL_API_KEY')
-    if not api_key:
-        raise RuntimeError("MISTRAL_API_KEY is not set in environment variables.")
-    client = Mistral(api_key=api_key)
-    # Encode PDF to base64
-    with open(pdf_path, "rb") as f:
-        base64_pdf = base64.b64encode(f.read()).decode('utf-8')
-    # Use data:application/pdf;base64,... as document_url
-    document_url = f"data:application/pdf;base64,{base64_pdf}"
-    ocr_response = client.ocr.process(
-        model="mistral-ocr-latest",
-        document={
-            "type": "document_url",
-            "document_url": document_url
-        },
-        include_image_base64=False
-    )
-    # The response contains 'markdown' with the extracted text
-    markdown = getattr(ocr_response, 'markdown', None)
-    if not markdown:
-        raise RuntimeError("No markdown text returned from Mistral OCR API.")
-    # Split markdown into lines and pages (simple heuristic: page breaks as '---' or '\f')
-    entries = []
-    page_num = 1
-    for line in markdown.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        if line in ('---', '\f'):
-            page_num += 1
-            continue
-        entries.append({
-            "input": line,
-            "output": "",
-            "page": page_num
-        })
-    return entries
-
-# --- Mistral API Key Management (in-memory for demo, can be improved) ---
-MISTRAL_API_KEY: Optional[str] = None
-
-def set_mistral_api_key(api_key: str):
-    global MISTRAL_API_KEY
-    MISTRAL_API_KEY = api_key
-
-def get_mistral_api_key() -> Optional[str]:
-    global MISTRAL_API_KEY
-    if MISTRAL_API_KEY:
-        return MISTRAL_API_KEY
-    return os.getenv('MISTRAL_API_KEY')
-
-@app.post("/api/set-mistral-api-key", tags=["Document AI"])
-async def set_mistral_api_key_api(data: Dict[str, str]):
-    api_key = data.get("api_key")
-    if not api_key or not api_key.startswith("sk-"):
-        return JSONResponse(status_code=400, content={"message": "Invalid API key format."})
-    set_mistral_api_key(api_key)
-    return {"message": "Mistral API key set successfully."}
-
-@app.post("/api/document-ocr-annotation", tags=["Document AI"])
-async def document_ocr_annotation(
-    file: UploadFile = File(...),
-    bbox: bool = Form(False),
-    doc: bool = Form(False),
-    pages: Optional[str] = Form(None),
-    tm = Depends(get_task_manager)
-):
-    """
-    Upload a PDF and run OCR + (optional) annotation using Mistral Document AI.
-    The result will be auto-saved as a new dataset and registered as a new Task.
-    """
-    import tempfile, shutil, uuid
-    api_key = get_mistral_api_key()
-    if not api_key:
-        raise HTTPException(status_code=400, detail="Mistral API key not set.")
-    # Save uploaded file to temp
-    temp_dir = tempfile.mkdtemp()
-    temp_path = os.path.join(temp_dir, file.filename)
-    with open(temp_path, "wb") as f:
-        shutil.copyfileobj(file.file, f)
-    # Upload to Mistral and get signed url
-    doc_ai = DocumentUnderstanding(api_key=api_key)
-    signed_url = doc_ai.upload_document(temp_path)
-    # Parse pages
-    page_list = None
-    if pages:
+        # DeepSeek models
+        deepseek_models = [
+            {"name": "deepseek-chat", "provider": "deepseek", "description": "DeepSeek-V3-0324"},
+            {"name": "deepseek-reasoner", "provider": "deepseek", "description": "DeepSeek-R1-0528"}
+        ]
+        
+        # Ollama models
+        ollama_models = []
         try:
-            page_list = [int(p.strip()) for p in pages.split(",") if p.strip().isdigit()]
-        except Exception:
-            page_list = None
-    # Prepare annotation models
-    bbox_model = BBoxImageAnnotation if bbox else None
-    doc_model = DocumentAnnotation if doc else None
-    # Run OCR + annotation
-    result = doc_ai.process_with_annotations(
-        document_url=signed_url,
-        pages=page_list,
-        bbox_annotation_model=bbox_model,
-        document_annotation_model=doc_model,
-        include_image_base64=False
-    )
-    # Extract entries for dataset (simple: use markdown or annotation result)
-    entries = []
-    if hasattr(result, 'markdown') and result.markdown:
-        # Split markdown by lines/pages
-        for i, line in enumerate(result.markdown.splitlines()):
-            if line.strip():
-                entries.append({"input": line.strip(), "output": "", "page": i+1})
-    elif hasattr(result, 'document_annotation') and result.document_annotation:
-        # Use document annotation as entries
-        entries.append(result.document_annotation)
-    elif hasattr(result, 'bbox_annotations') and result.bbox_annotations:
-        for ann in result.bbox_annotations:
-            entries.append(ann)
-    # Fallback: try to use any 'entries' key
-    elif isinstance(result, dict) and 'entries' in result:
-        entries = result['entries']
-    # Auto-generate a new task id
-    task_id = f"pdf_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}"
-    # Register as a new Task
-    task_data = {
-        "id": task_id,
-        "type": "ocr_pdf",
-        "description": f"Auto-imported from PDF: {file.filename}",
-        "prompt_template": "OCR/Annotation from PDF",
-        "created_at": datetime.now().isoformat()
-    }
-    tm.add_custom_task(task_data)
-    # Save dataset to cache
-    cache_data = {
-        "task_id": task_id,
-        "generated_at": datetime.now().isoformat(),
-        "entry_count": len(entries),
-        "entries": entries[:1000],
-        "source": "mistral-ocr",
-        "file_name": file.filename
-    }
-    save_dataset_to_cache_sync(task_id, cache_data)
-    # Return preview and info
-    return {
-        "task_id": task_id,
-        "count": len(entries),
-        "entries_preview": entries[:10],
-        "message": f"PDF imported and dataset created as task {task_id}"
-    }
+            ollama_model_names = get_available_ollama_models()
+            ollama_models = [
+                {"name": f"ollama:{model}", "provider": "ollama", "description": f"Ollama - {model}"}
+                for model in ollama_model_names
+            ]
+        except Exception as e:
+            logger.warning(f"Failed to get Ollama models: {e}")
+        
+        all_models = deepseek_models + ollama_models
+        
+        return {
+            "models": all_models,
+            "deepseek_count": len(deepseek_models),
+            "ollama_count": len(ollama_models),
+            "total_count": len(all_models),
+            "ollama_available": len(ollama_models) > 0
+        }
+    except Exception as e:
+        logger.error(f"Error getting all models: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get models: {str(e)}")
 
-# Experiment tracking API endpoint removed
 
-# Experiment tracking API endpoint removed
-
-@app.get("/api/preview/{task_id}", summary="Preview generated dataset", tags=["Dataset Preview"])
-async def preview_dataset_api(task_id: str = FastApiPath(..., description="ID of the task")):
-    """Return a preview (first 10 entries) of the generated dataset for a task."""
-    cache_file = app_config.cache_dir / f'dataset_{task_id}.json'
-    if not cache_file.exists():
-        # Try fallback: look for CSV in downloads (for demo)
-        import glob
-        import csv
-        import os
-        downloads = os.path.expanduser('~/Downloads')
-        csv_files = glob.glob(os.path.join(downloads, f"dataset_{task_id}*.csv"))
-        if csv_files:
-            with open(csv_files[0], encoding='utf-8') as f:
-                reader = csv.DictReader(f)
-                rows = list(reader)[:10]
-            return {"entries": rows, "count": len(rows)}
-        raise HTTPException(status_code=404, detail="Dataset not found. Generate dataset first.")
-    import json
-    with open(cache_file, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-    entries = data.get('entries', [])
-    preview = entries[:10]
-    return {"entries": preview, "count": len(entries)}

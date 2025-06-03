@@ -5,9 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DekDataset - AI Dataset Generator</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- Add Google Fonts for better typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
-    <style>
-        .pdf-drop-zone {
+    <!-- Add Bootstrap CSS for proper modal and component styling -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Add meta tags for better SEO and appearance -->
+    <meta name="description" content="DekDataset - Advanced Thai AI/ML Dataset Generator powered by DeepSeek API and Ollama Local Models">
+    <meta name="keywords" content="AI, Machine Learning, Dataset, Thai Language, DeepSeek, Ollama">
+    <meta name="author" content="ZOMBIT - JonusNattapong">
+    <style>        .pdf-drop-zone {
             border: 2px dashed #888;
             border-radius: 8px;
             padding: 2rem 1rem;
@@ -23,9 +33,61 @@
             background: #e6f0ff;
             color: #007bff;
         }
+        
+        /* Model Provider Styles */
+        .model-provider-tabs {
+            margin-bottom: 1rem;
+        }
+        
+        .model-section {
+            transition: all 0.3s ease;
+            padding: 15px;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            background: #f8f9fa;
+        }
+        
+        .model-section.active {
+            background: #fff;
+            border-color: #007bff;
+            box-shadow: 0 2px 4px rgba(0,123,255,0.1);
+        }
+        
+        .loading-spinner {
+            color: #6c757d;
+            font-size: 0.9em;
+        }
+
+        /* Task item styles */
+        .task-item {
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .task-item:hover {
+            background-color: #f8f9fa;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
+        .task-item.selected {
+            background-color: #e3f2fd;
+            border-color: #2196f3;
+            box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
+        }
+
+        /* Alert container */
+        #alertContainer {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            max-width: 400px;
+        }
     </style>
 </head>
 <body>
+    <!-- Animated background elements -->
     <div class="bg-animation"></div>
     <div class="floating-elements">
         <div class="floating-element"></div>
@@ -38,25 +100,40 @@
             <a href="#" class="navbar-brand">
                 <i class="fas fa-brain"></i>
                 DekDataset
+                <span style="font-size: 0.7rem; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-left: 0.5rem;">by ZOMBIT</span>
             </a>
         </div>
     </nav>
 
     <div class="container">
+        <!-- Add alert container for notifications with enhanced styling -->
+        <div id="alertContainer" style="position: fixed; top: 20px; right: 20px; z-index: 9999; max-width: 400px;"></div>
+
         <div class="main-content">
-            <!-- Task Management Panel -->
+            <!-- Task Management Panel with enhanced header -->
             <div class="card">
                 <div class="card-header">
                     <i class="fas fa-tasks"></i>
                     <h2>Task Management</h2>
+                    <span class="badge bg-primary ms-auto" id="taskCount">0 tasks</span>
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label">Select Task</label>
-                    <select class="form-select" id="taskDropdown">
-                        <option value="">-- Select Task --</option>
-                        <!-- Task options will be populated by JavaScript -->
-                    </select>
+                    <label class="form-label">
+                        <i class="fas fa-list me-2"></i>Select Task
+                    </label>
+                    <div style="display: flex; gap: 1rem; align-items: center;">
+                        <select class="form-select" id="taskDropdown" style="flex: 1;">
+                            <option value="">-- Select Task --</option>
+                            <!-- Task options will be populated by JavaScript -->
+                        </select>
+                        <button class="btn btn-success" id="createTaskBtn" data-bs-toggle="modal" data-bs-target="#createTaskModal">
+                            <i class="fas fa-plus"></i> Create
+                        </button>
+                        <button class="btn btn-secondary" id="refreshTasks">
+                            <i class="fas fa-sync"></i>
+                        </button>
+                    </div>
                 </div>
 
                 <div id="taskJsonSection" style="display:none;">
@@ -75,52 +152,152 @@
                     </div>
                 </div>
                 
-                <button class="btn btn-success" id="createTaskBtn" style="margin-bottom: 2rem; width: 100%;">
-                    <i class="fas fa-plus"></i>Create New Task
-                </button>
-                
                 <div id="taskList">
                     <!-- Task items will be populated by JavaScript -->
                 </div>
             </div>
 
-            <!-- Generation Panel -->
+            <!-- Generation Panel with enhanced styling -->
             <div class="card">
                 <div class="card-header">
                     <i class="fas fa-magic"></i>
                     <h2>Dataset Generation</h2>
+                    <div class="status-indicator status-active ms-auto" title="System Ready"></div>
                 </div>
                 
                 <div class="generation-panel">
                     <div class="form-group">
-                        <label class="form-label">Selected Task</label>
-                        <input type="text" class="form-control" id="selectedTask" readonly placeholder="No task selected">
+                        <label class="form-label">
+                            <i class="fas fa-target me-2"></i>Selected Task
+                        </label>
+                        <input type="text" class="form-control" id="selectedTask" readonly placeholder="No task selected" style="background: rgba(102, 126, 234, 0.05);">
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Number of Entries</label>
+                        <label class="form-label">
+                            <i class="fas fa-hashtag me-2"></i>Number of Entries
+                        </label>
                         <input type="number" class="form-control" id="entryCount" value="10" min="1" max="1000">
                     </div>
-                    <div class="form-group">
-                        <label class="form-label">Model</label>
-                        <select class="form-select" id="modelSelect">
-                            <option value="deepseek-chat">DeepSeek-V3-0324 (deepseek-chat)</option>
-                            <option value="deepseek-reasoner">DeepSeek-R1-0528 (deepseek-reasoner)</option>
-                        </select>
+                    
+                    <div class="form-group" style="grid-column: 1 / -1;">
+                        <label class="form-label">
+                            <i class="fas fa-robot me-2"></i>Model Provider
+                            <span id="modelLoadingIndicator" class="loading-spinner ms-2" style="display:none;">
+                                <i class="fas fa-spinner fa-spin"></i> Loading models...
+                            </span>
+                        </label>
+                        
+                        <!-- Model Provider Selection with enhanced styling -->
+                        <div class="model-provider-tabs mb-3">
+                            <div class="btn-group w-100" role="group" aria-label="Model Provider">
+                                <input type="radio" class="btn-check" name="modelProvider" id="deepseekProvider" value="deepseek" checked>
+                                <label class="btn btn-outline-primary" for="deepseekProvider">
+                                    <i class="fas fa-cloud me-2"></i> DeepSeek API
+                                </label>
+                                
+                                <input type="radio" class="btn-check" name="modelProvider" id="ollamaProvider" value="ollama">
+                                <label class="btn btn-outline-success" for="ollamaProvider">
+                                    <i class="fas fa-home me-2"></i> Ollama Local
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- DeepSeek Models -->
+                        <div id="deepseekModelSection" class="model-section active">
+                            <label class="form-label small text-muted">
+                                <i class="fas fa-cloud me-1"></i> DeepSeek Cloud Models
+                            </label>
+                            <select class="form-select" id="deepseekModelSelect">
+                                <option value="">Loading DeepSeek models...</option>
+                            </select>
+                        </div>
+
+                        <!-- Ollama Models -->
+                        <div id="ollamaModelSection" class="model-section" style="display: none;">
+                            <label class="form-label small text-muted">
+                                <i class="fas fa-home me-1"></i> Ollama Local Models
+                            </label>
+                            <select class="form-select" id="ollamaModelSelect">
+                                <option value="">Loading Ollama models...</option>
+                            </select>
+                            <small class="form-text text-muted">
+                                <i class="fas fa-info-circle me-1"></i>Make sure Ollama is running locally on port 11434
+                            </small>
+                        </div>
                     </div>
                 </div>
-                  <div style="margin-bottom: 2rem;">
+                
+                <div style="margin-bottom: 2rem;">
                     <div class="btn-group">
-                        <button class="btn btn-warning" id="testGeneration">
-                            <i class="fas fa-flask"></i>Test Generation
+                        <button class="btn btn-warning" id="testGeneration" disabled>
+                            <i class="fas fa-flask"></i> Test Generation
                         </button>
-                        <button class="btn btn-primary" id="generateDataset">
-                            <i class="fas fa-rocket"></i>Generate Dataset
+                        <button class="btn btn-primary" id="generateDataset" disabled>
+                            <i class="fas fa-rocket"></i> Generate Dataset
                         </button>
-                        <button class="btn btn-secondary" id="qualityBtn">
-                            <i class="fas fa-shield-alt"></i>Quality Settings
-                        </button>                        <button class="btn btn-info" id="apiConfigBtn">
-                            <i class="fas fa-key"></i>API Config
+                        <!-- Add stop button -->
+                        <button class="btn btn-danger" id="stopGeneration" style="display: none;">
+                            <i class="fas fa-stop"></i> Stop Generation
                         </button>
+                        <button class="btn btn-secondary" id="qualityBtn" data-bs-toggle="modal" data-bs-target="#qualityModal">
+                            <i class="fas fa-shield-alt"></i> Quality Settings
+                        </button>
+                        <button class="btn btn-info" id="apiConfigBtn" data-bs-toggle="modal" data-bs-target="#apiConfigModal">
+                            <i class="fas fa-key"></i> API Config
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Enhanced Progress Section with stop functionality -->
+                <div id="progressSection" style="display: none;">
+                    <div class="progress mb-3">
+                        <div class="progress-bar" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                    <div id="progressText" class="text-center text-muted">
+                        <i class="fas fa-cog fa-spin me-2"></i>Initializing...
+                    </div>
+                    <div class="text-center mt-2">
+                        <small class="text-muted">
+                            <i class="fas fa-info-circle me-1"></i>
+                            You can stop the generation at any time using the Stop button above
+                        </small>
+                    </div>
+                </div>
+
+                <!-- Results and Download Section -->
+                <div id="downloadSection" style="display: none;">
+                    <div id="resultSummary" class="mb-4">
+                        <!-- Results will be displayed here -->
+                    </div>
+
+                    <!-- Preview Table Container -->
+                    <div id="previewTableContainer">
+                        <!-- Table will be inserted here by JavaScript -->
+                    </div>
+
+                    <!-- Sample Display (kept for JSON view) -->
+                    <div id="sampleDisplay" class="mt-3">
+                        <!-- Sample entry will be displayed here -->
+                    </div>
+
+                    <!-- Download Buttons -->
+                    <div class="download-buttons mt-4">
+                        <h5><i class="fas fa-download"></i> Download Dataset</h5>
+                        <div class="btn-group">
+                            <button class="btn btn-success download-btn" data-format="json" disabled>
+                                <i class="fas fa-file-code"></i> Download JSONL
+                            </button>
+                            <button class="btn btn-info download-btn" data-format="csv" disabled>
+                                <i class="fas fa-file-csv"></i> Download CSV
+                            </button>
+                            <button class="btn btn-warning download-btn" data-format="zip" disabled>
+                                <i class="fas fa-file-archive"></i> Download ZIP
+                            </button>
+                        </div>
+                        <p class="text-muted mt-2">
+                            <i class="fas fa-info-circle"></i> 
+                            JSONL format is recommended for machine learning tasks. CSV is good for analysis in Excel/Google Sheets.
+                        </p>
                     </div>
                 </div>
 
@@ -156,1114 +333,171 @@
                 </div>
                 <!-- End PDF Upload Panel -->
 
-                <!-- Progress Section -->
-                <div id="progressSection" style="display: none;">
-                    <div class="progress">
-                        <div class="progress-bar" role="progressbar" style="width: 0%"></div>
-                    </div>
-                    <div id="progressText" style="text-align: center; color: var(--text-secondary);"></div>
-                </div>
-
                 <!-- Results Section -->
                 <div id="resultsSection" style="display: none;">
                     <h3 style="margin-bottom: 1rem;">Generated Dataset</h3>
                     <div id="qualityReport" class="alert alert-info" style="display: none;"></div>
                     <div id="datasetPreview" style="margin-bottom: 2rem;"></div>
-                    
-                    <div class="btn-group">
-                        <button class="btn btn-success download-btn" data-format="json">
-                            <i class="fas fa-download"></i>Download JSON
-                        </button>
-                        <button class="btn btn-success download-btn" data-format="csv">
-                            <i class="fas fa-download"></i>Download CSV
-                        </button>
-                        <button class="btn btn-success download-btn" data-format="zip">
-                            <i class="fas fa-download"></i>Download ZIP
-                        </button>
-                    </div>
                 </div>
             </div>
         </div>
     </div>
 
     <!-- Create Task Modal -->
-    <div class="modal" id="createTaskModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Create New Task</h3>
-                <button class="close-btn" id="closeCreateModal">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label class="form-label">Task ID</label>
-                    <input type="text" class="form-control" id="taskId" placeholder="Enter unique task ID" required>
+    <div class="modal fade" id="createTaskModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Create New Task</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">Task Type</label>
-                    <select class="form-select" id="taskType">
-                        <option value="custom">Custom</option>
-                        <option value="qa">Question-Answer</option>
-                        <option value="classification">Classification</option>
-                        <option value="generation">Text Generation</option>
-                    </select>
+                <div class="modal-body">
+                    <form id="createTaskForm">
+                        <div class="mb-3">
+                            <label class="form-label">Task ID</label>
+                            <input type="text" class="form-control" id="taskId" placeholder="Enter unique task ID" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Task Type</label>
+                            <select class="form-select" id="taskType">
+                                <option value="custom">Custom</option>
+                                <option value="qa">Question-Answer</option>
+                                <option value="classification">Classification</option>
+                                <option value="generation">Text Generation</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <textarea class="form-control" id="taskDescription" rows="3" placeholder="Describe what this task does..."></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">System Prompt</label>
+                            <textarea class="form-control" id="systemPrompt" rows="3" placeholder="System prompt for the model..."></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">User Template</label>
+                            <textarea class="form-control" id="userTemplate" rows="3" placeholder="User template with placeholders..."></textarea>
+                        </div>
+                    </form>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">Description</label>
-                    <textarea class="form-control" id="taskDescription" rows="3" placeholder="Describe what this task does..."></textarea>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveTask">
+                        <i class="fas fa-plus"></i> Create Task
+                    </button>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">Prompt Template</label>
-                    <textarea class="form-control json-editor" id="promptTemplate" rows="5" placeholder="Enter your prompt template here..."></textarea>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" id="cancelCreateTask">Cancel</button>
-                <button class="btn btn-primary" id="saveTask">
-                    <i class="fas fa-plus"></i>Create Task
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- API Configuration Modal -->
-    <div class="modal" id="apiConfigModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>API Configuration</h3>
-                <button class="close-btn" id="closeApiConfigModal">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <div class="modal-body">
-                <div class="alert alert-info">
-                    <i class="fas fa-info-circle"></i>
-                    <strong>Note:</strong> You need a DeepSeek API key to generate real datasets. Get one from <a href="https://platform.deepseek.com" target="_blank">platform.deepseek.com</a>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">DeepSeek API Key</label>
-                    <input type="password" class="form-control" id="apiKey" placeholder="sk-...">
-                    <small style="color: var(--text-secondary);">This will be stored in your environment variables for this session.</small>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">API Status</label>
-                    <div id="apiStatus" class="alert alert-secondary">
-                        <i class="fas fa-question-circle"></i>
-                        Status unknown - Click "Test API" to check
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" id="testApiBtn">
-                    <i class="fas fa-flask"></i>Test API
-                </button>
-                <button class="btn btn-success" id="saveApiKey">
-                    <i class="fas fa-save"></i>Save & Set
-                </button>
-                <button class="btn btn-secondary" id="cancelApiConfig">Cancel</button>
             </div>
         </div>
     </div>
 
     <!-- Quality Settings Modal -->
-    <div class="modal" id="qualityModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Quality Control Settings</h3>
-                <button class="close-btn" id="closeQualityModal">
-                    <i class="fas fa-times"></i>
-                </button>
+    <div class="modal fade" id="qualityModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Quality Control Settings</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Enable Quality Filter</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="enableQualityFilter" checked>
+                            <label class="form-check-label" for="enableQualityFilter">
+                                Enable quality filtering
+                            </label>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Minimum Response Length</label>
+                        <input type="number" class="form-control" id="minResponseLength" value="10" min="1">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Maximum Response Length</label>
+                        <input type="number" class="form-control" id="maxResponseLength" value="2000" min="10">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Similarity Threshold: <span id="thresholdValue">0.8</span></label>
+                        <input type="range" class="form-range" id="similarityThreshold" min="0" max="1" step="0.1" value="0.8">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Enable Duplicate Detection</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="enableDuplicateDetection" checked>
+                            <label class="form-check-label" for="enableDuplicateDetection">
+                                Detect and remove duplicates
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveQuality">
+                        <i class="fas fa-save"></i> Save Settings
+                    </button>
+                </div>
             </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label class="form-label">Minimum Length</label>
-                    <input type="number" class="form-control" id="minLength" value="10">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Maximum Length</label>
-                    <input type="number" class="form-control" id="maxLength" value="1000">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Similarity Threshold</label>
-                    <input type="range" class="form-range" id="similarityThreshold" min="0" max="1" step="0.1" value="0.8">
-                    <small style="color: var(--text-secondary);">Current: <span id="thresholdValue">0.8</span></small>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Validation Rules (JSON array)</label>
-                    <textarea class="form-control" id="validationRules" rows="3" placeholder='["no_empty_output", "no_special_chars", "has_bbox", "has_label", "valid_page_number"]'>["no_empty_output", "no_special_chars", "has_bbox", "has_label", "valid_page_number"]</textarea>
-                    <small style="color: var(--text-secondary);">
-                        Examples: "no_empty_output", "no_special_chars", "has_bbox", "has_label", "valid_page_number"<br>
-                        <span style="color:#e67e22;font-weight:500;">* ต้องกรอกเป็น JSON array เช่น ["rule1", "rule2"] เท่านั้น หากไม่ต้องการ validation ให้ใส่ []</span>
-                    </small>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Custom Validators (JSON array)</label>
-                    <textarea class="form-control" id="customValidators" rows="3" placeholder='["bbox_format_validator", "label_consistency_validator", "ocr_text_quality_validator"]'>["bbox_format_validator", "label_consistency_validator", "ocr_text_quality_validator"]</textarea>
-                    <small style="color: var(--text-secondary);">
-                        Examples: "bbox_format_validator", "label_consistency_validator", "ocr_text_quality_validator"<br>
-                        <span style="color:#e67e22;font-weight:500;">* ต้องกรอกเป็น JSON array เช่น ["validator1", "validator2"] เท่านั้น หากไม่ต้องการ validator ให้ใส่ []</span>
-                    </small>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" id="cancelQuality">Cancel</button>
-                <button class="btn btn-primary" id="saveQuality">
-                    <i class="fas fa-save"></i>Save Settings
-                </button>
-            </div>
-        </div>    </div>    
+        </div>
+    </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- API Configuration Modal -->
+    <div class="modal fade" id="apiConfigModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">API Configuration</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        <strong>Note:</strong> You need a DeepSeek API key to generate real datasets. Get one from <a href="https://platform.deepseek.com" target="_blank">platform.deepseek.com</a>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">DeepSeek API Key</label>
+                        <input type="password" class="form-control" id="apiKey" placeholder="sk-...">
+                        <small class="form-text text-muted">This will be stored in your environment variables for this session.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">API Status</label>
+                        <div id="apiStatus" class="alert alert-secondary">
+                            <i class="fas fa-question-circle"></i>
+                            Status unknown - Click "Test API" to check
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="testApiBtn">
+                        <i class="fas fa-flask"></i> Test API
+                    </button>
+                    <button type="button" class="btn btn-success" id="saveApiKey">
+                        <i class="fas fa-save"></i> Save & Set
+                    </button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Bootstrap JS for modal functionality -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/app.js"></script>
+    
+    <!-- Add initialization script for task count -->
     <script>
-        // Load data from tasks.json
-        let tasksArray = [];
-        let tasks = {};
-
-        // Function to load tasks from tasks.json
-        async function loadTasks() {
-            try {
-                const response = await fetch('/api/app-config/tasks.json'); // MODIFIED URL
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                const tasksData = await response.json();
-                
-                // Convert tasks object to array format
-                tasksArray = Object.keys(tasksData).map(taskId => ({
-                    id: taskId,
-                    type: tasksData[taskId].schema?.type || 'custom',
-                    description: tasksData[taskId].description || tasksData[taskId].name || taskId,
-                    name: tasksData[taskId].name || taskId,
-                    format: tasksData[taskId].format || 'Jsonl',
-                    schema: tasksData[taskId].schema || {},
-                    examples: tasksData[taskId].examples || [],
-                    parameters: tasksData[taskId].parameters || {}
-                }));
-                
-                // Convert to object for easy access
-                tasks = Object.fromEntries(tasksArray.map(t => [t.id, t]));
-                
-                // Update UI after loading
-                populateTaskDropdown();
-                renderTaskList();
-                
-                console.log(`Loaded ${tasksArray.length} tasks from tasks.json`);
-            } catch (error) {
-                console.error('Error loading tasks:', error);
-                showAlert('Failed to load tasks from tasks.json. Using fallback data.', 'error');
-                
-                // Fallback to mock data
-                tasksArray = [
-                    { id: 'task_qa', type: 'qa', description: 'Question-Answer Generation' },
-                    { id: 'task_classify', type: 'classification', description: 'Text Classification' },
-                    { id: 'task_generate', type: 'generation', description: 'Text Generation' }
-                ];
-                tasks = Object.fromEntries(tasksArray.map(t => [t.id, t]));
-                populateTaskDropdown();
-                renderTaskList();
-            }
-        }
-
-        const taskDropdown = document.getElementById('taskDropdown');
-        const taskJsonSection = document.getElementById('taskJsonSection');
-        const taskJsonArea = document.getElementById('taskJsonArea');
-        const saveTaskJsonBtn = document.getElementById('saveTaskJson');
-        const reloadTaskJsonBtn = document.getElementById('reloadTaskJson');
-        const taskJsonMsg = document.getElementById('taskJsonMsg');
-        const taskList = document.getElementById('taskList');
-        const selectedTaskInput = document.getElementById('selectedTask');
-
-        let currentTaskId = null;
-        let originalTaskJson = null;        // Initialize UI
-        async function init() {
-            // Load tasks from tasks.json first
-            await loadTasks();
-            setupEventListeners();
-            checkApiStatus(); // Check API status on load
-        }
-
-        function populateTaskDropdown() {
-            taskDropdown.innerHTML = '<option value="">-- Select Task --</option>';
-            tasksArray.forEach(task => {
-                const option = document.createElement('option');
-                option.value = task.id;
-                option.textContent = task.id;
-                taskDropdown.appendChild(option);
-            });
-        }
-
-        function renderTaskList() {
-            taskList.innerHTML = '';
-            
-            // Add modern scrollable container with better styling
-            taskList.style.maxHeight = '720px';
-            taskList.style.overflowY = 'auto';
-            taskList.style.padding = '0';
-            taskList.style.gap = '0';
-            
-            if (tasksArray.length === 0) {
-            taskList.innerHTML = `
-            <div style="
-            text-align: center;
-            padding: 3rem 1rem;
-            color: #6c757d;
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            border-radius: 12px;
-            border: 2px dashed #dee2e6;
-            ">
-            <i class="fas fa-tasks" style="font-size: 2.5rem; margin-bottom: 1rem; opacity: 0.5;"></i>
-            <div style="font-size: 1.1rem; font-weight: 500;">No tasks available</div>
-            <div style="font-size: 0.9rem; margin-top: 0.5rem;">Create your first task to get started</div>
-            </div>
-            `;
-            return;
-            }
-            
-            tasksArray.forEach((task, index) => {
-            const taskItem = document.createElement('div');
-            taskItem.className = 'task-item-modern';
-            taskItem.dataset.taskId = task.id;
-            
-            // Modern card design with gradient and animations
-            taskItem.style = `
-            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-            border: 1px solid #e3e6ea;
-            border-radius: 16px;
-            margin-bottom: 12px;
-            padding: 1.2rem 1.5rem;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            cursor: pointer;
-            position: relative;
-            overflow: hidden;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-            `;
-            
-            // Determine task type icon and color
-            const taskTypeConfig = {
-            'qa': { icon: 'fa-question-circle', color: '#3498db', bgColor: '#ebf3fd' },
-            'classification': { icon: 'fa-tags', color: '#e74c3c', bgColor: '#fdf2f2' },
-            'generation': { icon: 'fa-magic', color: '#9b59b6', bgColor: '#f8f4fd' },
-            'custom': { icon: 'fa-cog', color: '#34495e', bgColor: '#f4f6f7' }
-            };
-            
-            const config = taskTypeConfig[task.type] || taskTypeConfig['custom'];
-            
-            taskItem.innerHTML = `
-            <!-- Background decorative element -->
-            <div style="
-            position: absolute;
-            top: -20px;
-            right: -20px;
-            width: 80px;
-            height: 80px;
-            background: ${config.bgColor};
-            border-radius: 50%;
-            opacity: 0.3;
-            "></div>
-            
-            <!-- Main content -->
-            <div style="position: relative; z-index: 2;">
-            <!-- Header -->
-            <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.8rem;">
-                <div style="
-                width: 42px;
-                height: 42px;
-                background: ${config.color};
-                border-radius: 12px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: white;
-                font-size: 1.2rem;
-                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-                ">
-                <i class="fas ${config.icon}"></i>
-                </div>
-                <div style="flex: 1;">
-                <div style="
-                font-weight: 700;
-                font-size: 1.1rem;
-                color: #2c3e50;
-                margin-bottom: 0.2rem;
-                ">${task.id}</div>
-                <div style="
-                color: #7f8c8d;
-                font-size: 0.85rem;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-                font-weight: 600;
-                ">${task.type}</div>
-                <!-- Status badge moved here -->
-                <div style="
-                display: inline-block;
-                background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
-                color: white;
-                padding: 0.2rem 0.6rem;
-                border-radius: 20px;
-                font-size: 0.7rem;
-                font-weight: 600;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-                box-shadow: 0 2px 6px rgba(39, 174, 96, 0.3);
-                margin-top: 0.3rem;
-                ">
-                <i class="fas fa-check-circle" style="margin-right: 0.3rem;"></i>
-                Active
-                </div>
-                </div>
-            </div>
-            
-            <!-- Description -->
-            <div style="
-                color: #5a6c7d;
-                font-size: 0.9rem;
-                line-height: 1.5;
-                margin-bottom: 1rem;
-                max-height: 3rem;
-                overflow: hidden;
-                display: -webkit-box;
-                -webkit-line-clamp: 2;
-                -webkit-box-orient: vertical;
-            ">
-                ${task.description || task.name || 'No description available'}
-            </div>
-            
-            <!-- Action buttons -->
-            <div style="display: flex; gap: 0.5rem; align-items: center;">
-                <button class="btn select-task" data-task-id="${task.id}" style="
-                background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
-                border: none;
-                color: white;
-                padding: 0.5rem 1.2rem;
-                border-radius: 10px;
-                font-size: 0.85rem;
-                font-weight: 600;
-                transition: all 0.2s ease;
-                box-shadow: 0 3px 8px rgba(52, 152, 219, 0.3);
-                flex: 1;
-                " onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 4px 12px rgba(52, 152, 219, 0.4)'" 
-                   onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 3px 8px rgba(52, 152, 219, 0.3)'">
-                <i class="fas fa-play" style="margin-right: 0.5rem;"></i>
-                Select Task
-                </button>
-                
-                <button class="btn delete-task" data-task-id="${task.id}" style="
-                background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
-                border: none;
-                color: white;
-                padding: 0.5rem 0.8rem;
-                border-radius: 10px;
-                font-size: 0.85rem;
-                transition: all 0.2s ease;
-                box-shadow: 0 3px 8px rgba(231, 76, 60, 0.3);
-                " onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 4px 12px rgba(231, 76, 60, 0.4)'" 
-                   onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 3px 8px rgba(231, 76, 60, 0.3)'">
-                <i class="fas fa-trash"></i>
-                </button>
-            </div>
-            </div>
-            `;
-            
-            // Add hover effects
-            taskItem.addEventListener('mouseenter', function() {
-            this.style.transform = 'translateY(-3px)';
-            this.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.1)';
-            this.style.borderColor = config.color;
-            });
-            
-            taskItem.addEventListener('mouseleave', function() {
-            this.style.transform = 'translateY(0)';
-            this.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.04)';
-            this.style.borderColor = '#e3e6ea';
-            });
-            
-            // Add click effect
-            taskItem.addEventListener('mousedown', function() {
-            this.style.transform = 'translateY(-1px) scale(0.98)';
-            });
-            
-            taskItem.addEventListener('mouseup', function() {
-            this.style.transform = 'translateY(-3px) scale(1)';
-            });
-            
-            taskList.appendChild(taskItem);
-            });
-            
-            // Add custom scrollbar styling
-            const style = document.createElement('style');
-            style.textContent = `
-            #taskList::-webkit-scrollbar {
-            width: 6px;
-            }
-            #taskList::-webkit-scrollbar-track {
-            background: #f1f1f1;
-            border-radius: 10px;
-            }
-            #taskList::-webkit-scrollbar-thumb {
-            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
-            border-radius: 10px;
-            }
-            #taskList::-webkit-scrollbar-thumb:hover {
-            background: linear-gradient(135deg, #2980b9 0%, #3498db 100%);
-            }
-            `;
-            if (!document.getElementById('taskListScrollbarStyle')) {
-            style.id = 'taskListScrollbarStyle';
-            document.head.appendChild(style);
-            }
-        }
-
-        function showTaskJson(taskId) {
-            if (!taskId || !tasks[taskId]) {
-                taskJsonSection.style.display = 'none';
-                return;
-            }
-            currentTaskId = taskId;
-            originalTaskJson = JSON.stringify(tasks[taskId], null, 2);
-            taskJsonArea.value = originalTaskJson;
-            taskJsonSection.style.display = 'block';
-            taskJsonMsg.innerHTML = '';
-        }
-
-        function setupEventListeners() {
-            // Task dropdown
-            taskDropdown.addEventListener('change', function() {
-                showTaskJson(this.value);
-                selectedTaskInput.value = this.value;
-            });
-
-            // JSON editor buttons
-            reloadTaskJsonBtn.addEventListener('click', function() {
-                if (currentTaskId && tasks[currentTaskId]) {
-                    taskJsonArea.value = JSON.stringify(tasks[currentTaskId], null, 2);
-                    showMessage(taskJsonMsg, 'Reloaded from original.', 'info');
-                }
-            });
-
-            saveTaskJsonBtn.addEventListener('click', async function() {
-                if (!currentTaskId) return;
-                let newJson;
-                try {
-                    newJson = JSON.parse(taskJsonArea.value);
-                    tasks[currentTaskId] = newJson;
-                    showMessage(taskJsonMsg, 'Saved successfully.', 'success');
-                } catch (e) {
-                    showMessage(taskJsonMsg, 'Invalid JSON: ' + e.message, 'error');
-                }
-            });
-
-            // Task list actions
-            taskList.addEventListener('click', function(e) {
-                const taskId = e.target.closest('[data-task-id]')?.dataset.taskId;
-                if (!taskId) return;
-
-                if (e.target.closest('.select-task')) {
-                    taskDropdown.value = taskId;
-                    selectedTaskInput.value = taskId;
-                    showTaskJson(taskId);
-                } else if (e.target.closest('.delete-task')) {
-                    if (confirm('Are you sure you want to delete this task?')) {
-                        delete tasks[taskId];
-                        tasksArray = tasksArray.filter(t => t.id !== taskId);
-                        populateTaskDropdown();
-                        renderTaskList();
-                    }
-                }
-            });            // Modal controls
-            setupModalControls();
-
-            // API Configuration
-            document.getElementById('apiConfigBtn').addEventListener('click', () => {
-                document.getElementById('apiConfigModal').classList.add('show');
-            });
-
-            document.getElementById('closeApiConfigModal').addEventListener('click', () => {
-                document.getElementById('apiConfigModal').classList.remove('show');
-            });
-
-            document.getElementById('cancelApiConfig').addEventListener('click', () => {
-                document.getElementById('apiConfigModal').classList.remove('show');
-            });
-
-            document.getElementById('testApiBtn').addEventListener('click', checkApiStatus);
-            document.getElementById('saveApiKey').addEventListener('click', saveApiKey);
-
-            // Generation controls
-            setupGenerationControls();
-        }
-
-        function setupModalControls() {            const createTaskBtn = document.getElementById('createTaskBtn');
-            const createTaskModal = document.getElementById('createTaskModal');
-            const qualityBtn = document.getElementById('qualityBtn');
-            const qualityModal = document.getElementById('qualityModal');
-
-            createTaskBtn.addEventListener('click', () => {
-                createTaskModal.classList.add('show');
-            });
-
-            qualityBtn.addEventListener('click', async () => {
-                try {
-                    const response = await fetch('/api/quality-config');
-                    if (response.ok) {
-                        const data = await response.json();
-                        const config = data.config;
-                        document.getElementById('minLength').value = config.min_length;
-                        document.getElementById('maxLength').value = config.max_length;
-                        document.getElementById('similarityThreshold').value = config.similarity_threshold;
-                        document.getElementById('thresholdValue').textContent = config.similarity_threshold;
-                        document.getElementById('validationRules').value = JSON.stringify(config.required_fields || []);
-                        document.getElementById('customValidators').value = JSON.stringify(config.custom_validators || []);
-                    }
-                } catch (error) {
-                    console.error('Error loading quality config:', error);
-                }                qualityModal.classList.add('show');
-            });
-
-            // Close modal handlers
-            document.getElementById('closeCreateModal').addEventListener('click', () => {
-                createTaskModal.classList.remove('show');
-            });            document.getElementById('closeQualityModal').addEventListener('click', () => {
-                qualityModal.classList.remove('show');
-            });
-
-            document.getElementById('cancelCreateTask').addEventListener('click', () => {
-                createTaskModal.classList.remove('show');
-            });            document.getElementById('cancelQuality').addEventListener('click', () => {
-                qualityModal.classList.remove('show');
-            });
-
-            // Save handlers
-            document.getElementById('saveTask').addEventListener('click', () => {
-                const taskId = document.getElementById('taskId').value;
-                const taskType = document.getElementById('taskType').value;
-                const taskDescription = document.getElementById('taskDescription').value;
-                const promptTemplate = document.getElementById('promptTemplate').value;
-
-                if (!taskId) {
-                    alert('Please enter a Task ID');
-                    return;
-                }
-
-                if (tasks[taskId]) {
-                    alert('Task ID already exists');
-                    return;
-                }
-
-                const newTask = {
-                    id: taskId,
-                    type: taskType,
-                    description: taskDescription,
-                    promptTemplate: promptTemplate
-                };
-
-                tasks[taskId] = newTask;
-                tasksArray.push(newTask);
-                populateTaskDropdown();
-                renderTaskList();
-                createTaskModal.classList.remove('show');
-                
-                // Clear form
-                document.getElementById('taskId').value = '';
-                document.getElementById('taskDescription').value = '';
-                document.getElementById('taskPrompt').value = '';
-            });
-
-            // Quality settings
-            const similarityThreshold = document.getElementById('similarityThreshold');
-            const thresholdValue = document.getElementById('thresholdValue');
-            
-            similarityThreshold.addEventListener('input', () => {
-                thresholdValue.textContent = similarityThreshold.value;
-            });
-
-            document.getElementById('saveQuality').addEventListener('click', async () => {
-                try {
-                    const minLength = parseInt(document.getElementById('minLength').value, 10);
-                    const maxLength = parseInt(document.getElementById('maxLength').value, 10);
-                    const similarityThreshold = parseFloat(document.getElementById('similarityThreshold').value);
-                    let requiredFields = [];
-                    let customValidators = [];
-                    try {
-                        requiredFields = JSON.parse(document.getElementById('validationRules').value || '[]');
-                    } catch (e) { requiredFields = []; }
-                    try {
-                        customValidators = JSON.parse(document.getElementById('customValidators').value || '[]');
-                    } catch (e) { customValidators = []; }
-
-                    const configData = {
-                        min_length: minLength,
-                        max_length: maxLength,
-                        similarity_threshold: similarityThreshold,
-                        required_fields: requiredFields,
-                        custom_validators: customValidators
-                    };
-
-                    const response = await fetch('/api/quality-config', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(configData)
-                    });
-                    if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(errorData.detail || 'Failed to save quality config');
-                    }
-                    qualityModal.classList.remove('show');
-                    showAlert('Quality settings saved successfully!', 'success');                } catch (error) {
-                    showAlert('Error saving quality settings: ' + error.message, 'error');
-                }
-            });            // Close modals when clicking outside
-            [createTaskModal, qualityModal].forEach(modal => {
-                modal.addEventListener('click', (e) => {
-                    if (e.target === modal) {
-                        modal.classList.remove('show');
-                    }
-                });
-            });
-        }        function setupGenerationControls() {
-            const testGeneration = document.getElementById('testGeneration');
-            const generateDataset = document.getElementById('generateDataset');
-            const progressSection = document.getElementById('progressSection');
-            const resultsSection = document.getElementById('resultsSection');
-            const progressBar = document.querySelector('.progress-bar');
-            const progressText = document.getElementById('progressText');
-
-            testGeneration.addEventListener('click', async () => {
-                const selectedTask = document.getElementById('selectedTask').value;
-                if (!selectedTask) {
-                    showAlert('Please select a task first', 'error');
-                    return;
-                }
-                
-                try {
-                    showAlert('Test generation started...', 'info');
-                    progressSection.style.display = 'block';
-                    progressText.textContent = 'Testing generation...';
-                    progressBar.style.width = '50%';
-
-                    const response = await fetch('/api/test-generation', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            task_id: selectedTask
-                        })
-                    });
-
-                    if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(errorData.detail || 'Test generation failed');
-                    }
-
-                    const result = await response.json();
-                    progressSection.style.display = 'none';
-                    showTestResults(result);
-                    showAlert('Test completed successfully!', 'success');
-                } catch (error) {
-                    progressSection.style.display = 'none';
-                    console.error('Error in test generation:', error);
-                    showAlert('Test generation failed: ' + error.message, 'error');
-                }
-            });
-
-            generateDataset.addEventListener('click', async () => {
-                const selectedTask = document.getElementById('selectedTask').value;
-                const entryCount = parseInt(document.getElementById('entryCount').value);
-                
-                if (!selectedTask) {
-                    showAlert('Please select a task first', 'error');
-                    return;
-                }
-
-                if (!entryCount || entryCount < 1 || entryCount > 1000) {
-                    showAlert('Please enter a valid number of entries (1-1000)', 'error');
-                    return;
-                }
-
-                try {
-                    progressSection.style.display = 'block';
-                    resultsSection.style.display = 'none';
-                    progressText.textContent = `Generating ${entryCount} entries...`;
-                    progressBar.style.width = '0%';
-
-                    // Start generation
-                    const response = await fetch('/api/generate', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            task_id: selectedTask,
-                            count: entryCount
-                        })
-                    });
-
-                    if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(errorData.detail || 'Dataset generation failed');
-                    }
-
-                    // Simulate progress during generation
-                    let progress = 0;
-                    const progressInterval = setInterval(() => {
-                        progress += Math.random() * 10;
-                        if (progress >= 90) {
-                            progress = 90; // Don't reach 100% until we get response
-                        }
-                        progressBar.style.width = progress + '%';
-                    }, 500);
-
-                    const result = await response.json();
-                    clearInterval(progressInterval);
-                    progressBar.style.width = '100%';
-                    
-                    setTimeout(() => {
-                        progressSection.style.display = 'none';
-                        showResults(result, selectedTask);
-                        showAlert(`Generated ${result.count} entries successfully!`, 'success');
-                    }, 500);
-
-                } catch (error) {
-                    progressSection.style.display = 'none';
-                    console.error('Error in dataset generation:', error);
-                    showAlert('Dataset generation failed: ' + error.message, 'error');
-                }
-            });
-
-            // Download buttons
-            document.addEventListener('click', (e) => {
-                if (e.target.closest('.download-btn')) {
-                    const format = e.target.closest('.download-btn').dataset.format;
-                    const selectedTask = document.getElementById('selectedTask').value;
-                    if (selectedTask) {
-                        downloadDataset(format, selectedTask);
-                    } else {
-                        showAlert('No task selected for download', 'error');
-                    }
-                }
-            });
-        }        async function showDatasetPreviewTable(taskId) {
-            const datasetPreview = document.getElementById('datasetPreview');
-            datasetPreview.innerHTML = '<div style="color:#aaa">Loading preview...</div>';
-            try {
-                const response = await fetch(`/api/preview/${taskId}`);
-                if (response.ok) {
-                    const html = await response.text();
-                    datasetPreview.innerHTML = html;
-                } else {
-                    datasetPreview.innerHTML = '<div class="alert alert-warning">No preview available</div>';
-                }
-            } catch (e) {
-                datasetPreview.innerHTML = '<div class="alert alert-danger">Error loading preview</div>';
-            }
-        }
-
-        function showTestResults(result) {
-            const resultsSection = document.getElementById('resultsSection');
-            const qualityReport = document.getElementById('qualityReport');
-            const datasetPreview = document.getElementById('datasetPreview');
-
-            qualityReport.style.display = 'block';
-            qualityReport.innerHTML = `
-                <strong>Test Generation Report:</strong><br>
-                • Test entries generated: ${result.test_entries ? result.test_entries.length : 0}<br>
-                • Status: ${result.status}<br>
-                • Task ID: ${result.task_id}
-            `;
-
-            // Show preview as table
-            if (result.task_id) {
-                showDatasetPreviewTable(result.task_id);
-            } else {
-                datasetPreview.innerHTML = '<div class="alert alert-warning">No preview available</div>';
-            }
-
-            resultsSection.style.display = 'block';
-        }
-
-        function showResults(result, taskId) {
-            const resultsSection = document.getElementById('resultsSection');
-            const qualityReport = document.getElementById('qualityReport');
-            const datasetPreview = document.getElementById('datasetPreview');
-
-            // Store current task ID for downloads
-            window.currentGeneratedTaskId = taskId;
-
-            qualityReport.style.display = 'block';
-            const qualityData = result.quality_report || {};
-            qualityReport.innerHTML = `
-                <strong>Quality Report:</strong><br>
-                • Generated entries: ${result.count || 0}<br>
-                • Quality score: ${qualityData.quality_score ? (qualityData.quality_score * 100).toFixed(1) + '%' : 'N/A'}<br>
-                • Duplicates removed: ${qualityData.duplicates_removed || 0}<br>
-                • Average length: ${qualityData.average_length ? qualityData.average_length.toFixed(1) + ' characters' : 'N/A'}<br>
-                • Generated at: ${new Date(result.generated_at).toLocaleString()}
-            `;
-
-            // Show preview as table
-            if (taskId) {
-                showDatasetPreviewTable(taskId);
-            } else {
-                datasetPreview.innerHTML = '<div class="alert alert-warning">No preview available</div>';
-            }
-
-            resultsSection.style.display = 'block';
-        }
-
-        async function downloadDataset(format, taskId) {
-            try {
-                showAlert(`Preparing ${format.toUpperCase()} download...`, 'info');
-                
-                const response = await fetch(`/api/download/${format}/${taskId}`);
-                
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.detail || 'Download failed');
-                }
-
-                // Get the filename from the response headers or use a default
-                const contentDisposition = response.headers.get('content-disposition');
-                let filename = `dataset_${taskId}.${format}`;
-                if (contentDisposition) {
-                    const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(contentDisposition);
-                    if (matches != null && matches[1]) {
-                        filename = matches[1].replace(/['"]/g, '');
-                    }
-                }
-
-                // Create blob and download
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-
-                showAlert(`Dataset downloaded successfully as ${format.toUpperCase()}!`, 'success');
-            } catch (error) {
-                console.error('Download error:', error);
-                showAlert('Download failed: ' + error.message, 'error');
-            }
-        }
-
-        function showMessage(container, message, type) {
-            const className = type === 'error' ? 'text-danger' : 
-                            type === 'success' ? 'text-success' : 'text-info';
-            container.innerHTML = `<span class="${className}">${message}</span>`;
-            setTimeout(() => {
-                container.innerHTML = '';
-            }, 3000);
-        }
-
-        function showAlert(message, type) {
-            const alertDiv = document.createElement('div');
-            alertDiv.className = `alert alert-${type === 'error' ? 'danger' : type}`;
-            alertDiv.innerHTML = `
-                <i class="fas fa-${type === 'error' ? 'exclamation-triangle' : 
-                                 type === 'success' ? 'check-circle' : 'info-circle'}"></i>
-                ${message}
-            `;
-            
-            const container = document.querySelector('.container');
-            container.insertBefore(alertDiv, container.firstChild);
-            
-            setTimeout(() => {
-                alertDiv.style.opacity = '0';
-                alertDiv.style.transform = 'translateY(-20px)';
-                setTimeout(() => alertDiv.remove(), 300);
-            }, 3000);
-        }
-
-        async function checkApiStatus() {
-            const apiStatus = document.getElementById('apiStatus');
-            try {
-                const response = await fetch('/api/status');
-                const status = await response.json();
-                
-                if (status.deepseek_api_configured) {
-                    apiStatus.className = 'alert alert-success';
-                    apiStatus.innerHTML = `
-                        <i class="fas fa-check-circle"></i>
-                        DeepSeek API is configured and ready to use
-                    `;
-                } else {
-                    apiStatus.className = 'alert alert-warning';
-                    apiStatus.innerHTML = `
-                        <i class="fas fa-exclamation-triangle"></i>
-                        DeepSeek API key not configured. Please set your API key.
-                    `;
-                }
-            } catch (error) {
-                apiStatus.className = 'alert alert-danger';
-                apiStatus.innerHTML = `
-                    <i class="fas fa-times-circle"></i>
-                    Error checking API status: ${error.message}
-                `;
-            }
-        }
-
-        async function saveApiKey() {
-            const apiKey = document.getElementById('apiKey').value;
-            if (!apiKey || !apiKey.startsWith('sk-')) {
-                showAlert('Please enter a valid DeepSeek API key (starts with sk-)', 'error');
-                return;
-            }
-
-            try {
-                // Note: This is a frontend-only approach - the API key would need to be 
-                // set as an environment variable on the server side for actual use
-                showAlert('API key saved for this session. Note: You need to set DEEPSEEK_API_KEY environment variable on the server for persistent use.', 'info');
-                
-                // Clear the input for security
-                document.getElementById('apiKey').value = '';
-                
-                // Close modal
-                document.getElementById('apiConfigModal').classList.remove('show');
-                
-                // Refresh API status
-                await checkApiStatus();
-                
-            } catch (error) {
-                showAlert('Error saving API key: ' + error.message, 'error');
-            }        }
-
-        // Initialize the application
-        init();
-
-        // Add some interactive animations
-
-        // createParticles(); // Commented out as it's not defined
-
         document.addEventListener('DOMContentLoaded', function() {
-            // Dynamically update W&B dashboard link based on project/entity
-            const wandbProjectInput = document.getElementById('wandbProject');
-            const wandbEntityInput = document.getElementById('wandbEntity');
-            const wandbDashboardLink = document.getElementById('wandbDashboardLink');
-            function updateWandbLink() {
-                const project = wandbProjectInput?.value?.trim() || 'dekdataset';
-                const entity = wandbEntityInput?.value?.trim();
-                let url = 'https://wandb.ai/';
-                if (entity) {
-                    url += encodeURIComponent(entity) + '/';
-                }
-                url += encodeURIComponent(project);
-                if (wandbDashboardLink) {
-                    wandbDashboardLink.href = url;
-                }
-            }
-            if (wandbProjectInput && wandbEntityInput && wandbDashboardLink) {
-                wandbProjectInput.addEventListener('input', updateWandbLink);
-                wandbEntityInput.addEventListener('input', updateWandbLink);
-                updateWandbLink();
+            // Update task count badge when tasks are loaded
+            const originalUpdateTaskList = window.datasetGenerator?.updateTaskList;
+            if (originalUpdateTaskList) {
+                window.datasetGenerator.updateTaskList = function(tasks) {
+                    originalUpdateTaskList.call(this, tasks);
+                    const taskCountBadge = document.getElementById('taskCount');
+                    if (taskCountBadge) {
+                        taskCountBadge.textContent = `${tasks.length} task${tasks.length !== 1 ? 's' : ''}`;
+                    }
+                };
             }
         });
-
-        // --- PDF Upload Drag & Drop ---
-        const pdfDropZone = document.getElementById('pdfDropZone');
-        const pdfFileInput = document.getElementById('pdfFileInput');
-        const uploadPdfBtn = document.getElementById('uploadPdfBtn');
-        const pdfUploadStatus = document.getElementById('pdfUploadStatus');
-        const pdfEntriesPreview = document.getElementById('pdfEntriesPreview');
-        let selectedPdfFile = null;
-
-        pdfDropZone.addEventListener('click', () => pdfFileInput.click());
-        pdfDropZone.addEventListener('dragover', e => {
-            e.preventDefault();
-            pdfDropZone.classList.add('dragover');
-        });
-        pdfDropZone.addEventListener('dragleave', e => {
-            e.preventDefault();
-            pdfDropZone.classList.remove('dragover');
-        });
-        pdfDropZone.addEventListener('drop', e => {
-            e.preventDefault();
-            pdfDropZone.classList.remove('dragover');
-            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                handlePdfFile(e.dataTransfer.files[0]);
-            }
-        });
-        pdfFileInput.addEventListener('change', e => {
-            if (e.target.files && e.target.files[0]) {
-                handlePdfFile(e.target.files[0]);
-            }
-        });
-        function handlePdfFile(file) {
-            if (!file.name.toLowerCase().endsWith('.pdf')) {
-                pdfUploadStatus.innerHTML = '<span class="text-danger">Only PDF files are allowed.</span>';
-                selectedPdfFile = null;
-                return;
-            }
-            selectedPdfFile = file;
-            pdfUploadStatus.innerHTML = `<span class="text-info">Selected: ${file.name}</span>`;
-        }
-        uploadPdfBtn.addEventListener('click', async () => {
-            if (!selectedPdfFile) {
-                pdfUploadStatus.innerHTML = '<span class="text-danger"><i class="fas fa-exclamation-circle"></i> Please select a PDF file first.</span>';
-                return;
-            }
-            const mistralApiKey = document.getElementById('mistralApiKey').value.trim();
-            if (!mistralApiKey || !mistralApiKey.startsWith('sk-')) {
-                pdfUploadStatus.innerHTML = '<span class="text-danger"><i class="fas fa-exclamation-circle"></i> Please enter a valid Mistral API Key (sk-...)</span>';
-                return;
-            }
-            pdfUploadStatus.innerHTML = '<span class="text-info"><i class="fas fa-spinner fa-spin"></i> Uploading and processing PDF...</span>';
-            pdfEntriesPreview.innerHTML = '';
-            // Set API key to backend
-            await fetch('/api/set-mistral-api-key', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ api_key: mistralApiKey })
-            });
-            const formData = new FormData();
-            formData.append('file', selectedPdfFile);
-            // Annotation options
-            const bbox = document.getElementById('bboxAnnotation').checked;
-            const doc = document.getElementById('docAnnotation').checked;
-            const pages = document.getElementById('ocrPages').value;
-            formData.append('bbox', bbox);
-            formData.append('doc', doc);
-            if (pages) formData.append('pages', pages);
-            try {
-                const res = await fetch('/api/document-ocr-annotation', {
-                    method: 'POST',
-                    body: formData
-                });
-                if (!res.ok) {
-                    const err = await res.json();
-                    pdfUploadStatus.innerHTML = `<span class="text-danger"><i class="fas fa-times-circle"></i> ${err.detail || 'Upload failed.'}</span>`;
-                    return;
-                }
-                const data = await res.json();
-                pdfUploadStatus.innerHTML = `<span class="text-success"><i class="fas fa-check-circle"></i> PDF imported and dataset created as <b>${data.task_id}</b>.<br>Preview below.</span>`;
-                // Show preview (first 10 entries)
-                if (data.entries_preview && data.entries_preview.length > 0) {
-                    let html = '<div style="max-height:220px;overflow:auto;"><table class="table table-sm table-bordered"><thead><tr><th>#</th><th>Input</th></tr></thead><tbody>';
-                    data.entries_preview.forEach((entry, i) => {
-                        html += `<tr><td>${i+1}</td><td style=\"max-width:400px;white-space:pre-wrap;\">${entry.input || JSON.stringify(entry)}</td></tr>`;
-                    });
-                    html += '</tbody></table>';
-                    if (data.count > 10) html += `<div style=\"color:#888;font-size:0.9em;\">...and ${data.count-10} more</div>`;
-                    html += '</div>';
-                    pdfEntriesPreview.innerHTML = html;
-                } else {
-                    pdfEntriesPreview.innerHTML = '<span class="text-warning">No entries extracted.</span>';
-                }
-                // Reload tasks so new task appears in dropdown
-                await loadTasks();
-                // Auto-select new task
-                document.getElementById('taskDropdown').value = data.task_id;
-                document.getElementById('selectedTask').value = data.task_id;
-                showTaskJson(data.task_id);
-            } catch (e) {
-                pdfUploadStatus.innerHTML = `<span class="text-danger"><i class="fas fa-times-circle"></i> Error: ${e}</span>`;
-            }        });
-        // --- End PDF Upload Drag & Drop ---
-
     </script>
 </body>
 </html>

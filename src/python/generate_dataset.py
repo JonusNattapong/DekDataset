@@ -57,6 +57,21 @@ class GeneratedData:
         self.data = data
 
 
+def build_data_entries_from_raw(entries, task_id, metadata):
+    """
+    สร้าง data_entries ในรูปแบบเดียวกับ generate_dataset.py
+    """
+    data_entries = []
+    for i, entry in enumerate(entries):
+        content = entry.get("content", entry)
+        if "metadata" in content:
+            del content["metadata"]
+        data_entries.append({
+            "id": f"{task_id}-{i+1}",
+            "content": content,
+            "metadata": metadata
+        })
+    return data_entries
 # ----------------- Task Definitions -----------------
 def get_task_definitions() -> Dict[str, dict]:
     try:

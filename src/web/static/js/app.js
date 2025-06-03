@@ -1,14 +1,26 @@
+// DekDataset Generator - JavaScript Application
 class DatasetGenerator {
     constructor() {
         this.selectedTaskId = null;
         this.tasks = [];
+        this.currentAbortController = null; // Add abort controller for cancellation
+        this.isGenerating = false; // Track generation state
         this.init();
     }
 
     init() {
+        console.log('Initializing DatasetGenerator...');
         this.bindEvents();
-        this.loadTasks();
-        this.loadQualityConfig();
+        
+        // Load tasks first, then other components
+        this.loadTasks().then(() => {
+            console.log('Tasks loaded, loading other components...');
+            this.loadQualityConfig();
+            this.loadAvailableModels();
+        }).catch(error => {
+            console.error('Error during initialization:', error);
+            this.showAlert('Error initializing application: ' + error.message, 'danger');
+        });
     }
 
     bindEvents() {
@@ -25,9 +37,17 @@ class DatasetGenerator {
             }
         });
 
+        // Model provider selection
+        document.addEventListener('change', (e) => {
+            if (e.target.name === 'modelProvider') {
+                this.switchModelProvider(e.target.value);
+            }
+        });
+
         // Generation buttons
         const testBtn = document.getElementById('testGeneration');
         const generateBtn = document.getElementById('generateDataset');
+        const stopBtn = document.getElementById('stopGeneration'); // Add stop button
         
         if (testBtn) {
             testBtn.addEventListener('click', () => this.testGeneration());
@@ -35,6 +55,11 @@ class DatasetGenerator {
         
         if (generateBtn) {
             generateBtn.addEventListener('click', () => this.generateDataset());
+        }
+
+        // Add stop button event listener
+        if (stopBtn) {
+            stopBtn.addEventListener('click', () => this.stopGeneration());
         }
 
         // Modal buttons
@@ -74,6 +99,40 @@ class DatasetGenerator {
         }
     }
 
+    switchModelProvider(provider) {
+        const deepseekSection = document.getElementById('deepseekModelSection');
+        const ollamaSection = document.getElementById('ollamaModelSection');
+        
+        if (provider === 'deepseek') {
+            deepseekSection.style.display = 'block';
+            ollamaSection.style.display = 'none';
+            deepseekSection.classList.add('active');
+            ollamaSection.classList.remove('active');
+        } else if (provider === 'ollama') {
+            deepseekSection.style.display = 'none';
+            ollamaSection.style.display = 'block';
+            ollamaSection.classList.add('active');
+            deepseekSection.classList.remove('active');
+        }
+    }
+
+    getSelectedModel() {
+        const providerRadio = document.querySelector('input[name="modelProvider"]:checked');
+        if (!providerRadio) return null;
+
+        const provider = providerRadio.value;
+        
+        if (provider === 'deepseek') {
+            const deepseekSelect = document.getElementById('deepseekModelSelect');
+            return deepseekSelect ? deepseekSelect.value : null;
+        } else if (provider === 'ollama') {
+            const ollamaSelect = document.getElementById('ollamaModelSelect');
+            return ollamaSelect ? ollamaSelect.value : null;
+        }
+        
+        return null;
+    }
+
     async loadTasks() {
         try {
             this.showAlert('Loading tasks...', 'info');
@@ -84,17 +143,15 @@ class DatasetGenerator {
             }
             
             const data = await response.json();
-            console.log('API Response:', data); // Debug log
+            console.log('API Response:', data);
             
-            // Handle both old and new API response formats
             this.tasks = data.tasks || data || [];
             this.updateTaskList(this.tasks);
-            
             this.showAlert(`Loaded ${this.tasks.length} tasks successfully`, 'success');
         } catch (error) {
             console.error('Error loading tasks:', error);
             this.showAlert('Error loading tasks: ' + error.message, 'danger');
-            this.updateTaskList([]); // Show empty state
+            this.updateTaskList([]);
         }
     }
 
@@ -149,117 +206,28 @@ class DatasetGenerator {
     selectTask(taskId) {
         this.selectedTaskId = taskId;
         
-        // Update selected task display
-        const selectedTaskElement = document.getElementById('selectedTask');
-        if (selectedTaskElement) {
-            selectedTaskElement.value = taskId;
-        }
-        
-        // Update UI - remove previous selection
+        // Update UI to show selected task
         document.querySelectorAll('.task-item').forEach(item => {
-            item.classList.remove('border-primary', 'bg-light');
+            item.classList.remove('selected');
         });
         
-        // Add selection styling
-        const selectedElement = document.querySelector(`[data-task-id="${taskId}"]`);
-        if (selectedElement) {
-            selectedElement.classList.add('border-primary', 'bg-light');
+        const selectedItem = document.querySelector(`[data-task-id="${taskId}"]`);
+        if (selectedItem) {
+            selectedItem.classList.add('selected');
         }
-
-        // Enable generation buttons
-        const testBtn = document.getElementById('testGeneration');
-        const generateBtn = document.getElementById('generateDataset');
         
-        if (testBtn) testBtn.disabled = false;
-        if (generateBtn) generateBtn.disabled = false;
-
-        this.showAlert(`Selected task: ${taskId}`, 'info');
-    }
-
-    async createTask() {
-        const taskData = {
-            task_id: document.getElementById('taskId')?.value?.trim(),
-            task_type: document.getElementById('taskType')?.value || 'custom',
-            description: document.getElementById('taskDescription')?.value?.trim(),
-            prompt_template: document.getElementById('promptTemplate')?.value?.trim()
-        };
-
-        // Validation
-        if (!taskData.task_id) {
-            this.showAlert('Task ID is required', 'warning');
-            return;
+        // Update selected task display
+        const selectedTaskInput = document.getElementById('selectedTask');
+        if (selectedTaskInput) {
+            selectedTaskInput.value = taskId;
         }
-
-        if (!taskData.description) {
-            this.showAlert('Task description is required', 'warning');
-            return;
+        
+        // Enable generation buttons only if not currently generating
+        if (!this.isGenerating) {
+            this.updateGenerationUI(false);
         }
-
-        if (!taskData.prompt_template) {
-            this.showAlert('Prompt template is required', 'warning');
-            return;
-        }
-
-        try {
-            const response = await fetch('/api/tasks', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(taskData)
-            });
-
-            const result = await response.json();
-
-            if (response.ok) {
-                this.showAlert('Task created successfully!', 'success');
-                
-                // Close modal
-                const modal = bootstrap.Modal.getInstance(document.getElementById('createTaskModal'));
-                if (modal) modal.hide();
-                
-                // Clear form
-                document.getElementById('createTaskForm')?.reset();
-                
-                // Reload tasks
-                await this.loadTasks();
-            } else {
-                this.showAlert('Error: ' + (result.error || 'Unknown error'), 'danger');
-            }
-        } catch (error) {
-            console.error('Error creating task:', error);
-            this.showAlert('Error creating task: ' + error.message, 'danger');
-        }
-    }
-
-    async deleteTask(taskId) {
-        if (!confirm(`Are you sure you want to delete task "${taskId}"?`)) {
-            return;
-        }
-
-        try {
-            const response = await fetch(`/api/tasks/${taskId}`, {
-                method: 'DELETE'
-            });
-
-            const result = await response.json();
-
-            if (response.ok) {
-                this.showAlert('Task deleted successfully!', 'success');
-                
-                // Clear selection if deleted task was selected
-                if (this.selectedTaskId === taskId) {
-                    this.selectedTaskId = null;
-                    const selectedTaskElement = document.getElementById('selectedTask');
-                    if (selectedTaskElement) selectedTaskElement.value = '';
-                }
-                
-                await this.loadTasks();
-            } else {
-                this.showAlert('Error: ' + (result.error || 'Unknown error'), 'danger');
-            }
-        } catch (error) {
-            console.error('Error deleting task:', error);
-            this.showAlert('Error deleting task: ' + error.message, 'danger');
-        }
+        
+        this.showAlert(`Selected task: ${taskId}`, 'success');
     }
 
     async testGeneration() {
@@ -267,29 +235,58 @@ class DatasetGenerator {
             this.showAlert('Please select a task first', 'warning');
             return;
         }
-        const model = document.getElementById('modelSelect')?.value || 'deepseek-chat';
+        
+        const model = this.getSelectedModel() || 'deepseek-chat';
+        if (!model) {
+            this.showAlert('Please select a model first', 'warning');
+            return;
+        }
+
+        // Set generation state
+        this.isGenerating = true;
+        this.updateGenerationUI(true);
+        this.currentAbortController = new AbortController();
+        
         this.showProgress('Testing generation...', 30);
+        
         try {
             const response = await fetch('/api/test-generation', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ task_id: this.selectedTaskId, model })
+                body: JSON.stringify({ task_id: this.selectedTaskId, model }),
+                signal: this.currentAbortController.signal
             });
 
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
             const result = await response.json();
-            
-            if (response.ok) {
-                this.showProgress('Test completed!', 100);
-                this.displayResults(result);
+            this.hideProgress();
+
+            if (result.success) {
+                const output = result.sample || result.output || 'Generation completed successfully';
                 this.showAlert('Test generation completed successfully!', 'success');
+                
+                // Show result in a modal or alert
+                this.displayGenerationResult('Test Result', output);
             } else {
-                this.showAlert('Test failed: ' + (result.error || 'Unknown error'), 'danger');
+                this.showAlert('Test generation failed: ' + (result.error || 'Unknown error'), 'danger');
             }
         } catch (error) {
-            console.error('Test generation error:', error);
-            this.showAlert('Error: ' + error.message, 'danger');
+            this.hideProgress();
+            
+            if (error.name === 'AbortError') {
+                this.showAlert('Test generation was cancelled by user', 'warning');
+            } else {
+                console.error('Error during test generation:', error);
+                this.showAlert('Error during test generation: ' + error.message, 'danger');
+            }
         } finally {
-            setTimeout(() => this.hideProgress(), 2000);
+            // Reset generation state
+            this.isGenerating = false;
+            this.updateGenerationUI(false);
+            this.currentAbortController = null;
         }
     }
 
@@ -298,226 +295,114 @@ class DatasetGenerator {
             this.showAlert('Please select a task first', 'warning');
             return;
         }
-        const model = document.getElementById('modelSelect')?.value || 'deepseek-chat';
-        const countElement = document.getElementById('entryCount');
-        const count = parseInt(countElement?.value || '10');
-        if (count <= 0 || count > 1000) {
-            this.showAlert('Entry count must be between 1 and 1000', 'warning');
+        
+        const model = this.getSelectedModel() || 'deepseek-chat';
+        if (!model) {
+            this.showAlert('Please select a model first', 'warning');
             return;
         }
-        this.showProgress('Generating dataset...', 0);
+        
+        const entryCount = parseInt(document.getElementById('entryCount')?.value || '10');
+
+        // Set generation state
+        this.isGenerating = true;
+        this.updateGenerationUI(true);
+        this.currentAbortController = new AbortController();
+        
+        this.showProgress('Generating dataset...', 10);
+        
         try {
             const response = await fetch('/api/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    task_id: this.selectedTaskId,
-                    count: count,
-                    model: model
-                })
+                body: JSON.stringify({ 
+                    task_id: this.selectedTaskId, 
+                    model: model,
+                    count: entryCount // Fix: use 'count' instead of 'entry_count'
+                }),
+                signal: this.currentAbortController.signal
             });
 
-            // Simulate progress
-            let progress = 0;
-            const progressInterval = setInterval(() => {
-                progress += Math.random() * 15;
-                if (progress > 90) progress = 90;
-                this.showProgress(`Generating dataset... ${Math.round(progress)}%`, progress);
-            }, 1000);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
 
             const result = await response.json();
-            clearInterval(progressInterval);
+            this.hideProgress();
 
-            if (response.ok) {
-                this.showProgress('Generation completed!', 100);
-                this.displayResults(result);
-                this.showAlert(`Generated ${result.count || count} entries successfully!`, 'success');
+            if (result.entries && result.entries.length > 0) {
+                this.showAlert(`Dataset generation completed! Generated ${result.entries.length} entries.`, 'success');
+                this.displayDatasetResult(result);
             } else {
-                this.showAlert('Generation failed: ' + (result.error || 'Unknown error'), 'danger');
+                this.showAlert('Dataset generation completed but no entries were generated.', 'warning');
             }
         } catch (error) {
-            console.error('Generation error:', error);
-            this.showAlert('Error: ' + error.message, 'danger');
+            this.hideProgress();
+            
+            if (error.name === 'AbortError') {
+                this.showAlert('Dataset generation was cancelled by user', 'warning');
+            } else {
+                console.error('Error during dataset generation:', error);
+                this.showAlert('Error during dataset generation: ' + error.message, 'danger');
+            }
         } finally {
-            setTimeout(() => this.hideProgress(), 2000);
+            // Reset generation state
+            this.isGenerating = false;
+            this.updateGenerationUI(false);
+            this.currentAbortController = null;
         }
     }
 
-    displayResults(result) {
-        const resultsSection = document.getElementById('resultsSection');
-        const qualityReport = document.getElementById('qualityReport');
-        const datasetPreview = document.getElementById('datasetPreview');
-
-        if (!resultsSection) return;
-
-        const entries = result.entries || result.test_entries || [];
-        // Show quality report
-        if (qualityReport) {
-            const report = result.quality_report || {};
-            qualityReport.innerHTML = `
-                <div class="card">
-                    <div class="card-header">
-                        <h6 class="mb-0">Quality Report</h6>
-                    </div>
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <strong>Total entries:</strong> ${entries.length}<br>
-                                <strong>Generated at:</strong> ${result.generated_at ? new Date(result.generated_at).toLocaleString() : 'N/A'}
-                            </div>
-                            <div class="col-md-6">
-                                ${Object.entries(report).map(([key, value]) => 
-                                    `<strong>${key}:</strong> ${value}<br>`).join('')}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-
-        // Show preview
-        if (datasetPreview) {
-            if (entries.length === 0) {
-                datasetPreview.innerHTML = '<div class="alert alert-warning">No entries generated</div>';
-            } else {
-                // Try to infer columns from the first entry
-                const columns = this.getPreviewColumns(entries);
-                let html = `<div class="card"><div class="card-header"><h6 class="mb-0">Dataset Preview</h6></div><div class="card-body"><div class="table-responsive"><table class="table table-sm table-striped"><thead><tr>`;
-                columns.forEach(col => {
-                    html += `<th>${this.escapeHtml(col.header)}</th>`;
-                });
-                html += '</tr></thead><tbody>';
-                entries.slice(0, 10).forEach((entry, idx) => {
-                    html += '<tr>';
-                    columns.forEach(col => {
-                        let val = col.getter(entry, idx);
-                        if (typeof val === 'object' && val !== null) val = JSON.stringify(val);
-                        html += `<td style="max-width:320px;white-space:pre-wrap;">${this.escapeHtml(val == null ? '' : String(val))}</td>`;
-                    });
-                    html += '</tr>';
-                });
-                html += '</tbody></table>';
-                if (entries.length > 10) html += `<div style=\"color:#888;font-size:0.9em;\">...and ${entries.length-10} more</div>`;
-                html += '</div></div></div>';
-                datasetPreview.innerHTML = html;
-            }
-        }
-
-        resultsSection.style.display = 'block';
-        resultsSection.scrollIntoView({ behavior: 'smooth' });
-    }
-
-    /**
-     * Try to infer the best columns for preview from the dataset entries.
-     * Returns an array of {header, getter} objects.
-     */
-    getPreviewColumns(entries) {
-        if (!entries || entries.length === 0) return [
-            { header: '#', getter: (e, i) => i + 1 },
-            { header: 'Content', getter: e => JSON.stringify(e) }
-        ];
-        const first = entries[0];
-        // Common field sets
-        const fieldSets = [
-            // QA
-            ['context', 'question', 'answer'],
-            // Classification
-            ['text', 'label'],
-            // OCR/Doc
-            ['input', 'output', 'bbox', 'page'],
-            // Token classification
-            ['tokens', 'labels'],
-            // Generic
-            ['content', 'label'],
-        ];
-        let chosen = null;
-        for (const fields of fieldSets) {
-            if (fields.every(f => f in first)) {
-                chosen = fields;
-                break;
-            }
-        }
-        if (!chosen) {
-            // Fallback: use up to 4 top-level keys
-            const keys = Object.keys(first).slice(0, 4);
-            chosen = keys.length ? keys : null;
-        }
-        if (chosen) {
-            return [
-                { header: '#', getter: (e, i) => i + 1 },
-                ...chosen.map(key => ({ header: key.charAt(0).toUpperCase() + key.slice(1), getter: e => e[key] }))
-            ];
-        }
-        // Fallback: just show JSON
-        return [
-            { header: '#', getter: (e, i) => i + 1 },
-            { header: 'Content', getter: e => JSON.stringify(e) }
-        ];
-    }
-
-    async loadQualityConfig() {
-        try {
-            const response = await fetch('/api/quality-config');
-            if (response.ok) {
-                const data = await response.json();
-                this.updateQualityConfigUI(data.config);
-            }
-        } catch (error) {
-            console.warn('Could not load quality config:', error);
+    stopGeneration() {
+        if (this.currentAbortController && this.isGenerating) {
+            this.currentAbortController.abort();
+            this.showAlert('Stopping generation...', 'info');
         }
     }
 
-    updateQualityConfigUI(config) {
-        if (!config) return;
+    updateGenerationUI(isGenerating) {
+        const testBtn = document.getElementById('testGeneration');
+        const generateBtn = document.getElementById('generateDataset');
+        const stopBtn = document.getElementById('stopGeneration');
+        const entryCountInput = document.getElementById('entryCount');
+        const modelProviderRadios = document.querySelectorAll('input[name="modelProvider"]');
+        const modelSelects = document.querySelectorAll('#deepseekModelSelect, #ollamaModelSelect');
 
-        const elements = {
-            'minLength': config.min_length,
-            'maxLength': config.max_length,
-            'similarityThreshold': config.similarity_threshold
-        };
-
-        Object.entries(elements).forEach(([id, value]) => {
-            const element = document.getElementById(id);
-            if (element && value !== undefined) {
-                element.value = value;
+        if (isGenerating) {
+            // Disable generation buttons and inputs
+            if (testBtn) {
+                testBtn.disabled = true;
+                testBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
             }
-        });
-
-        // Update threshold display
-        const thresholdValue = document.getElementById('thresholdValue');
-        if (thresholdValue && config.similarity_threshold) {
-            thresholdValue.textContent = config.similarity_threshold;
-        }
-    }
-
-    async updateQualitySettings() {
-        const config = {
-            min_length: parseInt(document.getElementById('minLength')?.value || '10'),
-            max_length: parseInt(document.getElementById('maxLength')?.value || '1000'),
-            similarity_threshold: parseFloat(document.getElementById('similarityThreshold')?.value || '0.8')
-        };
-
-        try {
-            const response = await fetch('/api/quality-config', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(config)
-            });
-
-            const result = await response.json();
-
-            if (response.ok) {
-                this.showAlert('Quality settings updated successfully!', 'success');
-                
-                // Close modal if exists
-                const modal = bootstrap.Modal.getInstance(document.getElementById('qualityModal'));
-                if (modal) modal.hide();
-            } else {
-                this.showAlert('Error: ' + (result.error || 'Unknown error'), 'danger');
+            if (generateBtn) {
+                generateBtn.disabled = true;
+                generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
             }
-        } catch (error) {
-            console.error('Error updating quality settings:', error);
-            this.showAlert('Error updating quality settings: ' + error.message, 'danger');
+            if (stopBtn) {
+                stopBtn.style.display = 'inline-flex';
+                stopBtn.disabled = false;
+            }
+            if (entryCountInput) entryCountInput.disabled = true;
+            
+            modelProviderRadios.forEach(radio => radio.disabled = true);
+            modelSelects.forEach(select => select.disabled = true);
+        } else {
+            // Re-enable generation buttons and inputs
+            if (testBtn) {
+                testBtn.disabled = !this.selectedTaskId;
+                testBtn.innerHTML = '<i class="fas fa-flask"></i> Test Generation';
+            }
+            if (generateBtn) {
+                generateBtn.disabled = !this.selectedTaskId;
+                generateBtn.innerHTML = '<i class="fas fa-rocket"></i> Generate Dataset';
+            }
+            if (stopBtn) {
+                stopBtn.style.display = 'none';
+            }
+            if (entryCountInput) entryCountInput.disabled = false;
+            
+            modelProviderRadios.forEach(radio => radio.disabled = false);
+            modelSelects.forEach(select => select.disabled = false);
         }
     }
 
@@ -528,14 +413,13 @@ class DatasetGenerator {
         const progressBar = progressSection.querySelector('.progress-bar');
         const progressText = document.getElementById('progressText');
 
-        progressSection.style.display = 'block';
+        if (progressText) progressText.innerHTML = `<i class="fas fa-cog fa-spin me-2"></i>${text}`;
         if (progressBar) {
-            progressBar.style.width = Math.min(percent, 100) + '%';
+            progressBar.style.width = `${percent}%`;
             progressBar.setAttribute('aria-valuenow', Math.min(percent, 100));
         }
-        if (progressText) {
-            progressText.textContent = text;
-        }
+
+        progressSection.style.display = 'block';
     }
 
     hideProgress() {
@@ -543,65 +427,30 @@ class DatasetGenerator {
         if (progressSection) {
             progressSection.style.display = 'none';
         }
+        
+        // Reset UI state
+        this.updateGenerationUI(false);
     }
 
     showAlert(message, type = 'info') {
-        // Remove existing alerts of the same type
-        document.querySelectorAll(`.alert-${type}`).forEach(alert => {
-            if (alert.textContent.includes(message.substring(0, 20))) {
-                alert.remove();
-            }
-        });
+        const alertContainer = document.getElementById('alertContainer');
+        if (!alertContainer) return;
 
         const alertDiv = document.createElement('div');
-        alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
-        alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; max-width: 400px;';
+        alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
         alertDiv.innerHTML = `
-            ${this.escapeHtml(message)}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         `;
 
-        document.body.appendChild(alertDiv);
+        alertContainer.appendChild(alertDiv);
 
-        // Auto-dismiss after 5 seconds
+        // Auto-remove after 5 seconds
         setTimeout(() => {
             if (alertDiv.parentNode) {
                 alertDiv.remove();
             }
         }, 5000);
-    }
-
-    async downloadDataset(format) {
-        if (!this.selectedTaskId) {
-            this.showAlert('No task selected for download', 'warning');
-            return;
-        }
-
-        try {
-            // Check if dataset exists
-            const response = await fetch(`/api/download/${format}/${this.selectedTaskId}`);
-            
-            if (response.ok) {
-                // Create download link
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `dataset_${this.selectedTaskId}.${format}`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                window.URL.revokeObjectURL(url);
-                
-                this.showAlert(`Dataset downloaded as ${format.toUpperCase()}`, 'success');
-            } else {
-                const error = await response.json();
-                this.showAlert('Download failed: ' + (error.error || 'Unknown error'), 'danger');
-            }
-        } catch (error) {
-            console.error('Download error:', error);
-            this.showAlert('Download error: ' + error.message, 'danger');
-        }
     }
 
     escapeHtml(text) {
@@ -610,30 +459,632 @@ class DatasetGenerator {
         return div.innerHTML;
     }
 
-    // Debug helper
-    getStatus() {
-        return {
-            selectedTaskId: this.selectedTaskId,
-            tasksCount: this.tasks.length,
-            tasks: this.tasks
-        };
+    // Additional methods would go here (createTask, deleteTask, loadQualityConfig, etc.)
+    async createTask() {
+        const taskId = document.getElementById('taskId')?.value?.trim();
+        const taskDescription = document.getElementById('taskDescription')?.value?.trim();
+        const taskType = document.getElementById('taskType')?.value || 'custom';
+        const systemPrompt = document.getElementById('systemPrompt')?.value?.trim();
+        const userTemplate = document.getElementById('userTemplate')?.value?.trim();
+
+        if (!taskId) {
+            this.showAlert('Task ID is required', 'warning');
+            return;
+        }
+
+        if (!taskDescription && !systemPrompt && !userTemplate) {
+            this.showAlert('At least one of description, system prompt, or user template is required', 'warning');
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/tasks', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    id: taskId,
+                    description: taskDescription,
+                    type: taskType,
+                    system_prompt: systemPrompt,
+                    user_template: userTemplate
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const result = await response.json();
+            
+            // Close the modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('createTaskModal'));
+            if (modal) modal.hide();
+
+            // Clear the form
+            document.getElementById('createTaskForm')?.reset();
+
+            this.showAlert(`Task "${taskId}" created successfully!`, 'success');
+            
+            // Reload tasks to show the new one
+            await this.loadTasks();
+
+        } catch (error) {
+            console.error('Error creating task:', error);
+            this.showAlert('Error creating task: ' + error.message, 'danger');
+        }
     }
+
+    async deleteTask(taskId) {
+        if (!taskId) {
+            this.showAlert('Invalid task ID', 'warning');
+            return;
+        }
+
+        // Show confirmation dialog
+        const confirmed = confirm(`Are you sure you want to delete task "${taskId}"? This action cannot be undone.`);
+        if (!confirmed) return;
+
+        try {
+            const response = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            // If this was the selected task, clear selection
+            if (this.selectedTaskId === taskId) {
+                this.selectedTaskId = null;
+                const testBtn = document.getElementById('testGeneration');
+                const generateBtn = document.getElementById('generateDataset');
+                if (testBtn) testBtn.disabled = true;
+                if (generateBtn) generateBtn.disabled = true;
+            }
+
+            this.showAlert(`Task "${taskId}" deleted successfully!`, 'success');
+            
+            // Reload tasks to reflect the deletion
+            await this.loadTasks();
+
+        } catch (error) {
+            console.error('Error deleting task:', error);
+            this.showAlert('Error deleting task: ' + error.message, 'danger');
+        }
+    }
+
+    async loadQualityConfig() {
+        try {
+            const response = await fetch('/api/quality-config');
+            
+            if (response.ok) {
+                const config = await response.json();
+                
+                // Update UI elements with loaded config
+                const similaritySlider = document.getElementById('similarityThreshold');
+                const thresholdValue = document.getElementById('thresholdValue');
+                const enableFilter = document.getElementById('enableQualityFilter');
+                const minLength = document.getElementById('minResponseLength');
+                const maxLength = document.getElementById('maxResponseLength');
+                const enableDuplicateDetection = document.getElementById('enableDuplicateDetection');
+
+                if (similaritySlider && config.similarity_threshold !== undefined) {
+                    similaritySlider.value = config.similarity_threshold;
+                    if (thresholdValue) thresholdValue.textContent = config.similarity_threshold;
+                }
+                
+                if (enableFilter && config.enable_quality_filter !== undefined) {
+                    enableFilter.checked = config.enable_quality_filter;
+                }
+                
+                if (minLength && config.min_response_length !== undefined) {
+                    minLength.value = config.min_response_length;
+                }
+                
+                if (maxLength && config.max_response_length !== undefined) {
+                    maxLength.value = config.max_response_length;
+                }
+                
+                if (enableDuplicateDetection && config.enable_duplicate_detection !== undefined) {
+                    enableDuplicateDetection.checked = config.enable_duplicate_detection;
+                }
+
+                console.log('Quality config loaded:', config);
+            } else {
+                console.warn('Could not load quality config, using defaults');
+            }
+        } catch (error) {
+            console.error('Error loading quality config:', error);
+            // Don't show error alert for config loading as it's not critical
+        }
+    }
+
+    async updateQualitySettings() {
+        const similarityThreshold = parseFloat(document.getElementById('similarityThreshold')?.value || '0.8');
+        const enableFilter = document.getElementById('enableQualityFilter')?.checked || false;
+        const minLength = parseInt(document.getElementById('minResponseLength')?.value || '10');
+        const maxLength = parseInt(document.getElementById('maxResponseLength')?.value || '2000');
+        const enableDuplicateDetection = document.getElementById('enableDuplicateDetection')?.checked || true;
+
+        // Validate inputs
+        if (minLength < 0 || maxLength < 0 || minLength > maxLength) {
+            this.showAlert('Invalid length settings. Min length must be less than max length and both must be positive.', 'warning');
+            return;
+        }
+
+        if (similarityThreshold < 0 || similarityThreshold > 1) {
+            this.showAlert('Similarity threshold must be between 0 and 1.', 'warning');
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/quality-config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    similarity_threshold: similarityThreshold,
+                    enable_quality_filter: enableFilter,
+                    min_response_length: minLength,
+                    max_response_length: maxLength,
+                    enable_duplicate_detection: enableDuplicateDetection
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            // Close the modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('qualityModal'));
+            if (modal) modal.hide();
+
+            this.showAlert('Quality settings updated successfully!', 'success');
+
+        } catch (error) {
+            console.error('Error updating quality settings:', error);
+            this.showAlert('Error updating quality settings: ' + error.message, 'danger');
+        }
+    }
+
+    async loadAvailableModels() {
+        try {
+            // Load DeepSeek models (always available)
+            const deepseekSelect = document.getElementById('deepseekModelSelect');
+            if (deepseekSelect) {
+                deepseekSelect.innerHTML = `
+                    <option value="deepseek-chat">DeepSeek-V3-0324</option>
+                    <option value="deepseek-reasoner">DeepSeek-R1-0528</option>
+                `;
+            }
+
+            // Load Ollama models
+            try {
+                const response = await fetch('/api/models/ollama');
+                if (response.ok) {
+                    const data = await response.json();
+                    const ollamaSelect = document.getElementById('ollamaModelSelect');
+                    
+                    if (ollamaSelect) {
+                        if (data.models && data.models.length > 0) {
+                            ollamaSelect.innerHTML = data.models.map(model => 
+                                `<option value="ollama:${model}">${model}</option>`
+                            ).join('');
+                            
+                            // Enable Ollama provider if models are available
+                            const ollamaRadio = document.querySelector('input[name="modelProvider"][value="ollama"]');
+                            if (ollamaRadio) {
+                                ollamaRadio.disabled = false;
+                                const ollamaLabel = ollamaRadio.closest('label');
+                                if (ollamaLabel) {
+                                    ollamaLabel.classList.remove('disabled');
+                                }
+                            }
+                        } else {
+                            ollamaSelect.innerHTML = '<option value="">No Ollama models available</option>';
+                            
+                            // Disable Ollama provider if no models
+                            const ollamaRadio = document.querySelector('input[name="modelProvider"][value="ollama"]');
+                            if (ollamaRadio) {
+                                ollamaRadio.disabled = true;
+                                const ollamaLabel = ollamaRadio.closest('label');
+                                if (ollamaLabel) {
+                                    ollamaLabel.classList.add('disabled');
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                console.warn('Could not load Ollama models:', error);
+                const ollamaSelect = document.getElementById('ollamaModelSelect');
+                if (ollamaSelect) {
+                    ollamaSelect.innerHTML = '<option value="">Ollama server not available</option>';
+                }
+            }
+
+            console.log('Available models loaded');
+        } catch (error) {
+            console.error('Error loading available models:', error);
+            // Don't show error alert as this is not critical for basic functionality
+        }
+    }
+
+    displayGenerationResult(title, output) {
+        // Create a modal to display generation results
+        const modalHtml = `
+            <div class="modal fade" id="generationResultModal" tabindex="-1">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">${this.escapeHtml(title)}</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <pre class="bg-light p-3 rounded" style="max-height: 400px; overflow-y: auto;">${this.escapeHtml(JSON.stringify(output, null, 2))}</pre>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Remove existing modal if any
+        const existingModal = document.getElementById('generationResultModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+
+        // Add modal to document
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('generationResultModal'));
+        modal.show();
+
+        // Clean up modal when hidden
+        document.getElementById('generationResultModal').addEventListener('hidden.bs.modal', function() {
+            this.remove();
+        });
+    }
+
+    displayDatasetResult(result) {
+        // Show dataset generation results and enable download
+        const downloadSection = document.getElementById('downloadSection');
+        if (!downloadSection) return;
+
+        downloadSection.style.display = 'block';
+        
+        // Update result summary
+        const resultSummary = document.getElementById('resultSummary');
+        if (resultSummary) {
+            resultSummary.innerHTML = `
+                <div class="alert alert-success">
+                    <h5><i class="fas fa-check-circle"></i> Dataset Generated Successfully!</h5>
+                    <p><strong>Task:</strong> ${this.escapeHtml(result.task_id)}</p>
+                    <p><strong>Entries:</strong> ${result.count}</p>
+                    <p><strong>Generated:</strong> ${new Date(result.generated_at).toLocaleString()}</p>
+                    ${result.quality_report ? `<p><strong>Quality Score:</strong> ${(result.quality_report.quality_score * 100).toFixed(1)}%</p>` : ''}
+                </div>
+            `;
+        }
+
+        // Enable download buttons
+        const downloadBtns = document.querySelectorAll('.download-btn');
+        downloadBtns.forEach(btn => {
+            btn.disabled = false;
+            btn.dataset.taskId = result.task_id;
+        });
+
+        // Show preview table
+        this.displayPreviewTable(result.entries);
+
+        // Show a sample of the generated data
+        if (result.entries && result.entries.length > 0) {
+            const sampleEntry = result.entries[0];
+            const sampleDisplay = document.getElementById('sampleDisplay');
+            if (sampleDisplay) {
+                sampleDisplay.innerHTML = `
+                    <h6>Sample Entry (JSON):</h6>
+                    <pre class="bg-light p-2 rounded" style="max-height: 200px; overflow-y: auto;">${this.escapeHtml(JSON.stringify(sampleEntry, null, 2))}</pre>
+                `;
+            }
+        }
+    }
+
+    displayPreviewTable(entries) {
+        const previewContainer = document.getElementById('previewTableContainer');
+        if (!previewContainer || !entries || entries.length === 0) return;
+
+        // Extract all unique fields from content across all entries
+        const allFields = new Set(['id']); // Always include ID
+        entries.forEach(entry => {
+            if (entry.content && typeof entry.content === 'object') {
+                Object.keys(entry.content).forEach(field => allFields.add(field));
+            }
+        });
+
+        const fields = Array.from(allFields);
+        
+        // Create table HTML
+        const tableHtml = `
+            <div class="card mt-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5><i class="fas fa-table"></i> Dataset Preview</h5>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-primary" onclick="datasetGenerator.toggleTableView('compact')">
+                            <i class="fas fa-compress"></i> Compact
+                        </button>
+                        <button class="btn btn-outline-primary" onclick="datasetGenerator.toggleTableView('full')">
+                            <i class="fas fa-expand"></i> Full
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="datasetGenerator.exportTableToCSV()">
+                            <i class="fas fa-download"></i> Export CSV
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                        <table class="table table-striped table-hover mb-0" id="previewTable">
+                            <thead class="table-dark sticky-top">
+                                <tr>
+                                    ${fields.map(field => `<th class="text-nowrap">${this.escapeHtml(field)}</th>`).join('')}
+                                    <th class="text-nowrap">Source</th>
+                                    <th class="text-nowrap">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${entries.slice(0, 50).map((entry, index) => `
+                                    <tr data-entry-index="${index}">
+                                        <td class="text-nowrap">${this.escapeHtml(entry.id || `entry-${index + 1}`)}</td>
+                                        ${fields.slice(1).map(field => {
+                                            const value = entry.content && entry.content[field] ? entry.content[field] : '';
+                                            const displayValue = typeof value === 'string' ? value : JSON.stringify(value);
+                                            const truncated = displayValue.length > 100 ? displayValue.substring(0, 100) + '...' : displayValue;
+                                            return `<td class="entry-content" data-field="${field}" data-full-value="${this.escapeHtml(displayValue)}" title="${this.escapeHtml(displayValue)}">${this.escapeHtml(truncated)}</td>`;
+                                        }).join('')}
+                                        <td class="text-nowrap">
+                                            <small class="text-muted">${this.escapeHtml(entry.metadata?.source || 'Unknown')}</small>
+                                        </td>
+                                        <td class="text-nowrap">
+                                            <button class="btn btn-sm btn-outline-info me-1" onclick="datasetGenerator.viewEntryDetails(${index})" title="View Details">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-secondary" onclick="datasetGenerator.copyEntryToClipboard(${index})" title="Copy JSON">
+                                                <i class="fas fa-copy"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                                ${entries.length > 50 ? `
+                                    <tr>
+                                        <td colspan="${fields.length + 2}" class="text-center text-muted py-3">
+                                            <i class="fas fa-info-circle"></i> Showing first 50 entries out of ${entries.length} total entries.
+                                            <button class="btn btn-link btn-sm" onclick="datasetGenerator.showAllEntries()">Show All</button>
+                                        </td>
+                                    </tr>
+                                ` : ''}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card-footer text-muted">
+                    <small>
+                        <i class="fas fa-info-circle"></i> Total: ${entries.length} entries | 
+                        Fields: ${fields.length} | 
+                        Click on entries to view full content
+                    </small>
+                </div>
+            </div>
+        `;
+
+        previewContainer.innerHTML = tableHtml;
+        
+        // Store entries for later use
+        this.currentEntries = entries;
+        this.currentFields = fields;
+
+        // Add click handlers for expandable content
+        this.addTableInteractivity();
+    }
+
+    addTableInteractivity() {
+        // Add click to expand content
+        document.querySelectorAll('.entry-content').forEach(cell => {
+            cell.addEventListener('click', function() {
+                const fullValue = this.getAttribute('data-full-value');
+                const field = this.getAttribute('data-field');
+                
+                if (fullValue && fullValue.length > 100) {
+                    const modal = document.createElement('div');
+                    modal.className = 'modal fade';
+                    modal.innerHTML = `
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Field: ${field}</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <pre class="bg-light p-3 rounded" style="white-space: pre-wrap; word-break: break-word;">${fullValue}</pre>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                    <button type="button" class="btn btn-primary" onclick="navigator.clipboard.writeText('${fullValue.replace(/'/g, "\\'")}')">Copy</button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    document.body.appendChild(modal);
+                    const bsModal = new bootstrap.Modal(modal);
+                    bsModal.show();
+                    
+                    modal.addEventListener('hidden.bs.modal', () => {
+                        modal.remove();
+                    });
+                }
+            });
+        });
+    }
+
+    toggleTableView(viewType) {
+        const table = document.getElementById('previewTable');
+        if (!table) return;
+
+        if (viewType === 'compact') {
+            table.classList.add('table-sm');
+            document.querySelectorAll('.entry-content').forEach(cell => {
+                const fullValue = cell.getAttribute('data-full-value');
+                if (fullValue && fullValue.length > 50) {
+                    cell.textContent = fullValue.substring(0, 50) + '...';
+                }
+            });
+        } else {
+            table.classList.remove('table-sm');
+            document.querySelectorAll('.entry-content').forEach(cell => {
+                const fullValue = cell.getAttribute('data-full-value');
+                if (fullValue && fullValue.length > 100) {
+                    cell.textContent = fullValue.substring(0, 100) + '...';
+                } else if (fullValue) {
+                    cell.textContent = fullValue;
+                }
+            });
+        }
+    }
+
+    viewEntryDetails(index) {
+        if (!this.currentEntries || !this.currentEntries[index]) return;
+
+        const entry = this.currentEntries[index];
+        const modalHtml = `
+            <div class="modal fade" id="entryDetailsModal" tabindex="-1">
+                <div class="modal-dialog modal-xl">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Entry Details: ${this.escapeHtml(entry.id || `Entry ${index + 1}`)}</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h6>Content</h6>
+                                    <pre class="bg-light p-3 rounded" style="max-height: 300px; overflow-y: auto;">${this.escapeHtml(JSON.stringify(entry.content, null, 2))}</pre>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6>Metadata</h6>
+                                    <pre class="bg-light p-3 rounded" style="max-height: 300px; overflow-y: auto;">${this.escapeHtml(JSON.stringify(entry.metadata, null, 2))}</pre>
+                                </div>
+                            </div>
+                            <div class="mt-3">
+                                <h6>Full Entry (JSON)</h6>
+                                <pre class="bg-dark text-light p-3 rounded" style="max-height: 200px; overflow-y: auto;">${this.escapeHtml(JSON.stringify(entry, null, 2))}</pre>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                            <button type="button" class="btn btn-primary" onclick="datasetGenerator.copyEntryToClipboard(${index})">
+                                <i class="fas fa-copy"></i> Copy JSON
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Remove existing modal
+        const existingModal = document.getElementById('entryDetailsModal');
+        if (existingModal) existingModal.remove();
+
+        // Add and show modal
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        const modal = new bootstrap.Modal(document.getElementById('entryDetailsModal'));
+        modal.show();
+    }
+
+    copyEntryToClipboard(index) {
+        if (!this.currentEntries || !this.currentEntries[index]) return;
+
+        const entry = this.currentEntries[index];
+        const jsonString = JSON.stringify(entry, null, 2);
+        
+        navigator.clipboard.writeText(jsonString).then(() => {
+            this.showAlert('Entry JSON copied to clipboard!', 'success');
+        }).catch(err => {
+            console.error('Failed to copy to clipboard:', err);
+            this.showAlert('Failed to copy to clipboard', 'warning');
+        });
+    }
+
+    exportTableToCSV() {
+        if (!this.currentEntries || !this.currentFields) return;
+
+        // Create CSV content
+        const headers = [...this.currentFields, 'source', 'generated_at'];
+        const csvRows = [headers.join(',')];
+
+        this.currentEntries.forEach(entry => {
+            const row = [];
+            
+            // Add ID
+            row.push(this.escapeCSV(entry.id || ''));
+            
+            // Add content fields
+            this.currentFields.slice(1).forEach(field => {
+                const value = entry.content && entry.content[field] ? entry.content[field] : '';
+                const cellValue = typeof value === 'string' ? value : JSON.stringify(value);
+                row.push(this.escapeCSV(cellValue));
+            });
+            
+            // Add metadata
+            row.push(this.escapeCSV(entry.metadata?.source || ''));
+            row.push(this.escapeCSV(entry.metadata?.generated_at || ''));
+            
+            csvRows.push(row.join(','));
+        });
+
+        // Download CSV
+        const csvContent = csvRows.join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        
+        link.setAttribute('href', url);
+        link.setAttribute('download', `dataset_preview_${new Date().getTime()}.csv`);
+        link.style.visibility = 'hidden';
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        this.showAlert('CSV exported successfully!', 'success');
+    }
+
+    escapeCSV(value) {
+        if (value === null || value === undefined) return '';
+        const stringValue = String(value);
+        if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+            return `"${stringValue.replace(/"/g, '""')}"`;
+        }
+        return stringValue;
+    }
+
+    showAllEntries() {
+        if (!this.currentEntries) return;
+        
+        // Re-render table with all entries
+        this.displayPreviewTable(this.currentEntries);
+    }
+
+    // ...existing code...
 }
 
-// Initialize application
+// Initialize the application when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     window.datasetGenerator = new DatasetGenerator();
-    
-    // Debug helper
-    window.debugDatasetGenerator = () => {
-        console.log('Dataset Generator Status:', window.datasetGenerator.getStatus());
-    };    // Experiment tracking functionality removed
-});
-
-// Add global error handler
-window.addEventListener('error', (event) => {
-    console.error('Global error:', event.error);
-    if (window.datasetGenerator) {
-        window.datasetGenerator.showAlert('An unexpected error occurred', 'danger');
-    }
 });
