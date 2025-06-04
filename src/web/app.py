@@ -10,6 +10,7 @@ import traceback
 import tempfile
 import zipfile
 import requests
+from openai import OpenAI
 import concurrent.futures
 import re
 import base64
@@ -225,17 +226,21 @@ class HealthResponse(BaseModel):
 
 # --- Full DeepSeek Client Implementation (from generate_dataset.py) ---
 class DeepSeekClient:
-    def __init__(self, api_key: str, model: str = "deepseek-chat", temperature: float = 1.0):
+    def __init__(self, api_key: str, model: str = "deepseek-chat", temperature: float = 1.0, base_url: str = "https://api.deepseek.com"):
         """
         Full DeepSeek client for high-quality dataset generation
         """
         self.api_key = api_key
-        self.api_url = "https://api.deepseek.com/chat/completions"
+        self.api_url = f"{base_url}/chat/completions"
         self.model = model
         self.temperature = temperature
         self.max_retries = 3
         self.retry_delay = 5
         self.cache = {}
+        self.base_url = base_url
+
+    def get_openai_client(self):
+        return OpenAI(api_key=self.api_key, base_url=self.base_url)
 
     def create_optimized_prompt(self, task: dict, count: int, examples=None, advanced_option=True) -> str:
         """Create optimized prompt for dataset generation"""
@@ -324,6 +329,39 @@ Schema: {schema_description}
             "Only output the JSON array with no additional text, explanations or comments."
         )
 
+        schema_fields = list(task.get("schema", {}).get("fields", {}).keys())
+
+        # Use OpenAI client for deepseek-reasoner and deepseek-chat
+        if self.model in ["deepseek-reasoner", "deepseek-chat"]:
+            client = OpenAI(api_key=self.api_key, base_url="https://api.deepseek.com")
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ]
+            for attempt in range(self.max_retries):
+                try:
+                    response = client.chat.completions.create(
+                        model=self.model,
+                        messages=messages,
+                    )
+                    # Try reasoning_content first (for deepseek-reasoner), fallback to content
+                    content = ""
+                    try:
+                        content = response.choices[0].message.reasoning_content
+                    except Exception:
+                        content = response.choices[0].message.content
+                    parsed_entries = self.parse_response_content(content)
+                    return [
+                        {field: entry.get(field) for field in schema_fields}
+                        for entry in parsed_entries if isinstance(entry, dict)
+                    ]
+                except Exception as e:
+                    if attempt == self.max_retries - 1:
+                        logger.error(f"API request failed after {self.max_retries} attempts: {e}")
+                        return []
+                    time.sleep(self.retry_delay * (2**attempt))
+            return []
+        # Fallback: legacy requests for other models
         req_body = {
             "model": self.model,
             "temperature": self.temperature,
@@ -342,9 +380,7 @@ Schema: {schema_description}
                 resp.raise_for_status()
                 resp_json = resp.json()
                 content = resp_json["choices"][0]["message"]["content"]
-                schema_fields = list(task.get("schema", {}).get("fields", {}).keys())
                 parsed_entries = self.parse_response_content(content)
-                # Map only schema fields for each entry
                 return [
                     {field: entry.get(field) for field in schema_fields}
                     for entry in parsed_entries if isinstance(entry, dict)
@@ -709,12 +745,17 @@ def real_generate_dataset(task: Dict, count: int, client: DeepSeekClient) -> tup
                 "id": f"{task_name}-{i}",
                 "content": content,
                 "metadata": {
-                    "source": "DeepSeek-V3",
+                    "source": (
+                        "DeepSeek-V3-0324" if client.model == "deepseek-chat"
+                        else "DeepSeek-R1-0528" if client.model == "deepseek-reasoner"
+                        else getattr(client, "provider", getattr(client, "model", "DeepSeek-V3"))
+                    ),
                     "license": "CC-BY 4.0",
                     "version": "1.0.0",
                     "created_at": datetime.now().isoformat(),
                     "task": task_name,
-                    "model": client.model
+                    "model": client.model,
+                    "provider": getattr(client, "provider", "deepseek")
                 }
             }
             formatted_entries.append(formatted_entry)
@@ -1136,7 +1177,9 @@ async def generate_dataset_api(
                         'id': f"{task_name}-ollama-{i}",
                         'content': {field: entry.get(field) for field in schema_fields} if schema_fields else entry,
                         'metadata': {
-                            'source': f"Ollama-{client.model}",
+                            'source': getattr(client, "provider", f"Ollama-{client.model}"),
+                            'model': client.model,
+                            'provider': getattr(client, "provider", "ollama"),
                             'generated_at': datetime.now().isoformat(),
                             'task_id': payload.task_id,
                             'generation_method': 'ollama_batch'
@@ -1150,7 +1193,9 @@ async def generate_dataset_api(
                     'id': f"{task_name}-fallback-1",
                     'content': {'error': 'Ollama generation failed - timeout or model issue'},
                     'metadata': {
-                        'source': f"Ollama-{client.model}",
+                        'source': getattr(client, "provider", f"Ollama-{client.model}"),
+                        'model': client.model,
+                        'provider': getattr(client, "provider", "ollama"),
                         'generated_at': datetime.now().isoformat(),
                         'task_id': payload.task_id,
                         'generation_method': 'ollama_fallback',
