@@ -542,35 +542,6 @@
             }
         });
     </script>
-
-    <!-- Task Configuration Modal (moved inside <body> for Bootstrap compatibility) -->
-    <div class="modal fade" id="taskConfigModal" tabindex="-1" aria-labelledby="taskConfigModalLabel" aria-hidden="true">
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="taskConfigModalLabel">Task Configuration</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            <div class="form-group">
-              <textarea id="taskJsonArea" class="form-control json-editor" rows="12"></textarea>
-              <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
-                <button class="btn btn-primary btn-sm" id="saveTaskJson">
-                  <i class="fas fa-save"></i> Save
-                </button>
-                <button class="btn btn-secondary btn-sm" id="reloadTaskJson">
-                  <i class="fas fa-sync"></i> Reload
-                </button>
-                <button class="btn btn-outline-danger btn-sm" id="cancelTaskJson" data-bs-dismiss="modal">
-                  <i class="fas fa-times"></i> Cancel
-                </button>
-              </div>
-              <div id="taskJsonMsg" style="margin-top: 0.5rem;"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>    <!-- Custom Modal System Script -->
     <script>
     // Custom Modal System
     class CustomModal {
