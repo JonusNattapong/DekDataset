@@ -136,25 +136,12 @@
                     </div>
                 </div>
 
-                <div id="taskJsonSection" style="display:none;">
-                    <div class="form-group">
-                        <label class="form-label">Task Configuration</label>
-                        <textarea id="taskJsonArea" class="form-control json-editor" rows="12"></textarea>
-                        <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
-                            <button class="btn btn-primary btn-sm" id="saveTaskJson">
-                                <i class="fas fa-save"></i> Save
-                            </button>
-                            <button class="btn btn-secondary btn-sm" id="reloadTaskJson">
-                                <i class="fas fa-sync"></i> Reload
-                            </button>
-                        </div>
-                        <div id="taskJsonMsg" style="margin-top: 0.5rem;"></div>
-                    </div>
-                </div>
+                <!-- Task Configuration Section moved below task list for better UX -->
                 
                 <div id="taskList">
                     <!-- Task items will be populated by JavaScript -->
                 </div>
+                <!-- Removed inline Task Configuration Section: now handled by popup modal -->
             </div>
 
             <!-- Generation Panel with enhanced styling -->
@@ -388,6 +375,62 @@
                 </div>
             </div>
         </div>
+    </div>    <!-- Edit Task Modal (always visible, JSON only, no mode switch) -->
+    <div class="modal fade" id="editTaskModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Task</h5>
+                    <button type="button" class="btn-close" id="closeEditTask"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="editJsonlMode">
+                        <div class="mb-3">
+                            <label class="form-label">Task Configuration (JSON Format)</label>
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <small class="text-muted">แก้ไขข้อมูล Task ได้โดยตรงในรูปแบบ JSON (object เดียว)</small>
+                                <div class="btn-group btn-group-sm">
+                                    <button type="button" class="btn btn-outline-secondary" id="formatJsonBtn">
+                                        <i class="fas fa-code"></i> Format
+                                    </button>
+                                    <button type="button" class="btn btn-outline-info" id="validateJsonBtn">
+                                        <i class="fas fa-check"></i> Validate
+                                    </button>
+                                    <button type="button" class="btn btn-outline-dark" id="copyJsonBtn">
+                                        <i class="fas fa-copy"></i> Copy
+                                    </button>
+                                </div>
+                            </div>
+                            <textarea class="form-control font-monospace" id="editTaskJsonl" rows="20"
+                                placeholder='{
+    "id": "task_name",
+    "type": "custom",
+    "description": "Task description",
+    "system_prompt": "System prompt for the model...",
+    "user_template": "User template with placeholders...",
+    "examples": []
+}'
+                                style="font-size: 14px; line-height: 1.5; background-color: #f8f9fa; border: 2px solid #dee2e6; border-radius: 6px; resize: vertical; width: 100%; font-family: ''Consolas', 'Monaco', 'Courier New', monospace'; padding: 12px;"></textarea>
+                        </div>
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i>
+                            <strong>JSON Format:</strong> แก้ไขข้อมูล Task ได้โดยตรงในรูปแบบ JSON object<br>
+                            <span>
+                                - สามารถแก้ไข <b>id</b>, <b>type</b>, <b>description</b>, <b>system_prompt</b>, <b>user_template</b>, <b>examples</b> และ field อื่นๆ ได้<br>
+                                - กด <b>Format</b> เพื่อจัดรูปแบบ, <b>Validate</b> เพื่อตรวจสอบ, <b>Copy</b> เพื่อคัดลอก JSON<br>
+                                - <b>เมื่อกดปุ่ม "Update from JSON" จะบันทึกข้อมูลทั้งหมดที่แก้ไขในรูปแบบ JSON นี้</b>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="cancelEditTask">Cancel</button>
+                    <button type="button" class="btn btn-success" id="updateTaskJsonl">
+                        <i class="fas fa-save"></i> Update from JSON
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Quality Settings Modal -->
@@ -498,6 +541,248 @@
                 };
             }
         });
+    </script>
+
+    <!-- Task Configuration Modal (moved inside <body> for Bootstrap compatibility) -->
+    <div class="modal fade" id="taskConfigModal" tabindex="-1" aria-labelledby="taskConfigModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="taskConfigModalLabel">Task Configuration</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group">
+              <textarea id="taskJsonArea" class="form-control json-editor" rows="12"></textarea>
+              <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
+                <button class="btn btn-primary btn-sm" id="saveTaskJson">
+                  <i class="fas fa-save"></i> Save
+                </button>
+                <button class="btn btn-secondary btn-sm" id="reloadTaskJson">
+                  <i class="fas fa-sync"></i> Reload
+                </button>
+                <button class="btn btn-outline-danger btn-sm" id="cancelTaskJson" data-bs-dismiss="modal">
+                  <i class="fas fa-times"></i> Cancel
+                </button>
+              </div>
+              <div id="taskJsonMsg" style="margin-top: 0.5rem;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>    <!-- Custom Modal System Script -->
+    <script>
+    // Custom Modal System
+    class CustomModal {
+        constructor(element) {
+            this.element = element;
+            this.overlay = null;
+            this.isVisible = false;
+        }        show() {
+            if (this.isVisible) return;
+            
+            // Create overlay
+            this.overlay = document.createElement('div');
+            this.overlay.className = 'custom-modal-overlay';
+            
+            // Create modal content wrapper
+            const contentWrapper = document.createElement('div');
+            contentWrapper.className = 'custom-modal-content';
+            
+            // Determine modal size
+            const dialogElem = this.element.querySelector('.modal-dialog');
+            if (dialogElem) {
+                if (dialogElem.classList.contains('modal-lg')) {
+                    this.overlay.classList.add('custom-modal-lg');
+                } else if (dialogElem.classList.contains('modal-xl')) {
+                    this.overlay.classList.add('custom-modal-xl');
+                } else if (dialogElem.classList.contains('modal-sm')) {
+                    this.overlay.classList.add('custom-modal-sm');
+                }
+            }
+            
+            // Extract modal content
+            const header = this.element.querySelector('.modal-header');
+            const body = this.element.querySelector('.modal-body');
+            const footer = this.element.querySelector('.modal-footer');
+            
+            // Create custom header
+            if (header) {
+                const customHeader = document.createElement('div');
+                customHeader.className = 'custom-modal-header';
+                
+                const title = document.createElement('h5');
+                title.className = 'custom-modal-title';
+                const titleText = header.querySelector('.modal-title');
+                title.innerHTML = titleText ? titleText.innerHTML : 'Modal';
+                
+                const closeBtn = document.createElement('button');
+                closeBtn.className = 'custom-modal-close';
+                closeBtn.innerHTML = '<i class="fas fa-times"></i>';
+                closeBtn.onclick = () => this.hide();
+                
+                customHeader.appendChild(title);
+                customHeader.appendChild(closeBtn);
+                contentWrapper.appendChild(customHeader);
+            }
+            
+            // Create custom body - clone the original body to preserve form elements
+            if (body) {
+                const customBody = document.createElement('div');
+                customBody.className = 'custom-modal-body';
+                
+                // Clone the body element to preserve form data and event handlers
+                const bodyClone = body.cloneNode(true);
+                customBody.appendChild(bodyClone);
+                contentWrapper.appendChild(customBody);
+            }
+            
+            // Create custom footer
+            if (footer) {
+                const customFooter = document.createElement('div');
+                customFooter.className = 'custom-modal-footer';
+                
+                // Clone footer to preserve button functionality
+                const footerClone = footer.cloneNode(true);
+                customFooter.appendChild(footerClone);
+                
+                // Update close buttons in footer
+                customFooter.querySelectorAll('[data-bs-dismiss="modal"]').forEach(btn => {
+                    btn.onclick = () => this.hide();
+                    btn.removeAttribute('data-bs-dismiss');
+                });
+                
+                // Re-bind event handlers for Update Task button
+                const updateBtn = customFooter.querySelector('#updateTask');
+                if (updateBtn && window.datasetGenerator) {
+                    updateBtn.onclick = () => window.datasetGenerator.updateTask();
+                }
+                
+                contentWrapper.appendChild(customFooter);
+            }
+            
+            this.overlay.appendChild(contentWrapper);
+            document.body.appendChild(this.overlay);
+            
+            // Show with animation
+            requestAnimationFrame(() => {
+                this.overlay.classList.add('show');
+                // Rebind Edit Task Modal events if this is the edit modal
+                if (this.element.id === 'editTaskModal' && window.datasetGenerator && typeof window.datasetGenerator.rebindEditTaskModalEvents === 'function') {
+                    setTimeout(() => window.datasetGenerator.rebindEditTaskModalEvents(), 50);
+                }
+            });
+            
+            // Close on overlay click
+            this.overlay.addEventListener('click', (e) => {
+                if (e.target === this.overlay) {
+                    this.hide();
+                }
+            });
+            
+            // Close on escape key
+            document.addEventListener('keydown', this.escapeHandler);
+            
+            this.isVisible = true;
+        }
+
+        hide() {
+            if (!this.isVisible || !this.overlay) return;
+            
+            this.overlay.classList.remove('show');
+            
+            setTimeout(() => {
+                if (this.overlay && this.overlay.parentNode) {
+                    this.overlay.parentNode.removeChild(this.overlay);
+                }
+                this.overlay = null;
+            }, 300);
+            
+            document.removeEventListener('keydown', this.escapeHandler);
+            this.isVisible = false;
+        }
+
+        escapeHandler = (e) => {
+            if (e.key === 'Escape') {
+                this.hide();
+            }
+        }
+    }
+
+    // Initialize custom modals when DOM is loaded
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('DOM loaded, initializing custom modal system...');
+          // Find all modal triggers and set up custom handlers
+        const modalTriggers = [
+            { selector: 'button[data-bs-target="#createTaskModal"]', modalId: 'createTaskModal' },
+            { selector: 'button[data-bs-target="#qualityModal"]', modalId: 'qualityModal' },
+            { selector: 'button[data-bs-target="#apiConfigModal"]', modalId: 'apiConfigModal' },
+            { selector: '.btn-outline-primary', modalId: 'taskConfigModal' } // Edit buttons
+        ];
+        
+        modalTriggers.forEach(({ selector, modalId }) => {
+            const buttons = document.querySelectorAll(selector);
+            const modalElement = document.getElementById(modalId);
+            
+            if (modalElement) {
+                const customModal = new CustomModal(modalElement);
+                
+                buttons.forEach(button => {
+                    // Remove Bootstrap attributes
+                    button.removeAttribute('data-bs-toggle');
+                    button.removeAttribute('data-bs-target');
+                    
+                    // Add custom click handler
+                    button.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log(`Opening modal: ${modalId}`);
+                        customModal.show();
+                    });
+                });
+                
+                console.log(`Initialized custom modal: ${modalId}`);
+            } else {
+                console.error(`Modal element not found: ${modalId}`);
+            }
+        });          // Handle Edit buttons specifically (they are generated dynamically)
+        // Note: Edit button handlers are now managed by the main DatasetGenerator class
+        
+        // Test function for debugging
+        window.openModal = function(modalId) {
+            const modalElement = document.getElementById(modalId);
+            if (modalElement) {
+                const customModal = new CustomModal(modalElement);
+                customModal.show();
+                console.log(`Manually opened modal: ${modalId}`);
+            } else {
+                console.error(`Modal not found: ${modalId}`);
+            }
+        };
+        
+        console.log('Custom modal system initialized successfully!');
+        console.log('Available test function: openModal("modalId")');
+        console.log('Available modals: createTaskModal, qualityModal, apiConfigModal, taskConfigModal');
+    });
+    </script>
+
+    <script>
+// Patch: Prevent JS error if form fields are not present (JSON-only modal)
+(function() {
+    // Override populateEditForm to only update the JSON textarea
+    if (window.datasetGenerator) {
+        window.datasetGenerator.populateEditForm = function(taskData) {
+            // Only update the JSON textarea, do not touch form fields
+            var jsonlTextarea = document.getElementById('editTaskJsonl');
+            if (jsonlTextarea) {
+                jsonlTextarea.value = JSON.stringify(taskData, null, 2);
+            }
+        };
+        // Also patch syncFormToJsonl and syncJsonlToForm to no-op
+        window.datasetGenerator.syncFormToJsonl = function() {};
+        window.datasetGenerator.syncJsonlToForm = function() {};
+    }
+})();
     </script>
 </body>
 </html>

@@ -690,7 +690,6 @@ class SimpleTaskManager:
             # Remove 'id' from task_data before storing
             task_data_copy = task_data.copy()
             task_data_copy.pop('id', None)
-            
             self._tasks[task_id] = task_data_copy
             self.save_tasks()
             return True
@@ -708,6 +707,24 @@ class SimpleTaskManager:
             return False
         except Exception as e:
             logger.error(f"Error removing task: {e}")
+            return False
+    
+    def update_task(self, task_id: str, task_data: Dict) -> bool:
+        """Update an existing task"""
+        try:
+            if task_id not in self._tasks:
+                return False
+            
+            # Remove 'id' from task_data if present
+            task_data_copy = task_data.copy()
+            task_data_copy.pop('id', None)
+            
+            # Update the task data
+            self._tasks[task_id].update(task_data_copy)
+            self.save_tasks()
+            return True
+        except Exception as e:
+            logger.error(f"Error updating task: {e}")
             return False
 
 # --- Simple Dataset Generation ---
@@ -1105,6 +1122,73 @@ async def delete_task_api(task_id: str = FastApiPath(..., title="The ID of the t
         raise
     except Exception as e:
         logger.error(f"Error deleting task {task_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/tasks/{task_id}", response_model=MessageResponse, summary="Update Task", tags=["Tasks API"])
+async def update_task_api(task_id: str = FastApiPath(..., title="The ID of the task to update"), 
+                         task_data: Dict[str, Any] = Body(...), 
+                         tm = Depends(get_task_manager)):
+    """Update an existing task by its ID."""
+    try:
+        if not tm.get_task(task_id):
+            raise HTTPException(status_code=404, detail="Task not found")
+        
+        # Remove 'id' from task_data if present to avoid conflicts
+        task_data_copy = task_data.copy()
+        task_data_copy.pop('id', None)
+        
+        success = tm.update_task(task_id, task_data_copy)
+        if not success:
+            raise HTTPException(status_code=400, detail="Failed to update task")
+        
+        logger.info(f"Updated task: {task_id}")
+        return MessageResponse(message="Task updated successfully")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating task {task_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/tasks/{task_id}/config", summary="Get Task Configuration", tags=["Tasks API"])
+async def get_task_config_api(task_id: str = FastApiPath(..., title="The ID of the task to get configuration for"), 
+                             tm = Depends(get_task_manager)):
+    """Get the complete configuration for a specific task."""
+    try:
+        task = tm.get_task(task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+        
+        logger.info(f"Retrieved configuration for task: {task_id}")
+        return JSONResponse(content=task)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting task configuration {task_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/tasks/{task_id}/config", response_model=MessageResponse, summary="Update Task Configuration", tags=["Tasks API"])
+async def update_task_config_api(task_id: str = FastApiPath(..., title="The ID of the task to update configuration for"),
+                                config_data: Dict[str, Any] = Body(...),
+                                tm = Depends(get_task_manager)):
+    """Update the complete configuration for a specific task."""
+    try:
+        if not tm.get_task(task_id):
+            raise HTTPException(status_code=404, detail="Task not found")
+        
+        # Remove 'id' from config_data if present to avoid conflicts
+        config_data_copy = config_data.copy()
+        config_data_copy.pop('id', None)
+        
+        success = tm.update_task(task_id, config_data_copy)
+        if not success:
+            raise HTTPException(status_code=400, detail="Failed to update task configuration")
+        
+        logger.info(f"Updated configuration for task: {task_id}")
+        return MessageResponse(message="Task configuration updated successfully")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating task configuration {task_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/generate", response_model=GenerateResponse, summary="Generate Dataset", tags=["Dataset Generation API"])
@@ -1628,5 +1712,130 @@ async def get_all_models_api():
     except Exception as e:
         logger.error(f"Error getting all models: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get models: {str(e)}")
+
+# Add after existing Pydantic models around line 220
+class ApiKeyRequest(BaseModel):
+    api_key: str
+
+class ApiKeyResponse(BaseModel):
+    message: str
+    valid: bool
+
+class ApiKeyTestRequest(BaseModel):
+    api_key: str
+
+class ApiKeyTestResponse(BaseModel):
+    valid: bool
+    message: str
+    model_accessible: Optional[str] = None
+
+# Add API Configuration endpoints after line 1630
+@app.post("/api/config/api-key", response_model=ApiKeyResponse, summary="Save API Key", tags=["Configuration API"])
+async def save_api_key(payload: ApiKeyRequest):
+    """Save and validate API key configuration."""
+    try:
+        api_key = payload.api_key.strip()
+        
+        if not api_key:
+            raise HTTPException(status_code=400, detail="API key cannot be empty")
+        
+        if not api_key.startswith('sk-'):
+            raise HTTPException(status_code=400, detail="Invalid API key format. API key should start with 'sk-'")
+        
+        # Test the API key by making a simple request
+        try:
+            test_client = DeepSeekClient(api_key=api_key)
+            openai_client = test_client.get_openai_client()
+            
+            # Make a simple test request
+            response = openai_client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[{"role": "user", "content": "Hello"}],
+                max_tokens=10,
+                timeout=10
+            )
+            
+            if response and response.choices:
+                # API key is valid - store it in environment (session-based)
+                os.environ['DEEPSEEK_API_KEY'] = api_key
+                
+                # Update global client
+                global _deepseek_client
+                _deepseek_client = test_client
+                
+                logger.info("API key saved and validated successfully")
+                return ApiKeyResponse(
+                    message="API key saved and validated successfully",
+                    valid=True
+                )
+            else:
+                raise HTTPException(status_code=400, detail="Invalid API key - no response from DeepSeek API")
+                
+        except Exception as e:
+            logger.error(f"API key validation failed: {e}")
+            raise HTTPException(status_code=400, detail=f"Invalid API key: {str(e)}")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error saving API key: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to save API key: {str(e)}")
+
+@app.post("/api/test-api-key", response_model=ApiKeyTestResponse, summary="Test API Key", tags=["Configuration API"])
+async def test_api_key(payload: ApiKeyTestRequest):
+    """Test API key validity without saving."""
+    try:
+        api_key = payload.api_key.strip()
+        
+        if not api_key:
+            return ApiKeyTestResponse(
+                valid=False,
+                message="API key cannot be empty"
+            )
+        
+        if not api_key.startswith('sk-'):
+            return ApiKeyTestResponse(
+                valid=False,
+                message="Invalid API key format. API key should start with 'sk-'"
+            )
+        
+        # Test the API key
+        try:
+            test_client = DeepSeekClient(api_key=api_key)
+            openai_client = test_client.get_openai_client()
+            
+            # Make a simple test request with timeout
+            response = openai_client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[{"role": "user", "content": "Test"}],
+                max_tokens=5,
+                timeout=10
+            )
+            
+            if response and response.choices:
+                return ApiKeyTestResponse(
+                    valid=True,
+                    message="API key is valid and working",
+                    model_accessible="deepseek-chat"
+                )
+            else:
+                return ApiKeyTestResponse(
+                    valid=False,
+                    message="No response from DeepSeek API"
+                )
+                
+        except Exception as e:
+            logger.warning(f"API key test failed: {e}")
+            return ApiKeyTestResponse(
+                valid=False,
+                message=f"API key validation failed: {str(e)}"
+            )
+            
+    except Exception as e:
+        logger.error(f"Error testing API key: {e}")
+        return ApiKeyTestResponse(
+            valid=False,
+            message=f"Error testing API key: {str(e)}"
+        )
 
 

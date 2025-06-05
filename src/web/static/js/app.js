@@ -5,6 +5,7 @@ class DatasetGenerator {
         this.tasks = [];
         this.currentAbortController = null; // Add abort controller for cancellation
         this.isGenerating = false; // Track generation state
+        this.currentConfigTaskId = null; // Track current task ID for configuration
         this.init();
     }
 
@@ -30,12 +31,87 @@ class DatasetGenerator {
                 this.selectTask(e.target.closest('.task-item').dataset.taskId);
             }
             
+            if (e.target.classList.contains('edit-task')) {
+                e.preventDefault();
+                e.stopPropagation();
+                const taskId = e.target.closest('.task-item').dataset.taskId;
+                this.openTaskConfigModal(taskId);
+            }
+
             if (e.target.classList.contains('delete-task')) {
                 e.preventDefault();
                 e.stopPropagation();
                 this.deleteTask(e.target.closest('.task-item').dataset.taskId);
             }
         });
+
+        // Edit mode toggle handlers
+        document.addEventListener('change', (e) => {
+            if (e.target.name === 'editMode') {
+                this.switchEditMode(e.target.value);
+            }
+        });
+
+        // JSONL edit mode button handlers
+        const formatJsonBtn = document.getElementById('formatJsonBtn');
+        const validateJsonBtn = document.getElementById('validateJsonBtn');
+        
+        if (formatJsonBtn) {
+            formatJsonBtn.addEventListener('click', () => this.formatJsonl());
+// Copy JSON button handler
+const copyJsonBtn = document.getElementById('copyJsonBtn');
+if (copyJsonBtn) {
+    copyJsonBtn.addEventListener('click', () => {
+        const jsonlTextarea = document.getElementById('editTaskJsonl');
+        if (jsonlTextarea) {
+            navigator.clipboard.writeText(jsonlTextarea.value);
+            this.showAlert('คัดลอก JSON เรียบร้อย', 'success');
+        }
+    });
+}
+        }
+        
+        if (validateJsonBtn) {
+            validateJsonBtn.addEventListener('click', () => this.validateJsonl());
+        }
+
+        // Task dropdown selection
+        const taskDropdown = document.getElementById('taskDropdown');
+        if (taskDropdown) {
+            taskDropdown.addEventListener('change', (e) => {
+                const selectedTaskId = e.target.value;
+                if (selectedTaskId) {
+                    this.selectTask(selectedTaskId);
+                    this.loadTaskConfiguration(selectedTaskId);
+                } else {
+                    this.hideTaskConfiguration();
+                }
+            });
+        }
+
+        // Task configuration buttons
+        const saveTaskJsonBtn = document.getElementById('saveTaskJson');
+        const reloadTaskJsonBtn = document.getElementById('reloadTaskJson');
+        const cancelTaskJsonBtn = document.getElementById('cancelTaskJson');
+        // (ลบ event listener edit-task ที่ซ้ำออก ใช้แค่ event delegation)
+        
+        if (saveTaskJsonBtn) {
+            saveTaskJsonBtn.addEventListener('click', () => this.saveTaskConfiguration());
+        }
+        
+        if (reloadTaskJsonBtn) {
+            reloadTaskJsonBtn.addEventListener('click', () => {
+                if (this.selectedTaskId) {
+                    this.loadTaskConfiguration(this.selectedTaskId);
+                }
+            });
+        }
+        
+        if (cancelTaskJsonBtn) {
+            cancelTaskJsonBtn.addEventListener('click', () => {
+                this.hideTaskConfiguration();
+            });
+        }
 
         // Model provider selection
         document.addEventListener('change', (e) => {
@@ -60,18 +136,37 @@ class DatasetGenerator {
         // Add stop button event listener
         if (stopBtn) {
             stopBtn.addEventListener('click', () => this.stopGeneration());
-        }
-
-        // Modal buttons
+        }        // Modal buttons
         const saveTaskBtn = document.getElementById('saveTask');
+        const updateTaskBtn = document.getElementById('updateTask');
+        const updateTaskJsonlBtn = document.getElementById('updateTaskJsonl');
         const saveQualityBtn = document.getElementById('saveQuality');
+        const saveApiKeyBtn = document.getElementById('saveApiKey');
+        const testApiBtn = document.getElementById('testApiBtn');
         
         if (saveTaskBtn) {
             saveTaskBtn.addEventListener('click', () => this.createTask());
         }
         
+        if (updateTaskBtn) {
+            updateTaskBtn.addEventListener('click', () => this.updateTask());
+        }
+
+        if (updateTaskJsonlBtn) {
+            updateTaskJsonlBtn.addEventListener('click', () => this.updateTaskFromJsonl());
+        }
+        
         if (saveQualityBtn) {
             saveQualityBtn.addEventListener('click', () => this.updateQualitySettings());
+        }
+
+        // API Configuration buttons
+        if (saveApiKeyBtn) {
+            saveApiKeyBtn.addEventListener('click', () => this.saveApiKey());
+        }
+        
+        if (testApiBtn) {
+            testApiBtn.addEventListener('click', () => this.testApiKey());
         }
 
         // Download buttons
@@ -153,14 +248,16 @@ class DatasetGenerator {
             this.showAlert('Error loading tasks: ' + error.message, 'danger');
             this.updateTaskList([]);
         }
-    }
-
-    updateTaskList(tasks) {
+    }    updateTaskList(tasks) {
         const taskListContainer = document.getElementById('taskList');
-        if (!taskListContainer) {
-            console.error('Task list container not found');
+        const taskDropdown = document.getElementById('taskDropdown');
+        if (!taskListContainer || !taskDropdown) {
+            console.error('Task list container or dropdown not found');
             return;
         }
+
+        // Update dropdown options
+        this.updateTaskDropdown(tasks);
 
         if (!tasks || tasks.length === 0) {
             taskListContainer.innerHTML = `
@@ -193,6 +290,9 @@ class DatasetGenerator {
                             <button class="btn btn-outline-primary btn-sm select-task">
                                 Select
                             </button>
+                            <button class="btn btn-outline-secondary btn-sm edit-task">
+                                Edit
+                            </button>
                             <button class="btn btn-outline-danger btn-sm delete-task">
                                 Delete
                             </button>
@@ -221,13 +321,456 @@ class DatasetGenerator {
         if (selectedTaskInput) {
             selectedTaskInput.value = taskId;
         }
+
+        // Update task dropdown selection
+        const taskDropdown = document.getElementById('taskDropdown');
+        if (taskDropdown) {
+            taskDropdown.value = taskId;
+        }
         
         // Enable generation buttons only if not currently generating
         if (!this.isGenerating) {
             this.updateGenerationUI(false);
         }
         
+        // Load and show task configuration
+        // this.loadTaskConfiguration(taskId);
+        
         this.showAlert(`Selected task: ${taskId}`, 'success');
+    }    // Task Configuration Management Methods
+    openTaskConfigModal(taskId) {
+        this.openEditTaskModal(taskId);
+    }    // New function to open edit task modal
+    async openEditTaskModal(taskId) {
+        try {
+            // Load task data
+            const response = await fetch(`/api/tasks/${taskId}/config`);
+            if (!response.ok) {
+                throw new Error(`Failed to load task: ${response.statusText}`);
+            }
+            const taskData = await response.json();
+            
+            // Reset to form mode when opening modal
+            const formModeRadio = document.getElementById('editModeForm');
+            if (formModeRadio) {
+                formModeRadio.checked = true;
+                this.switchEditMode('form');
+            }
+            
+            // Populate edit form fields
+            this.populateEditForm(taskData);
+            
+            // Open the edit modal using the custom modal system only
+            const modalElement = document.getElementById('editTaskModal');
+            
+            // Remove any Bootstrap modal instance to prevent double modals
+            if (window.bootstrap && window.bootstrap.Modal) {
+                const bsModalInstance = bootstrap.Modal.getInstance(modalElement);
+                if (bsModalInstance) {
+                    bsModalInstance.dispose();
+                }
+            }
+            
+            // Use custom modal system
+            if (modalElement && typeof CustomModal !== 'undefined') {
+                const customModal = new CustomModal(modalElement);
+                customModal.show();
+                
+                // Use our rebindEditTaskModalEvents function to attach all event handlers
+                // This ensures that cloned nodes in the custom modal get their event handlers
+                if (typeof this.rebindEditTaskModalEvents === 'function') {
+                    setTimeout(() => this.rebindEditTaskModalEvents(), 50);
+                }
+            } else {
+                this.showAlert('Edit modal not available', 'danger');
+            }
+        } catch (error) {
+            console.error('Error opening edit modal:', error);
+            this.showAlert('Error loading task for editing: ' + error.message, 'danger');
+        }
+    }// Function to populate edit form with task data
+    populateEditForm(taskData) {
+        // Map the real task data structure to the simplified edit form fields
+        document.getElementById('editTaskId').value = taskData.id || '';
+        
+        // Map format to type (if no type field exists)
+        const taskType = taskData.type || (taskData.format ? 'custom' : 'custom');
+        document.getElementById('editTaskType').value = taskType;
+        
+        // Use description or name
+        const description = taskData.description || taskData.name || '';
+        document.getElementById('editTaskDescription').value = description;
+        
+        // Extract system prompt from various possible locations
+        let systemPrompt = '';
+        if (taskData.system_prompt) {
+            systemPrompt = taskData.system_prompt;
+        } else if (taskData.parameters && taskData.parameters.system_prompt) {
+            systemPrompt = taskData.parameters.system_prompt;
+        } else if (taskData.prompt_template) {
+            systemPrompt = taskData.prompt_template;
+        }
+        document.getElementById('editSystemPrompt').value = systemPrompt;
+        
+        // Extract user template from various possible locations
+        let userTemplate = '';
+        if (taskData.user_template) {
+            userTemplate = taskData.user_template;
+        } else if (taskData.parameters && taskData.parameters.user_template) {
+            userTemplate = taskData.parameters.user_template;
+        } else if (taskData.examples && taskData.examples.length > 0) {
+            // If no explicit user template, try to extract pattern from examples
+            const firstExample = taskData.examples[0];
+            if (typeof firstExample === 'object' && firstExample.input) {
+                userTemplate = `Input: {input}\nOutput: {output}`;
+            }
+        }
+        document.getElementById('editUserTemplate').value = userTemplate;
+
+        // Populate JSONL textarea with complete task data
+        const jsonlTextarea = document.getElementById('editTaskJsonl');
+        if (jsonlTextarea) {
+            jsonlTextarea.value = JSON.stringify(taskData, null, 2);
+        }
+        
+        console.log('Populated edit form with task data:', {
+            id: taskData.id,
+            type: taskType,
+            description: description,
+            systemPrompt: systemPrompt,
+            userTemplate: userTemplate
+        });
+    }    // Function to switch between form and JSONL edit modes
+    switchEditMode(mode) {
+        const formMode = document.getElementById('editFormMode');
+        const jsonlMode = document.getElementById('editJsonlMode');
+        const updateTaskBtn = document.getElementById('updateTask');
+        const updateTaskJsonlBtn = document.getElementById('updateTaskJsonl');
+
+        // Find elements in the custom modal if present (after cloning)
+        const customModalBody = document.querySelector('.custom-modal-body');
+        let customFormMode = formMode;
+        let customJsonlMode = jsonlMode;
+        let customUpdateTaskBtn = updateTaskBtn;
+        let customUpdateTaskJsonlBtn = updateTaskJsonlBtn;
+
+        if (customModalBody) {
+            customFormMode = customModalBody.querySelector('#editFormMode') || formMode;
+            customJsonlMode = customModalBody.querySelector('#editJsonlMode') || jsonlMode;
+            customUpdateTaskBtn = document.querySelector('.custom-modal-footer #updateTask') || updateTaskBtn;
+            customUpdateTaskJsonlBtn = document.querySelector('.custom-modal-footer #updateTaskJsonl') || updateTaskJsonlBtn;
+        }
+
+        if (mode === 'form') {
+            // Sync JSONL to form fields
+            this.syncJsonlToForm();
+            if (customFormMode) customFormMode.style.display = 'block';
+            if (customJsonlMode) customJsonlMode.style.display = 'none';
+            if (customUpdateTaskBtn) customUpdateTaskBtn.style.display = 'inline-block';
+            if (customUpdateTaskJsonlBtn) customUpdateTaskJsonlBtn.style.display = 'none';
+        } else if (mode === 'jsonl') {
+            // Sync form fields to JSONL
+            this.syncFormToJsonl();
+            if (customFormMode) customFormMode.style.display = 'none';
+            if (customJsonlMode) customJsonlMode.style.display = 'block';
+            if (customUpdateTaskBtn) customUpdateTaskBtn.style.display = 'none';
+            if (customUpdateTaskJsonlBtn) customUpdateTaskJsonlBtn.style.display = 'inline-block';
+            setTimeout(() => {
+                const jsonlTextarea = document.querySelector('.custom-modal-body #editTaskJsonl') ||
+                                      document.getElementById('editTaskJsonl');
+                if (jsonlTextarea) {
+                    jsonlTextarea.focus();
+                }
+            }, 100);
+        }
+    }
+
+    // Sync form fields to JSONL textarea
+    syncFormToJsonl() {
+        const taskId = document.getElementById('editTaskId').value.trim();
+        const taskType = document.getElementById('editTaskType').value;
+        const taskDescription = document.getElementById('editTaskDescription').value.trim();
+        const systemPrompt = document.getElementById('editSystemPrompt').value.trim();
+        const userTemplate = document.getElementById('editUserTemplate').value.trim();
+
+        const taskData = {
+            id: taskId,
+            type: taskType,
+            description: taskDescription,
+            system_prompt: systemPrompt,
+            user_template: userTemplate,
+            format: "custom",
+            examples: [],
+            parameters: {}
+        };
+
+        const jsonlTextarea = document.getElementById('editTaskJsonl');
+        try {
+            const existingData = JSON.parse(jsonlTextarea.value || '{}');
+            const mergedData = { ...existingData, ...taskData };
+            jsonlTextarea.value = JSON.stringify(mergedData, null, 2);
+        } catch (error) {
+            jsonlTextarea.value = JSON.stringify(taskData, null, 2);
+        }
+    }
+
+    // Sync JSONL textarea to form fields
+    syncJsonlToForm() {
+        const jsonlTextarea = document.getElementById('editTaskJsonl');
+        if (!jsonlTextarea) return;
+        try {
+            const data = JSON.parse(jsonlTextarea.value);
+            if (data.id !== undefined) document.getElementById('editTaskId').value = data.id;
+            if (data.type !== undefined) document.getElementById('editTaskType').value = data.type;
+            if (data.description !== undefined) document.getElementById('editTaskDescription').value = data.description;
+            if (data.system_prompt !== undefined) document.getElementById('editSystemPrompt').value = data.system_prompt;
+            if (data.user_template !== undefined) document.getElementById('editUserTemplate').value = data.user_template;
+        } catch (error) {
+            // Ignore parse errors, do not update form
+        }
+    }
+
+    // Function to format JSONL content
+    formatJsonl() {
+        const jsonlTextarea = document.getElementById('editTaskJsonl');
+        try {
+            const data = JSON.parse(jsonlTextarea.value);
+            jsonlTextarea.value = JSON.stringify(data, null, 2);
+            this.showAlert('JSON formatted successfully', 'success');
+        } catch (error) {
+            this.showAlert('Invalid JSON format: ' + error.message, 'danger');
+        }
+    }
+
+    // Function to validate JSONL content
+    validateJsonl() {
+        const jsonlTextarea = document.getElementById('editTaskJsonl');
+        try {
+            const data = JSON.parse(jsonlTextarea.value);
+            
+            // Basic validation
+            const required = ['id', 'description'];
+            const missing = required.filter(field => !data[field]);
+            
+            if (missing.length > 0) {
+                this.showAlert(`Missing required fields: ${missing.join(', ')}`, 'warning');
+                return false;
+            }
+            
+            this.showAlert('JSON is valid', 'success');
+            return true;
+        } catch (error) {
+            this.showAlert('Invalid JSON format: ' + error.message, 'danger');
+            return false;
+        }
+    }
+
+    // Function to update task from JSONL
+    async updateTaskFromJsonl() {
+        const jsonlTextarea = document.getElementById('editTaskJsonl');
+        
+        // Validate first
+        if (!this.validateJsonl()) {
+            return;
+        }
+
+        try {
+            const taskData = JSON.parse(jsonlTextarea.value);
+            const taskId = taskData.id;
+
+            if (!taskId) {
+                this.showAlert('Task ID is required', 'warning');
+                return;
+            }
+
+            const response = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(taskData)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            // Close the modal
+            const modalElement = document.getElementById('editTaskModal');
+            if (modalElement) {
+                // Find and hide any visible custom modal
+                const activeOverlay = document.querySelector('.custom-modal-overlay.show');
+                if (activeOverlay) {
+                    activeOverlay.classList.remove('show');
+                    setTimeout(() => {
+                        if (activeOverlay.parentNode) {
+                            activeOverlay.parentNode.removeChild(activeOverlay);
+                        }
+                    }, 300);
+                }
+            }
+
+            this.showAlert(`Task "${taskId}" updated successfully from JSONL!`, 'success');
+            
+            // Reload tasks to reflect changes
+            await this.loadTasks();
+            
+        } catch (error) {
+            console.error('Error updating task from JSONL:', error);
+            this.showAlert('Error updating task: ' + error.message, 'danger');
+        }
+    }
+
+    async loadTaskConfiguration(taskId, showModal = false) {
+        console.log('Loading task configuration for:', taskId);
+        try {
+            const response = await fetch(`/api/tasks/${taskId}/config`);
+            if (!response.ok) {
+                throw new Error(`Failed to load task configuration: ${response.statusText}`);
+            }
+            const config = await response.json();
+            console.log('Loaded task configuration:', config);
+            this.populateTaskJsonEditor(config);
+            if (showModal) {
+                // Use custom modal system instead of Bootstrap
+                const modalElement = document.getElementById('taskConfigModal');
+                if (modalElement) {
+                    // Check if CustomModal class is available
+                    if (typeof CustomModal !== 'undefined') {
+                        const customModal = new CustomModal(modalElement);
+                        customModal.show();
+                    } else {
+                        console.error('CustomModal class not available');
+                        this.showAlert('Modal system not available', 'danger');
+                    }
+                } else {
+                    console.error('Task configuration modal element not found');
+                    this.showAlert('Modal element not found', 'danger');
+                }
+            } else {
+                this.showTaskConfiguration();
+            }
+            this.currentConfigTaskId = taskId;
+        } catch (error) {
+            console.error('Error loading task configuration:', error);
+            this.showAlert('Error loading task configuration: ' + error.message, 'danger');
+        }
+    }
+
+    showTaskConfiguration() {
+        const taskJsonSection = document.getElementById('taskJsonSection');
+        if (taskJsonSection) {
+            taskJsonSection.classList.remove('collapsed');
+            taskJsonSection.classList.remove('collapsing');
+            taskJsonSection.style.display = 'block';
+            // Animate expand
+            taskJsonSection.style.maxHeight = taskJsonSection.scrollHeight + 'px';
+            setTimeout(() => {
+                taskJsonSection.style.maxHeight = '';
+            }, 400);
+            taskJsonSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+
+    hideTaskConfiguration() {
+        const taskJsonSection = document.getElementById('taskJsonSection');
+        if (taskJsonSection) {
+            // Animate collapse
+            taskJsonSection.classList.remove('collapsed');
+            taskJsonSection.classList.add('collapsing');
+            taskJsonSection.style.maxHeight = taskJsonSection.scrollHeight + 'px';
+            void taskJsonSection.offsetHeight;
+            taskJsonSection.style.maxHeight = '0px';
+            const onTransitionEnd = function (e) {
+                if (e.propertyName === 'max-height') {
+                    taskJsonSection.classList.remove('collapsing');
+                    taskJsonSection.classList.add('collapsed');
+                    taskJsonSection.style.display = 'none';
+                    taskJsonSection.style.maxHeight = '';
+                    taskJsonSection.removeEventListener('transitionend', onTransitionEnd);
+                }
+            };
+            taskJsonSection.addEventListener('transitionend', onTransitionEnd);
+        }
+        this.currentConfigTaskId = null;
+    }
+
+    populateTaskJsonEditor(config) {
+        const taskJsonArea = document.getElementById('taskJsonArea');
+        if (taskJsonArea) {
+            // Format JSON with proper indentation
+            taskJsonArea.value = JSON.stringify(config, null, 2);
+            
+            // Auto-resize textarea to fit content
+            taskJsonArea.style.height = 'auto';
+            taskJsonArea.style.height = Math.max(400, taskJsonArea.scrollHeight) + 'px';
+        }
+    }
+
+    async saveTaskConfiguration() {
+        if (!this.currentConfigTaskId) {
+            this.showAlert('No task selected for configuration update', 'warning');
+            return;
+        }
+
+        const taskJsonArea = document.getElementById('taskJsonArea');
+        if (!taskJsonArea) {
+            this.showAlert('Task configuration editor not found', 'danger');
+            return;
+        }
+
+        try {
+            // Parse JSON to validate it
+            const configData = JSON.parse(taskJsonArea.value);
+            
+            // Send update request
+            const response = await fetch(`/api/tasks/${this.currentConfigTaskId}/config`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(configData)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const result = await response.json();
+            this.showAlert('Task configuration updated successfully!', 'success');
+            
+            // Reload tasks to reflect changes
+            await this.loadTasks();
+            
+        } catch (error) {
+            console.error('Error saving task configuration:', error);
+            if (error instanceof SyntaxError) {
+                this.showAlert('Invalid JSON format. Please check your syntax.', 'danger');
+            } else {
+                this.showAlert('Error saving task configuration: ' + error.message, 'danger');
+            }
+        }
+    }
+
+    updateTaskDropdown(tasks) {
+        const taskDropdown = document.getElementById('taskDropdown');
+        if (!taskDropdown) {
+            console.error('Task dropdown not found');
+            return;
+        }
+
+        // Clear existing options
+        taskDropdown.innerHTML = '<option value="">Select a task...</option>';
+        
+        // Add task options
+        tasks.forEach(task => {
+            const option = document.createElement('option');
+            option.value = task.id;
+            option.textContent = `${task.id} - ${task.description || task.name || 'No description'}`;
+            taskDropdown.appendChild(option);
+        });
+        
+        console.log(`Updated task dropdown with ${tasks.length} tasks`);
     }
 
     async testGeneration() {
@@ -815,12 +1358,17 @@ class DatasetGenerator {
         const tableHtml = `
             <div class="card mt-3">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5><i class="fas fa-table"></i> Dataset Preview</h5>
-                    <div class="btn-group btn-group-sm">
-                        <button class="btn btn-outline-primary" onclick="datasetGenerator.toggleTableView('compact')">
+                    <h5><i class="fas fa-table"></i> Dataset Preview</h5>                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-primary" onclick="datasetGenerator.toggleViewMode('table')" id="tableViewBtn">
+                            <i class="fas fa-table"></i> Table
+                        </button>
+                        <button class="btn btn-outline-success" onclick="datasetGenerator.toggleViewMode('jsonl')" id="jsonlViewBtn">
+                            <i class="fas fa-code"></i> JSONL
+                        </button>
+                        <button class="btn btn-outline-primary" onclick="datasetGenerator.toggleTableView('compact')" id="compactBtn">
                             <i class="fas fa-compress"></i> Compact
                         </button>
-                        <button class="btn btn-outline-primary" onclick="datasetGenerator.toggleTableView('full')">
+                        <button class="btn btn-outline-primary" onclick="datasetGenerator.toggleTableView('full')" id="fullBtn">
                             <i class="fas fa-expand"></i> Full
                         </button>
                         <button class="btn btn-outline-secondary" onclick="datasetGenerator.exportTableToCSV()">
@@ -1081,10 +1629,189 @@ class DatasetGenerator {
         this.displayPreviewTable(this.currentEntries);
     }
 
+    // API Configuration Methods
+    async saveApiKey() {
+        const apiKey = document.getElementById('apiKey')?.value?.trim();
+        
+        if (!apiKey) {
+            this.showAlert('Please enter an API key', 'warning');
+            return;
+        }
+        
+        if (!apiKey.startsWith('sk-')) {
+            this.showAlert('API key should start with "sk-"', 'warning');
+            return;
+        }
+
+        try {
+            // Test the API key before saving
+            const isValid = await this.validateApiKey(apiKey);
+            
+            if (!isValid) {
+                this.showAlert('Invalid API key. Please check and try again.', 'danger');
+                return;
+            }
+
+            // Save to session/environment (this would typically be done server-side)
+            const response = await fetch('/api/config/api-key', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ api_key: apiKey })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            // Update status display
+            const apiStatus = document.getElementById('apiStatus');
+            if (apiStatus) {
+                apiStatus.innerHTML = `
+                    <i class="fas fa-check-circle text-success"></i>
+                    API key saved and verified successfully
+                `;
+                apiStatus.className = 'alert alert-success';
+            }
+
+            // Close the modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('apiConfigModal'));
+            if (modal) modal.hide();
+
+            this.showAlert('API key saved successfully!', 'success');
+
+        } catch (error) {
+            console.error('Error saving API key:', error);
+            this.showAlert('Error saving API key: ' + error.message, 'danger');
+            
+            // Update status display
+            const apiStatus = document.getElementById('apiStatus');
+            if (apiStatus) {
+                apiStatus.innerHTML = `
+                    <i class="fas fa-exclamation-triangle text-danger"></i>
+                    Error: ${error.message}
+                `;
+                apiStatus.className = 'alert alert-danger';
+            }
+        }
+    }
+
+    async testApiKey() {
+        const apiKey = document.getElementById('apiKey')?.value?.trim();
+        
+        if (!apiKey) {
+            this.showAlert('Please enter an API key to test', 'warning');
+            return;
+        }
+
+        const testBtn = document.getElementById('testApiBtn');
+        const originalText = testBtn?.innerHTML;
+        
+        try {
+            if (testBtn) {
+                testBtn.disabled = true;
+                testBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+            }
+
+            const isValid = await this.validateApiKey(apiKey);
+            
+            const apiStatus = document.getElementById('apiStatus');
+            if (isValid) {
+                if (apiStatus) {
+                    apiStatus.innerHTML = `
+                        <i class="fas fa-check-circle text-success"></i>
+                        API key is valid and working
+                    `;
+                    apiStatus.className = 'alert alert-success';
+                }
+                this.showAlert('API key test successful!', 'success');
+            } else {
+                if (apiStatus) {
+                    apiStatus.innerHTML = `
+                        <i class="fas fa-times-circle text-danger"></i>
+                        API key is invalid or not working
+                    `;
+                    apiStatus.className = 'alert alert-danger';
+                }
+                this.showAlert('API key test failed', 'danger');
+            }
+
+        } catch (error) {
+            console.error('Error testing API key:', error);
+            this.showAlert('Error testing API key: ' + error.message, 'danger');
+            
+            const apiStatus = document.getElementById('apiStatus');
+            if (apiStatus) {
+                apiStatus.innerHTML = `
+                    <i class="fas fa-exclamation-triangle text-warning"></i>
+                    Test failed: ${error.message}
+                `;
+                apiStatus.className = 'alert alert-warning';
+            }
+        } finally {
+            if (testBtn) {
+                testBtn.disabled = false;
+                testBtn.innerHTML = originalText || '<i class="fas fa-flask"></i> Test API';
+            }
+        }
+    }
+
+    async validateApiKey(apiKey) {
+        try {
+            // Test the API key by making a simple request
+            const response = await fetch('/api/test-api-key', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ api_key: apiKey })
+            });
+
+            if (!response.ok) {
+                return false;
+            }
+
+            const result = await response.json();
+            return result.valid === true;
+
+        } catch (error) {
+            console.error('Error validating API key:', error);
+            return false;
+        }
+    }
+
+    // Remove duplicate/overriding methods at the end of the file:
+    // - loadTaskConfiguration
+    // - hideTaskConfiguration
+    // - populateJsonEditor
+    // - saveTaskConfiguration
+    // - formatJsonl
+    // - validateJsonl
+
+    // (Find and remove the following duplicate methods at the end of the file)
+    // async loadTaskConfiguration(taskId) { ... }
+    // hideTaskConfiguration() { ... }
+    // populateJsonEditor(config) { ... }
+    // async saveTaskConfiguration() { ... }
+    // formatJsonl() { ... }
+    // validateJsonl() { ... }
+
+    // The correct implementations are already present above and handle JSONL edit mode.
+
+    // --- No further changes needed for JSONL edit mode ---
+    // The Edit Task modal already supports switching between form and JSONL modes.
+    // The JSONL mode is shown/hidden by switchEditMode('jsonl') and the modal is opened by openEditTaskModal.
+    // The modal is only opened once at a time by the event delegation in bindEvents and openEditTaskModal.
+
+    // If you still see two Edit Task modals, ensure you are not calling both Bootstrap and CustomModal for the same modal.
+    // This code only uses the CustomModal system for Edit Task modal.
+
     // ...existing code...
 }
+// Expose to window for custom modal system
+window.datasetGenerator = new DatasetGenerator();
+window.datasetGenerator.rebindEditTaskModalEvents = window.datasetGenerator.rebindEditTaskModalEvents.bind(window.datasetGenerator);
 
 // Initialize the application when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     window.datasetGenerator = new DatasetGenerator();
 });
+
