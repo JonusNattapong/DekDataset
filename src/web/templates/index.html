@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,140 +9,134 @@
     <!-- Add Google Fonts for better typography -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
     <!-- Add Bootstrap CSS for proper modal and component styling -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    
+
     <!-- Add meta tags for better SEO and appearance -->
-    <meta name="description" content="DekDataset - Advanced Thai AI/ML Dataset Generator powered by DeepSeek API and Ollama Local Models">
+    <meta name="description"
+        content="DekDataset - Advanced Thai AI/ML Dataset Generator powered by DeepSeek API and Ollama Local Models">
     <meta name="keywords" content="AI, Machine Learning, Dataset, Thai Language, DeepSeek, Ollama">
     <meta name="author" content="ZOMBIT - JonusNattapong">
-    <style>        .pdf-drop-zone {
-            border: 2px dashed #888;
-            border-radius: 8px;
-            padding: 2rem 1rem;
-            text-align: center;
-            color: #888;
-            background: #fafbfc;
-            cursor: pointer;
-            transition: border-color 0.2s, background 0.2s;
-            margin-bottom: 1rem;
-        }
-        .pdf-drop-zone.dragover {
-            border-color: #007bff;
-            background: #e6f0ff;
-            color: #007bff;
-        }
-        
-        /* Model Provider Styles */
-        .model-provider-tabs {
-            margin-bottom: 1rem;
-        }
-        
-        .model-section {
-            transition: all 0.3s ease;
-            padding: 15px;
-            border: 1px solid #e9ecef;
-            border-radius: 8px;
-            background: #f8f9fa;
-        }
-        
-        .model-section.active {
-            background: #fff;
-            border-color: #007bff;
-            box-shadow: 0 2px 4px rgba(0,123,255,0.1);
-        }
-        
-        .loading-spinner {
-            color: #6c757d;
-            font-size: 0.9em;
-        }
-
-        /* Task item styles */
-        .task-item {
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-
-        .task-item:hover {
-            background-color: #f8f9fa;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
-
-        .task-item.selected {
-            background-color: #e3f2fd;
-            border-color: #2196f3;
-            box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
-        }
-
-        /* Alert container */
-        #alertContainer {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 9999;
-            max-width: 400px;
-        }
-    </style>
 </head>
-<body>
-    <!-- Animated background elements -->
-    <div class="bg-animation"></div>
-    <div class="floating-elements">
-        <div class="floating-element"></div>
-        <div class="floating-element"></div>
-        <div class="floating-element"></div>
-    </div>
 
+<body>
     <nav class="navbar">
         <div class="container">
             <a href="#" class="navbar-brand">
                 <i class="fas fa-brain"></i>
                 DekDataset
-                <span style="font-size: 0.7rem; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-left: 0.5rem;">by ZOMBIT</span>
+                <span
+                    style="font-size: 0.65rem; background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%); background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-left: 0.75rem; font-weight: 500;">by
+                    ZOMBITX64</span>
             </a>
         </div>
     </nav>
 
     <div class="container">
         <!-- Add alert container for notifications with enhanced styling -->
-        <div id="alertContainer" style="position: fixed; top: 20px; right: 20px; z-index: 9999; max-width: 400px;"></div>
+        <div id="alertContainer"></div>
 
         <div class="main-content">
-            <!-- Task Management Panel with enhanced header -->
-            <div class="card">
+            <!-- Task Management Panel with enhanced design -->
+            <div class="card task-management-card">
                 <div class="card-header">
-                    <i class="fas fa-tasks"></i>
-                    <h2>Task Management</h2>
-                    <span class="badge bg-primary ms-auto" id="taskCount">0 tasks</span>
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">
-                        <i class="fas fa-list me-2"></i>Select Task
-                    </label>
-                    <div style="display: flex; gap: 1rem; align-items: center;">
-                        <select class="form-select" id="taskDropdown" style="flex: 1;">
-                            <option value="">-- Select Task --</option>
-                            <!-- Task options will be populated by JavaScript -->
-                        </select>
-                        <button class="btn btn-success" id="createTaskBtn" data-bs-toggle="modal" data-bs-target="#createTaskModal">
-                            <i class="fas fa-plus"></i> Create
-                        </button>
-                        <button class="btn btn-secondary" id="refreshTasks">
-                            <i class="fas fa-sync"></i>
-                        </button>
+                    <div class="header-content">
+                        <div class="header-left">
+                            <i class="fas fa-tasks"></i>
+                            <h2>Task Management</h2>
+                        </div>
+
                     </div>
                 </div>
 
-                <!-- Task Configuration Section moved below task list for better UX -->
-                
-                <div id="taskList">
-                    <!-- Task items will be populated by JavaScript -->
+                <div class="card-body">
+                    <!-- Task Selection Section -->
+                    <div class="task-select-section d-flex align-items-center justify-content-between px-3 py-2 rounded shadow-sm"
+                        style="background: #f8fafc; border: 1px solid #e0e7ef;">
+                        <div class="d-flex align-items-center gap-2">
+                            <span
+                                class="task-count-badge badge rounded-pill bg-primary text-white px-3 py-2 fs-6 shadow-sm"
+                                id="taskCount" style="font-weight:600; letter-spacing:0.5px;">
+                                <i class="fas fa-tasks me-2"></i>0 งาน
+                            </span>
+                        </div>
+                        <div class="header-actions d-flex gap-2">
+                            <button class="btn btn-outline-primary btn-sm d-flex align-items-center gap-1"
+                                id="refreshTasks" title="Refresh Tasks" style="transition:background 0.2s;">
+                                <i class="fas fa-sync"></i>
+                                <span class="d-none d-md-inline">รีเฟรช</span>
+                            </button>
+                            <button class="btn btn-success btn-sm d-flex align-items-center gap-1" id="createTaskBtn"
+                                title="Create New Task" style="transition:background 0.2s;">
+                                <i class="fas fa-plus"></i>
+                                <span class="d-none d-md-inline">สร้างงานใหม่</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Quick Task Selection -->
+                    <div class="quick-select-section">
+                        <label class="form-label task-section-label">
+                            <i class="fas fa-bolt me-2"></i>Quick Select
+                        </label>
+                        <div class="quick-select-dropdown">
+                            <select class="form-select modern-select" id="taskDropdown">
+                                <option value="">Choose a task to work with...</option>
+                                <!-- Task options will be populated by JavaScript -->
+                            </select>
+                            <div class="select-indicator">
+                                <i class="fas fa-chevron-down"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Task List -->
+                    <div class="task-list-container">
+                        <div class="task-list-header">
+                            <span class="list-title">Available Tasks</span>
+                        </div>
+
+                        <div id="taskList" class="task-grid d-grid gap-3 mt-3"
+                            style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr));">
+                        </div>
+
+                        <!-- Empty State -->
+                        <div id="emptyTaskState" class="empty-state" style="display: none;">
+                            <div class="empty-icon">
+                                <i class="fas fa-tasks"></i>
+                            </div>
+                            <h4>No Tasks Found</h4>
+                            <p>Create your first task to get started with dataset generation</p>
+                            <button class="btn btn-primary" id="createFirstTask">
+                                <i class="fas fa-plus"></i> Create Your First Task
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Task Statistics -->
+                    <div class="task-stats" id="taskStats" style="display: none;">
+                        <div class="stat-item">
+                            <div class="stat-number" id="totalTasks">0</div>
+                            <div class="stat-label">Total Tasks</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number" id="customTasks">0</div>
+                            <div class="stat-label">Custom</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number" id="qaTasks">0</div>
+                            <div class="stat-label">Q&A</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number" id="recentTasks">0</div>
+                            <div class="stat-label">Recent</div>
+                        </div>
+                    </div>
                 </div>
-                <!-- Removed inline Task Configuration Section: now handled by popup modal -->
             </div>
 
             <!-- Generation Panel with enhanced styling -->
@@ -149,182 +144,257 @@
                 <div class="card-header">
                     <i class="fas fa-magic"></i>
                     <h2>Dataset Generation</h2>
-                    <div class="status-indicator status-active ms-auto" title="System Ready"></div>
+                    <div style="width: 12px; height: 12px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border-radius: 50%; box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);"
+                        title="System Ready"></div>
                 </div>
-                
-                <div class="generation-panel">
-                    <div class="form-group">
-                        <label class="form-label">
-                            <i class="fas fa-target me-2"></i>Selected Task
-                        </label>
-                        <input type="text" class="form-control" id="selectedTask" readonly placeholder="No task selected" style="background: rgba(102, 126, 234, 0.05);">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">
-                            <i class="fas fa-hashtag me-2"></i>Number of Entries
-                        </label>
-                        <input type="number" class="form-control" id="entryCount" value="10" min="1" max="1000">
-                    </div>
-                    
-                    <div class="form-group" style="grid-column: 1 / -1;">
-                        <label class="form-label">
-                            <i class="fas fa-robot me-2"></i>Model Provider
-                            <span id="modelLoadingIndicator" class="loading-spinner ms-2" style="display:none;">
-                                <i class="fas fa-spinner fa-spin"></i> Loading models...
-                            </span>
-                        </label>
-                        
-                        <!-- Model Provider Selection with enhanced styling -->
-                        <div class="model-provider-tabs mb-3">
-                            <div class="btn-group w-100" role="group" aria-label="Model Provider">
-                                <input type="radio" class="btn-check" name="modelProvider" id="deepseekProvider" value="deepseek" checked>
-                                <label class="btn btn-outline-primary" for="deepseekProvider">
-                                    <i class="fas fa-cloud me-2"></i> DeepSeek API
+
+                <div class="card-body">
+                    <div class="generation-panel">
+                        <div class="form-group">
+                            <label class="form-label">
+                                <i class="fas fa-target me-2"></i>Selected Task
+                            </label>
+                            <input type="text" class="form-control" id="selectedTask" readonly
+                                placeholder="No task selected"
+                                style="background: rgba(30, 58, 138, 0.05); border-color: rgba(30, 58, 138, 0.2);">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">
+                                <i class="fas fa-hashtag me-2"></i>Number of Entries
+                            </label>
+                            <input type="number" class="form-control" id="entryCount" value="10" min="1" max="1000">
+                        </div>
+
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <label class="form-label">
+                                <i class="fas fa-robot me-2"></i>Model Provider
+                                <span id="modelLoadingIndicator" class="loading-spinner ms-2" style="display:none;">
+                                    <i class="fas fa-spinner fa-spin"></i> Loading models...
+                                </span>
+                            </label>
+
+                            <!-- Model Provider Selection with enhanced styling -->
+                            <div class="model-provider-tabs mb-3">
+                                <div class="btn-group w-100" role="group" aria-label="Model Provider">
+                                    <input type="radio" class="btn-check" name="modelProvider" id="deepseekProvider"
+                                        value="deepseek" checked>
+                                    <label class="btn btn-outline-primary" for="deepseekProvider">
+                                        <i class="fas fa-cloud me-2"></i> DeepSeek API
+                                    </label>
+
+                                    <input type="radio" class="btn-check" name="modelProvider" id="ollamaProvider"
+                                        value="ollama">
+                                    <label class="btn btn-outline-success" for="ollamaProvider">
+                                        <i class="fas fa-home me-2"></i> Ollama Local
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- DeepSeek Models -->
+                            <div id="deepseekModelSection" class="model-section active">
+                                <label class="form-label small text-muted">
+                                    <i class="fas fa-cloud me-1"></i> DeepSeek Cloud Models
                                 </label>
-                                
-                                <input type="radio" class="btn-check" name="modelProvider" id="ollamaProvider" value="ollama">
-                                <label class="btn btn-outline-success" for="ollamaProvider">
-                                    <i class="fas fa-home me-2"></i> Ollama Local
+                                <select class="form-select" id="deepseekModelSelect">
+                                    <option value="">Loading DeepSeek models...</option>
+                                </select>
+                            </div>
+
+                            <!-- Ollama Models -->
+                            <div id="ollamaModelSection" class="model-section" style="display: none;">
+                                <label class="form-label small text-muted">
+                                    <i class="fas fa-home me-1"></i> Ollama Local Models
                                 </label>
+                                <select class="form-select" id="ollamaModelSelect">
+                                    <option value="">Loading Ollama models...</option>
+                                </select>
+                                <small class="form-text text-muted">
+                                    <i class="fas fa-info-circle me-1"></i>Make sure Ollama is running locally on port
+                                    11434
+                                </small>
                             </div>
                         </div>
+                    </div>
 
-                        <!-- DeepSeek Models -->
-                        <div id="deepseekModelSection" class="model-section active">
-                            <label class="form-label small text-muted">
-                                <i class="fas fa-cloud me-1"></i> DeepSeek Cloud Models
-                            </label>
-                            <select class="form-select" id="deepseekModelSelect">
-                                <option value="">Loading DeepSeek models...</option>
-                            </select>
+                    <div style="margin-bottom: 2rem;">
+                        <div class="btn-group">
+                            <button class="btn btn-warning" id="testGeneration" disabled>
+                                <i class="fas fa-flask"></i> Test Generation
+                            </button>
+                            <button class="btn btn-primary" id="generateDataset" disabled>
+                                <i class="fas fa-rocket"></i> Generate Dataset
+                            </button>
+                            <!-- Add stop button -->
+                            <button class="btn btn-danger" id="stopGeneration" style="display: none;">
+                                <i class="fas fa-stop"></i> Stop Generation
+                            </button>
+                            <button class="btn btn-secondary" id="qualityBtn">
+                                <i class="fas fa-shield-alt"></i> Quality Settings
+                            </button>
+                            <button class="btn btn-info" id="apiConfigBtn">
+                                <i class="fas fa-key"></i> API Config
+                            </button>
                         </div>
+                    </div>
 
-                        <!-- Ollama Models -->
-                        <div id="ollamaModelSection" class="model-section" style="display: none;">
-                            <label class="form-label small text-muted">
-                                <i class="fas fa-home me-1"></i> Ollama Local Models
-                            </label>
-                            <select class="form-select" id="ollamaModelSelect">
-                                <option value="">Loading Ollama models...</option>
-                            </select>
-                            <small class="form-text text-muted">
-                                <i class="fas fa-info-circle me-1"></i>Make sure Ollama is running locally on port 11434
+                    <!-- RAG Status Panel -->
+                    <div class="card mb-3" id="ragStatusPanel">
+                        <div class="card-body">
+                            <div class="row align-items-center">
+                                <div class="col-md-8">
+                                    <h6 class="mb-1">
+                                        <i class="fas fa-brain me-2"></i>RAG Enhancement Status
+                                    </h6>
+                                    <p class="mb-0" id="ragStatusText">
+                                        <i class="fas fa-circle text-secondary me-1" id="ragStatusIcon"></i>
+                                        <span id="ragStatusMessage">Checking RAG system...</span>
+                                    </p>
+                                    <small class="opacity-75" id="ragDocumentInfo">No PDF documents loaded</small>
+                                </div>
+                                <div class="col-md-4 text-md-end">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="useRagSwitch" checked>
+                                        <label class="form-check-label" for="useRagSwitch">
+                                            Use RAG Enhancement
+                                        </label>
+                                    </div>
+                                    <button class="btn btn-light btn-sm mt-2" id="manageRagBtn" data-bs-toggle="modal"
+                                        data-bs-target="#ragManagementModal">
+                                        <i class="fas fa-cog"></i> Manage
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Enhanced Progress Section with stop functionality -->
+                    <div id="progressSection" style="display: none;">
+                        <div class="progress mb-3">
+                            <div class="progress-bar" role="progressbar" style="width: 0%" aria-valuenow="0"
+                                aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                        <div id="progressText" class="text-center text-muted">
+                            <i class="fas fa-cog fa-spin me-2"></i>Initializing...
+                        </div>
+                        <div class="text-center mt-2">
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle me-1"></i>
+                                You can stop the generation at any time using the Stop button above
                             </small>
                         </div>
                     </div>
-                </div>
-                
-                <div style="margin-bottom: 2rem;">
-                    <div class="btn-group">
-                        <button class="btn btn-warning" id="testGeneration" disabled>
-                            <i class="fas fa-flask"></i> Test Generation
-                        </button>
-                        <button class="btn btn-primary" id="generateDataset" disabled>
-                            <i class="fas fa-rocket"></i> Generate Dataset
-                        </button>
-                        <!-- Add stop button -->
-                        <button class="btn btn-danger" id="stopGeneration" style="display: none;">
-                            <i class="fas fa-stop"></i> Stop Generation
-                        </button>
-                        <button class="btn btn-secondary" id="qualityBtn" data-bs-toggle="modal" data-bs-target="#qualityModal">
-                            <i class="fas fa-shield-alt"></i> Quality Settings
-                        </button>
-                        <button class="btn btn-info" id="apiConfigBtn" data-bs-toggle="modal" data-bs-target="#apiConfigModal">
-                            <i class="fas fa-key"></i> API Config
-                        </button>
-                    </div>
-                </div>
 
-                <!-- Enhanced Progress Section with stop functionality -->
-                <div id="progressSection" style="display: none;">
-                    <div class="progress mb-3">
-                        <div class="progress-bar" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-                    </div>
-                    <div id="progressText" class="text-center text-muted">
-                        <i class="fas fa-cog fa-spin me-2"></i>Initializing...
-                    </div>
-                    <div class="text-center mt-2">
-                        <small class="text-muted">
-                            <i class="fas fa-info-circle me-1"></i>
-                            You can stop the generation at any time using the Stop button above
-                        </small>
-                    </div>
-                </div>
-
-                <!-- Results and Download Section -->
-                <div id="downloadSection" style="display: none;">
-                    <div id="resultSummary" class="mb-4">
-                        <!-- Results will be displayed here -->
-                    </div>
-
-                    <!-- Preview Table Container -->
-                    <div id="previewTableContainer">
-                        <!-- Table will be inserted here by JavaScript -->
-                    </div>
-
-                    <!-- Sample Display (kept for JSON view) -->
-                    <div id="sampleDisplay" class="mt-3">
-                        <!-- Sample entry will be displayed here -->
-                    </div>
-
-                    <!-- Download Buttons -->
-                    <div class="download-buttons mt-4">
-                        <h5><i class="fas fa-download"></i> Download Dataset</h5>
-                        <div class="btn-group">
-                            <button class="btn btn-success download-btn" data-format="json" disabled>
-                                <i class="fas fa-file-code"></i> Download JSONL
-                            </button>
-                            <button class="btn btn-info download-btn" data-format="csv" disabled>
-                                <i class="fas fa-file-csv"></i> Download CSV
-                            </button>
-                            <button class="btn btn-warning download-btn" data-format="zip" disabled>
-                                <i class="fas fa-file-archive"></i> Download ZIP
-                            </button>
+                    <!-- Results and Download Section -->
+                    <div id="downloadSection" style="display: none;">
+                        <div id="resultSummary" class="mb-4">
+                            <!-- Results will be displayed here -->
                         </div>
-                        <p class="text-muted mt-2">
-                            <i class="fas fa-info-circle"></i> 
-                            JSONL format is recommended for machine learning tasks. CSV is good for analysis in Excel/Google Sheets.
-                        </p>
-                    </div>
-                </div>
 
-                <!-- PDF Upload Panel -->
-                <div class="card" id="pdfUploadCard" style="margin-top:2rem;">
-                    <div class="card-header" style="background:#f8f9fa;border-bottom:1px solid #eee;display:flex;align-items:center;gap:0.5rem;">
-                        <i class="fas fa-file-pdf" style="color:#e74c3c;"></i>
-                        <span style="font-weight:600;">Import Dataset from PDF (Mistral Document AI)</span>
-                    </div>
-                    <div class="pdf-upload-panel" style="padding:1.5rem 1rem 1rem 1rem;">
-                        <div id="pdfDropZone" class="pdf-drop-zone" style="margin-bottom:1rem;">
-                            <span id="pdfDropText"><i class="fas fa-upload"></i> Drag & drop PDF file here or click to select</span>
-                            <input type="file" id="pdfFileInput" accept="application/pdf" style="display:none;" />
+                        <!-- Preview Table Container -->
+                        <div id="previewTableContainer">
+                            <!-- Table will be inserted here by JavaScript -->
                         </div>
-                        <div class="form-group" style="margin-bottom:0.5rem;">
-                            <label class="form-label" style="font-weight:500;">Mistral API Key</label>
-                            <input type="password" class="form-control" id="mistralApiKey" placeholder="sk-..." style="max-width:350px;">
+
+                        <!-- Sample Display (kept for JSON view) -->
+                        <div id="sampleDisplay" class="mt-3">
+                            <!-- Sample entry will be displayed here -->
                         </div>
-                        <div class="form-group" style="margin-bottom:0.5rem;">
-                            <label class="form-label" style="font-weight:500;">Annotation Options</label>
-                            <div style="display:flex;gap:1.5rem;align-items:center;flex-wrap:wrap;">
-                                <label style="margin-bottom:0;"><input type="checkbox" id="bboxAnnotation"> BBox Annotation</label>
-                                <label style="margin-bottom:0;"><input type="checkbox" id="docAnnotation"> Document Annotation</label>
-                                <label style="margin-bottom:0;">Pages: <input type="text" id="ocrPages" style="width:80px;" placeholder="e.g. 1,2,3"></label>
+
+                        <!-- Download Buttons -->
+                        <div class="download-buttons mt-4">
+                            <h5><i class="fas fa-download"></i> Download Dataset</h5>
+                            <div class="btn-group">
+                                <button class="btn btn-success download-btn" data-format="json" disabled>
+                                    <i class="fas fa-file-code"></i> Download JSONL
+                                </button>
+                                <button class="btn btn-info download-btn" data-format="csv" disabled>
+                                    <i class="fas fa-file-csv"></i> Download CSV
+                                </button>
+                                <button class="btn btn-warning download-btn" data-format="zip" disabled>
+                                    <i class="fas fa-file-archive"></i> Download ZIP
+                                </button>
                             </div>
+                            <p class="text-muted mt-2">
+                                <i class="fas fa-info-circle"></i>
+                                JSONL format is recommended for machine learning tasks. CSV is good for analysis in
+                                Excel/Google Sheets.
+                            </p>
                         </div>
-                        <button class="btn btn-primary" id="uploadPdfBtn" style="margin-top:1rem;width:100%;font-weight:600;font-size:1.1em;">
-                            <i class="fas fa-magic"></i> Upload PDF & OCR
-                        </button>
-                        <div id="pdfUploadStatus" style="margin-top:1rem;"></div>
-                        <div id="pdfEntriesPreview" style="margin-top:1rem;"></div>
                     </div>
-                </div>
-                <!-- End PDF Upload Panel -->
 
-                <!-- Results Section -->
-                <div id="resultsSection" style="display: none;">
-                    <h3 style="margin-bottom: 1rem;">Generated Dataset</h3>
-                    <div id="qualityReport" class="alert alert-info" style="display: none;"></div>
-                    <div id="datasetPreview" style="margin-bottom: 2rem;"></div>
+                    <!-- PDF Upload Panel -->
+                    <div class="card" id="pdfUploadCard" style="margin-top:2rem;">
+                        <div class="card-header">
+                            <i class="fas fa-file-pdf me-2"></i>
+                            <span>Import Dataset from PDF <span class="text-muted"
+                                    style="font-weight:400;font-size:0.95em;">(Mistral Document AI)</span></span>
+                        </div>
+                        <div class="card-body">
+                            <div id="pdfDropZone" class="pdf-drop-zone">
+                                <span id="pdfDropText"><i class="fas fa-upload"></i> Drag & drop PDF or image file here
+                                    or click to select</span>
+                                <input type="file" id="pdfFileInput" accept="application/pdf,image/*"
+                                    style="display:none;" />
+                                <div id="pdfFileLabel"
+                                    style="margin-top:0.7rem;font-size:1.05em;color:#2d3748;font-weight:500;"></div>
+                            </div>
+                            <div class="form-group mb-2">
+                                <label class="form-label">Mistral API Key</label>
+                                <input type="password" class="form-control" id="mistralApiKey" placeholder="sk-..."
+                                    style="max-width:350px;">
+                            </div>
+
+                            <!-- Dataset Creation Options -->
+                            <div class="form-group mb-3" style="margin-top:1.5rem;">
+                                <div class="d-flex align-items-center gap-2 mb-2">
+                                    <input type="checkbox" id="createDatasetFromPdf" style="margin-right:0.5rem;">
+                                    <label class="form-label mb-0">Create Dataset from Extracted Text</label>
+                                </div>
+                                <div id="datasetOptionsPanel"
+                                    style="display:none;margin-top:1rem;padding:1rem;background:#f8f9fa;border-radius:8px;">
+                                    <div class="form-group mb-2">
+                                        <label class="form-label">Dataset Type</label>
+                                        <select class="form-select" id="pdfDatasetType" style="max-width:300px;">
+                                            <option value="text_generation">Text Generation</option>
+                                            <option value="question_answer">Question & Answer</option>
+                                            <option value="classification">Text Classification</option>
+                                            <option value="translation">Translation</option>
+                                            <option value="summarization">Summarization</option>
+                                        </select>
+                                    </div>
+                                    <small class="text-muted">
+                                        <i class="fas fa-info-circle"></i>
+                                        The system will automatically convert extracted text into training-ready dataset
+                                        format
+                                    </small>
+                                </div>
+                            </div>
+
+                            <div class="form-group mb-2">
+                                <label class="form-label">Advanced Options</label>
+                                <div style="display:flex;gap:1.5rem;align-items:center;flex-wrap:wrap;">
+                                    <label style="margin-bottom:0;"><input type="checkbox" id="bboxAnnotation"> BBox
+                                        Annotation</label>
+                                    <label style="margin-bottom:0;"><input type="checkbox" id="docAnnotation"> Document
+                                        Annotation</label>
+                                    <label style="margin-bottom:0;">Pages: <input type="text" id="ocrPages"
+                                            style="width:80px;" placeholder="e.g. 1,2,3"></label>
+                                </div>
+                            </div>
+                            <button class="btn btn-primary w-100 mt-3" id="uploadPdfBtn">
+                                <i class="fas fa-magic"></i> Upload & Process Document
+                            </button>
+                            <div id="pdfUploadStatus" style="margin-top:1rem;"></div>
+                            <div id="pdfEntriesPreview" style="margin-top:1rem;"></div>
+                        </div>
+                    </div>
+
+                    <!-- Results Section -->
+                    <div id="resultsSection" style="display: none;">
+                        <h3 style="margin-bottom: 1rem;">Generated Dataset</h3>
+                        <div id="qualityReport" class="alert alert-info" style="display: none;"></div>
+                        <div id="datasetPreview" style="margin-bottom: 2rem;"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -332,7 +402,7 @@
 
     <!-- Create Task Modal -->
     <div class="modal fade" id="createTaskModal" tabindex="-1">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-xl"><!-- เปลี่ยน modal-lg เป็น modal-xl -->
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Create New Task</h5>
@@ -342,7 +412,8 @@
                     <form id="createTaskForm">
                         <div class="mb-3">
                             <label class="form-label">Task ID</label>
-                            <input type="text" class="form-control" id="taskId" placeholder="Enter unique task ID" required>
+                            <input type="text" class="form-control" id="taskId" placeholder="Enter unique task ID"
+                                required>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Task Type</label>
@@ -355,15 +426,18 @@
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Description</label>
-                            <textarea class="form-control" id="taskDescription" rows="3" placeholder="Describe what this task does..."></textarea>
+                            <textarea class="form-control" id="taskDescription" rows="3"
+                                placeholder="Describe what this task does..."></textarea>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">System Prompt</label>
-                            <textarea class="form-control" id="systemPrompt" rows="3" placeholder="System prompt for the model..."></textarea>
+                            <textarea class="form-control" id="systemPrompt" rows="3"
+                                placeholder="System prompt for the model..."></textarea>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">User Template</label>
-                            <textarea class="form-control" id="userTemplate" rows="3" placeholder="User template with placeholders..."></textarea>
+                            <textarea class="form-control" id="userTemplate" rows="3"
+                                placeholder="User template with placeholders..."></textarea>
                         </div>
                     </form>
                 </div>
@@ -375,7 +449,7 @@
                 </div>
             </div>
         </div>
-    </div>    <!-- Edit Task Modal (always visible, JSON only, no mode switch) -->
+    </div> <!-- Edit Task Modal (always visible, JSON only, no mode switch) -->
     <div class="modal fade" id="editTaskModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
@@ -401,23 +475,23 @@
                                     </button>
                                 </div>
                             </div>
-                            <textarea class="form-control font-monospace" id="editTaskJsonl" rows="20"
-                                placeholder='{
+                            <textarea class="form-control font-monospace" id="editTaskJsonl" rows="20" placeholder='{
     "id": "task_name",
     "type": "custom",
     "description": "Task description",
     "system_prompt": "System prompt for the model...",
     "user_template": "User template with placeholders...",
     "examples": []
-}'
-                                style="font-size: 14px; line-height: 1.5; background-color: #f8f9fa; border: 2px solid #dee2e6; border-radius: 6px; resize: vertical; width: 100%; font-family: ''Consolas', 'Monaco', 'Courier New', monospace'; padding: 12px;"></textarea>
+}' style="font-size: 14px; line-height: 1.5; background-color: #f8f9fa; border: 2px solid #dee2e6; border-radius: 6px; resize: vertical; width: 100%; font-family: ''Consolas', 'Monaco', 'Courier New', monospace'; padding: 12px;"></textarea>
                         </div>
                         <div class="alert alert-info">
                             <i class="fas fa-info-circle"></i>
                             <strong>JSON Format:</strong> แก้ไขข้อมูล Task ได้โดยตรงในรูปแบบ JSON object<br>
                             <span>
-                                - สามารถแก้ไข <b>id</b>, <b>type</b>, <b>description</b>, <b>system_prompt</b>, <b>user_template</b>, <b>examples</b> และ field อื่นๆ ได้<br>
-                                - กด <b>Format</b> เพื่อจัดรูปแบบ, <b>Validate</b> เพื่อตรวจสอบ, <b>Copy</b> เพื่อคัดลอก JSON<br>
+                                - สามารถแก้ไข <b>id</b>, <b>type</b>, <b>description</b>, <b>system_prompt</b>,
+                                <b>user_template</b>, <b>examples</b> และ field อื่นๆ ได้<br>
+                                - กด <b>Format</b> เพื่อจัดรูปแบบ, <b>Validate</b> เพื่อตรวจสอบ, <b>Copy</b> เพื่อคัดลอก
+                                JSON<br>
                                 - <b>เมื่อกดปุ่ม "Update from JSON" จะบันทึกข้อมูลทั้งหมดที่แก้ไขในรูปแบบ JSON นี้</b>
                             </span>
                         </div>
@@ -461,7 +535,8 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Similarity Threshold: <span id="thresholdValue">0.8</span></label>
-                        <input type="range" class="form-range" id="similarityThreshold" min="0" max="1" step="0.1" value="0.8">
+                        <input type="range" class="form-range" id="similarityThreshold" min="0" max="1" step="0.1"
+                            value="0.8">
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Enable Duplicate Detection</label>
@@ -494,12 +569,14 @@
                 <div class="modal-body">
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle"></i>
-                        <strong>Note:</strong> You need a DeepSeek API key to generate real datasets. Get one from <a href="https://platform.deepseek.com" target="_blank">platform.deepseek.com</a>
+                        <strong>Note:</strong> You need a DeepSeek API key to generate real datasets. Get one from <a
+                            href="https://platform.deepseek.com" target="_blank">platform.deepseek.com</a>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">DeepSeek API Key</label>
                         <input type="password" class="form-control" id="apiKey" placeholder="sk-...">
-                        <small class="form-text text-muted">This will be stored in your environment variables for this session.</small>
+                        <small class="form-text text-muted">This will be stored in your environment variables for this
+                            session.</small>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">API Status</label>
@@ -522,238 +599,364 @@
         </div>
     </div>
 
+    <!-- RAG Management Modal -->
+    <div class="modal fade" id="ragManagementModal" tabindex="-1" aria-labelledby="ragManagementModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header"
+                    style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                    <h5 class="modal-title" id="ragManagementModalLabel">
+                        <i class="fas fa-brain me-2"></i>RAG System Management
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- RAG Status Overview -->
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6 class="mb-0"><i class="fas fa-info-circle me-2"></i>System Status</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <p><strong>Status:</strong> <span id="ragModalStatus"
+                                            class="badge bg-secondary">Loading...</span></p>
+                                    <p><strong>Documents:</strong> <span id="ragModalDocCount">0</span></p>
+                                </div>
+                                <div class="col-md-6">
+                                    <p><strong>Indexed:</strong> <span id="ragModalIndexed"
+                                            class="badge bg-secondary">No</span></p>
+                                    <button class="btn btn-sm btn-outline-danger" id="clearRagBtn">
+                                        <i class="fas fa-trash"></i> Clear All
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Search RAG Documents -->
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6 class="mb-0"><i class="fas fa-search me-2"></i>Search Documents</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-group">
+                                <label class="form-label">Search Query</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="ragSearchQuery"
+                                        placeholder="Enter search terms...">
+                                    <button class="btn btn-primary" id="ragSearchBtn">
+                                        <i class="fas fa-search"></i> Search
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div id="ragSearchResults" style="max-height: 300px; overflow-y: auto;">
+                                <!-- Search results will appear here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Loaded Documents -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0"><i class="fas fa-file-pdf me-2"></i>Loaded Documents</h6>
+                        </div>
+                        <div class="card-body">
+                            <div id="ragDocumentsList">
+                                <!-- Document list will appear here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="refreshRagStatus">
+                        <i class="fas fa-sync"></i> Refresh Status
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Add Bootstrap JS for modal functionality -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="/static/js/app.js"></script>
-    
+    <script src="/static/js/app.js" defer></script>
+
     <!-- Add initialization script for task count -->
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             // Update task count badge when tasks are loaded
-            const originalUpdateTaskList = window.datasetGenerator?.updateTaskList;
-            if (originalUpdateTaskList) {
-                window.datasetGenerator.updateTaskList = function(tasks) {
-                    originalUpdateTaskList.call(this, tasks);
-                    const taskCountBadge = document.getElementById('taskCount');
-                    if (taskCountBadge) {
-                        taskCountBadge.textContent = `${tasks.length} task${tasks.length !== 1 ? 's' : ''}`;
+            if (window.datasetGenerator && typeof window.datasetGenerator.updateTaskList === 'function') {
+                const originalUpdateTaskList = window.datasetGenerator.updateTaskList;
+                window.datasetGenerator.updateTaskList = function (tasks) {
+                    try {
+                        originalUpdateTaskList.call(this, tasks);
+                        const taskCountBadge = document.getElementById('taskCount');
+                        if (taskCountBadge && Array.isArray(tasks)) {
+                            taskCountBadge.textContent = `${tasks.length} task${tasks.length !== 1 ? 's' : ''}`;
+                        }
+                    } catch (error) {
+                        console.error('Error updating task list:', error);
+                        if (window.notifications) {
+                            window.notifications.error('Failed to update task list');
+                        }
                     }
                 };
             }
+
+            // Initialize the dataset generator if available
+            if (window.datasetGenerator && typeof window.datasetGenerator.init === 'function') {
+                try {
+                    window.datasetGenerator.init();
+                } catch (error) {
+                    console.error('Error initializing dataset generator:', error);
+                    if (window.notifications) {
+                        window.notifications.error('Failed to initialize application');
+                    }
+                }
+            }
         });
     </script>
+
+    <!-- Create a simple notification system -->
     <script>
-    // Custom Modal System
-    class CustomModal {
-        constructor(element) {
-            this.element = element;
-            this.overlay = null;
-            this.isVisible = false;
-        }        show() {
-            if (this.isVisible) return;
-            
-            // Create overlay
-            this.overlay = document.createElement('div');
-            this.overlay.className = 'custom-modal-overlay';
-            
-            // Create modal content wrapper
-            const contentWrapper = document.createElement('div');
-            contentWrapper.className = 'custom-modal-content';
-            
-            // Determine modal size
-            const dialogElem = this.element.querySelector('.modal-dialog');
-            if (dialogElem) {
-                if (dialogElem.classList.contains('modal-lg')) {
-                    this.overlay.classList.add('custom-modal-lg');
-                } else if (dialogElem.classList.contains('modal-xl')) {
-                    this.overlay.classList.add('custom-modal-xl');
-                } else if (dialogElem.classList.contains('modal-sm')) {
-                    this.overlay.classList.add('custom-modal-sm');
+        // Simple notification system for better error handling
+        window.notifications = {
+            success: function(message) {
+                this.show(message, 'success');
+            },
+            error: function(message) {
+                this.show(message, 'error');
+            },
+            warning: function(message) {
+                this.show(message, 'warning');
+            },
+            info: function(message) {
+                this.show(message, 'info');
+            },
+            show: function(message, type) {
+                const alertContainer = document.getElementById('alertContainer');
+                if (!alertContainer) return;
+
+                const alertDiv = document.createElement('div');
+                alertDiv.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show`;
+                alertDiv.innerHTML = `
+                    <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-triangle' : type === 'warning' ? 'exclamation-circle' : 'info-circle'}"></i>
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `;
+
+                alertContainer.appendChild(alertDiv);
+
+                // Auto-remove after 5 seconds
+                setTimeout(() => {
+                    if (alertDiv.parentNode) {
+                        alertDiv.parentNode.removeChild(alertDiv);
+                    }
+                }, 5000);
+            }
+        };
+    </script>
+
+    <!-- Custom Modal System - Enhanced with better event handling -->
+    <script>
+        class CustomModal {
+            constructor(element) {
+                this.element = element;
+                this.overlay = null;
+                this.isVisible = false;
+            }
+
+            show() {
+                if (this.isVisible) return;
+
+                // Create overlay
+                this.overlay = document.createElement('div');
+                this.overlay.className = 'custom-modal-overlay';
+
+                // Create modal content wrapper
+                const contentWrapper = document.createElement('div');
+                contentWrapper.className = 'custom-modal-content';
+
+                // Determine modal size
+                const dialogElem = this.element.querySelector('.modal-dialog');
+                if (dialogElem) {
+                    if (dialogElem.classList.contains('modal-lg')) {
+                        this.overlay.classList.add('custom-modal-lg');
+                    } else if (dialogElem.classList.contains('modal-xl')) {
+                        this.overlay.classList.add('custom-modal-xl');
+                    } else if (dialogElem.classList.contains('modal-sm')) {
+                        this.overlay.classList.add('custom-modal-sm');
+                    }
                 }
-            }
-            
-            // Extract modal content
-            const header = this.element.querySelector('.modal-header');
-            const body = this.element.querySelector('.modal-body');
-            const footer = this.element.querySelector('.modal-footer');
-            
-            // Create custom header
-            if (header) {
-                const customHeader = document.createElement('div');
-                customHeader.className = 'custom-modal-header';
-                
-                const title = document.createElement('h5');
-                title.className = 'custom-modal-title';
-                const titleText = header.querySelector('.modal-title');
-                title.innerHTML = titleText ? titleText.innerHTML : 'Modal';
-                
-                const closeBtn = document.createElement('button');
-                closeBtn.className = 'custom-modal-close';
-                closeBtn.innerHTML = '<i class="fas fa-times"></i>';
-                closeBtn.onclick = () => this.hide();
-                
-                customHeader.appendChild(title);
-                customHeader.appendChild(closeBtn);
-                contentWrapper.appendChild(customHeader);
-            }
-            
-            // Create custom body - clone the original body to preserve form elements
-            if (body) {
-                const customBody = document.createElement('div');
-                customBody.className = 'custom-modal-body';
-                
-                // Clone the body element to preserve form data and event handlers
-                const bodyClone = body.cloneNode(true);
-                customBody.appendChild(bodyClone);
-                contentWrapper.appendChild(customBody);
-            }
-            
-            // Create custom footer
-            if (footer) {
-                const customFooter = document.createElement('div');
-                customFooter.className = 'custom-modal-footer';
-                
-                // Clone footer to preserve button functionality
-                const footerClone = footer.cloneNode(true);
-                customFooter.appendChild(footerClone);
-                
-                // Update close buttons in footer
-                customFooter.querySelectorAll('[data-bs-dismiss="modal"]').forEach(btn => {
-                    btn.onclick = () => this.hide();
-                    btn.removeAttribute('data-bs-dismiss');
+
+                // Extract modal content
+                const header = this.element.querySelector('.modal-header');
+                const body = this.element.querySelector('.modal-body');
+                const footer = this.element.querySelector('.modal-footer');
+
+                // Create custom header
+                if (header) {
+                    const customHeader = document.createElement('div');
+                    customHeader.className = 'custom-modal-header';
+
+                    const title = document.createElement('h5');
+                    title.className = 'custom-modal-title';
+                    const titleText = header.querySelector('.modal-title');
+                    title.innerHTML = titleText ? titleText.innerHTML : 'Modal';
+
+                    const closeBtn = document.createElement('button');
+                    closeBtn.className = 'custom-modal-close';
+                    closeBtn.innerHTML = '<i class="fas fa-times"></i>';
+                    closeBtn.onclick = () => this.hide();
+
+                    customHeader.appendChild(title);
+                    customHeader.appendChild(closeBtn);
+                    contentWrapper.appendChild(customHeader);
+                }
+
+                // Create custom body - clone the original body to preserve form elements
+                if (body) {
+                    const customBody = document.createElement('div');
+                    customBody.className = 'custom-modal-body';
+
+                    // Clone the body element completely with all attributes and content
+                    const bodyClone = body.cloneNode(true);
+                    customBody.appendChild(bodyClone);
+                    contentWrapper.appendChild(customBody);
+                }
+
+                // Create custom footer
+                if (footer) {
+                    const customFooter = document.createElement('div');
+                    customFooter.className = 'custom-modal-footer';
+
+                    // Clone footer to preserve button functionality
+                    const footerClone = footer.cloneNode(true);
+                    customFooter.appendChild(footerClone);
+
+                    // Update close buttons in footer
+                    customFooter.querySelectorAll('[data-bs-dismiss="modal"]').forEach(btn => {
+                        btn.onclick = () => this.hide();
+                        btn.removeAttribute('data-bs-dismiss');
+                    });
+
+                    contentWrapper.appendChild(customFooter);
+                }
+
+                this.overlay.appendChild(contentWrapper);
+                document.body.appendChild(this.overlay);
+
+                // Show with animation
+                requestAnimationFrame(() => {
+                    this.overlay.classList.add('show');
                 });
-                
-                // Re-bind event handlers for Update Task button
-                const updateBtn = customFooter.querySelector('#updateTask');
-                if (updateBtn && window.datasetGenerator) {
-                    updateBtn.onclick = () => window.datasetGenerator.updateTask();
-                }
-                
-                contentWrapper.appendChild(customFooter);
+
+                // Close on overlay click
+                this.overlay.addEventListener('click', (e) => {
+                    if (e.target === this.overlay) {
+                        this.hide();
+                    }
+                });
+
+                // Close on escape key
+                document.addEventListener('keydown', this.escapeHandler);
+
+                this.isVisible = true;
             }
-            
-            this.overlay.appendChild(contentWrapper);
-            document.body.appendChild(this.overlay);
-            
-            // Show with animation
-            requestAnimationFrame(() => {
-                this.overlay.classList.add('show');
-                // Rebind Edit Task Modal events if this is the edit modal
-                if (this.element.id === 'editTaskModal' && window.datasetGenerator && typeof window.datasetGenerator.rebindEditTaskModalEvents === 'function') {
-                    setTimeout(() => window.datasetGenerator.rebindEditTaskModalEvents(), 50);
-                }
-            });
-            
-            // Close on overlay click
-            this.overlay.addEventListener('click', (e) => {
-                if (e.target === this.overlay) {
+
+            hide() {
+                if (!this.isVisible || !this.overlay) return;
+
+                this.overlay.classList.remove('show');
+
+                setTimeout(() => {
+                    if (this.overlay && this.overlay.parentNode) {
+                        this.overlay.parentNode.removeChild(this.overlay);
+                    }
+                    this.overlay = null;
+                }, 300);
+
+                document.removeEventListener('keydown', this.escapeHandler);
+                this.isVisible = false;
+            }
+
+            escapeHandler = (e) => {
+                if (e.key === 'Escape') {
                     this.hide();
                 }
-            });
-            
-            // Close on escape key
-            document.addEventListener('keydown', this.escapeHandler);
-            
-            this.isVisible = true;
-        }
-
-        hide() {
-            if (!this.isVisible || !this.overlay) return;
-            
-            this.overlay.classList.remove('show');
-            
-            setTimeout(() => {
-                if (this.overlay && this.overlay.parentNode) {
-                    this.overlay.parentNode.removeChild(this.overlay);
-                }
-                this.overlay = null;
-            }, 300);
-            
-            document.removeEventListener('keydown', this.escapeHandler);
-            this.isVisible = false;
-        }
-
-        escapeHandler = (e) => {
-            if (e.key === 'Escape') {
-                this.hide();
             }
         }
-    }
 
-    // Initialize custom modals when DOM is loaded
-    document.addEventListener('DOMContentLoaded', function() {
-        console.log('DOM loaded, initializing custom modal system...');
-          // Find all modal triggers and set up custom handlers
-        const modalTriggers = [
-            { selector: 'button[data-bs-target="#createTaskModal"]', modalId: 'createTaskModal' },
-            { selector: 'button[data-bs-target="#qualityModal"]', modalId: 'qualityModal' },
-            { selector: 'button[data-bs-target="#apiConfigModal"]', modalId: 'apiConfigModal' },
-            { selector: '.btn-outline-primary', modalId: 'taskConfigModal' } // Edit buttons
-        ];
-        
-        modalTriggers.forEach(({ selector, modalId }) => {
-            const buttons = document.querySelectorAll(selector);
-            const modalElement = document.getElementById(modalId);
-            
-            if (modalElement) {
-                const customModal = new CustomModal(modalElement);
-                
-                buttons.forEach(button => {
+        // Make CustomModal available globally
+        window.CustomModal = CustomModal;
+
+        // Initialize custom modals when DOM is loaded
+        document.addEventListener('DOMContentLoaded', function () {
+            console.log('DOM loaded, initializing custom modal system...');
+
+            // Store modal instances globally
+            window.customModals = {};
+
+            // Find all modal triggers and set up custom handlers
+            const modalConfigs = [
+                { trigger: '#createTaskBtn', modalId: 'createTaskModal' },
+                { trigger: '#qualityBtn', modalId: 'qualityModal' },
+                { trigger: '#apiConfigBtn', modalId: 'apiConfigModal' }
+            ];
+
+            modalConfigs.forEach(({ trigger, modalId }) => {
+                const button = document.querySelector(trigger);
+                const modalElement = document.getElementById(modalId);
+
+                if (modalElement && button) {
+                    const customModal = new CustomModal(modalElement);
+                    window.customModals[modalId] = customModal;
+
                     // Remove Bootstrap attributes
                     button.removeAttribute('data-bs-toggle');
                     button.removeAttribute('data-bs-target');
-                    
+
                     // Add custom click handler
-                    button.addEventListener('click', function(e) {
+                    button.addEventListener('click', function (e) {
                         e.preventDefault();
                         e.stopPropagation();
                         console.log(`Opening modal: ${modalId}`);
                         customModal.show();
                     });
-                });
-                
-                console.log(`Initialized custom modal: ${modalId}`);
-            } else {
-                console.error(`Modal element not found: ${modalId}`);
-            }
-        });          // Handle Edit buttons specifically (they are generated dynamically)
-        // Note: Edit button handlers are now managed by the main DatasetGenerator class
-        
-        // Test function for debugging
-        window.openModal = function(modalId) {
-            const modalElement = document.getElementById(modalId);
-            if (modalElement) {
-                const customModal = new CustomModal(modalElement);
-                customModal.show();
-                console.log(`Manually opened modal: ${modalId}`);
-            } else {
-                console.error(`Modal not found: ${modalId}`);
-            }
-        };
-        
-        console.log('Custom modal system initialized successfully!');
-        console.log('Available test function: openModal("modalId")');
-        console.log('Available modals: createTaskModal, qualityModal, apiConfigModal, taskConfigModal');
-    });
+
+                    console.log(`Initialized custom modal: ${modalId}`);
+                } else {
+                    console.error(`Modal element or button not found: ${modalId}, ${trigger}`);
+                }
+            });
+
+            console.log('Custom modal system initialized successfully!');
+            console.log('Available modals:', Object.keys(window.customModals));
+        });
     </script>
 
     <script>
-// Patch: Prevent JS error if form fields are not present (JSON-only modal)
-(function() {
-    // Override populateEditForm to only update the JSON textarea
-    if (window.datasetGenerator) {
-        window.datasetGenerator.populateEditForm = function(taskData) {
-            // Only update the JSON textarea, do not touch form fields
-            var jsonlTextarea = document.getElementById('editTaskJsonl');
-            if (jsonlTextarea) {
-                jsonlTextarea.value = JSON.stringify(taskData, null, 2);
+        // Patch: Prevent JS error if form fields are not present (JSON-only modal)
+        (function () {
+            // Override populateEditForm to only update the JSON textarea
+            if (window.datasetGenerator) {
+                window.datasetGenerator.populateEditForm = function (taskData) {
+                    // Only update the JSON textarea, do not touch form fields
+                    var jsonlTextarea = document.getElementById('editTaskJsonl');
+                    if (jsonlTextarea) {
+                        jsonlTextarea.value = JSON.stringify(taskData, null, 2);
+                    }
+                };
+                // Also patch syncFormToJsonl and syncJsonlToForm to no-op
+                window.datasetGenerator.syncFormToJsonl = function () { };
+                window.datasetGenerator.syncJsonlToForm = function () { };
             }
-        };
-        // Also patch syncFormToJsonl and syncJsonlToForm to no-op
-        window.datasetGenerator.syncFormToJsonl = function() {};
-        window.datasetGenerator.syncJsonlToForm = function() {};
-    }
-})();
+        })();
     </script>
 </body>
+
 </html>

@@ -1,1817 +1,2091 @@
-// DekDataset Generator - JavaScript Application
-class DatasetGenerator {
-    constructor() {
-        this.selectedTaskId = null;
-        this.tasks = [];
-        this.currentAbortController = null; // Add abort controller for cancellation
-        this.isGenerating = false; // Track generation state
-        this.currentConfigTaskId = null; // Track current task ID for configuration
-        this.init();
-    }
+// DekDataset Web Application - Main JavaScript
+(function () {
+  "use strict";
 
-    init() {
-        console.log('Initializing DatasetGenerator...');
-        this.bindEvents();
-        
-        // Load tasks first, then other components
-        this.loadTasks().then(() => {
-            console.log('Tasks loaded, loading other components...');
-            this.loadQualityConfig();
-            this.loadAvailableModels();
-        }).catch(error => {
-            console.error('Error during initialization:', error);
-            this.showAlert('Error initializing application: ' + error.message, 'danger');
-        });
-    }
+  // Global application state
+  window.datasetGenerator = {
+    currentTask: null,
+    isGenerating: false,
+    models: {
+      deepseek: [],
+      ollama: [],
+    },
 
-    bindEvents() {
-        // Task selection
-        document.addEventListener('click', (e) => {
-            if (e.target.classList.contains('select-task')) {
-                this.selectTask(e.target.closest('.task-item').dataset.taskId);
-            }
-            
-            if (e.target.classList.contains('edit-task')) {
-                e.preventDefault();
-                e.stopPropagation();
-                const taskId = e.target.closest('.task-item').dataset.taskId;
-                this.openTaskConfigModal(taskId);
-            }
+    // Initialize the application
+    init: function () {
+      console.log("🚀 DekDataset Web App initializing...");
+      this.setupEventListeners();
+      this.loadTasks();
+      this.loadModels();
+      this.loadQualitySettings();
+      this.checkApiStatus();
+    },
 
-            if (e.target.classList.contains('delete-task')) {
-                e.preventDefault();
-                e.stopPropagation();
-                this.deleteTask(e.target.closest('.task-item').dataset.taskId);
-            }
-        });
+    // Setup event listeners
+    setupEventListeners: function () {
+      // Task management
+      const taskDropdown = document.getElementById("taskDropdown");
+      const refreshTasks = document.getElementById("refreshTasks");
+      const testGeneration = document.getElementById("testGeneration");
+      const generateDataset = document.getElementById("generateDataset");
+      const stopGeneration = document.getElementById("stopGeneration");
 
-        // Edit mode toggle handlers
-        document.addEventListener('change', (e) => {
-            if (e.target.name === 'editMode') {
-                this.switchEditMode(e.target.value);
-            }
-        });
+      if (taskDropdown) {
+        taskDropdown.addEventListener("change", (e) =>
+          this.selectTask(e.target.value)
+        );
+      }
 
-        // JSONL edit mode button handlers
-        const formatJsonBtn = document.getElementById('formatJsonBtn');
-        const validateJsonBtn = document.getElementById('validateJsonBtn');
-        
-        if (formatJsonBtn) {
-            formatJsonBtn.addEventListener('click', () => this.formatJsonl());
-// Copy JSON button handler
-const copyJsonBtn = document.getElementById('copyJsonBtn');
-if (copyJsonBtn) {
-    copyJsonBtn.addEventListener('click', () => {
-        const jsonlTextarea = document.getElementById('editTaskJsonl');
-        if (jsonlTextarea) {
-            navigator.clipboard.writeText(jsonlTextarea.value);
-            this.showAlert('คัดลอก JSON เรียบร้อย', 'success');
-        }
-    });
-}
-        }
-        
-        if (validateJsonBtn) {
-            validateJsonBtn.addEventListener('click', () => this.validateJsonl());
-        }
+      if (refreshTasks) {
+        refreshTasks.addEventListener("click", () => this.loadTasks());
+      }
 
-        // Task dropdown selection
-        const taskDropdown = document.getElementById('taskDropdown');
-        if (taskDropdown) {
-            taskDropdown.addEventListener('change', (e) => {
-                const selectedTaskId = e.target.value;
-                if (selectedTaskId) {
-                    this.selectTask(selectedTaskId);
-                    this.loadTaskConfiguration(selectedTaskId);
-                } else {
-                    this.hideTaskConfiguration();
-                }
-            });
-        }
+      if (testGeneration) {
+        testGeneration.addEventListener("click", () => this.testGeneration());
+      }
 
-        // Task configuration buttons
-        const saveTaskJsonBtn = document.getElementById('saveTaskJson');
-        const reloadTaskJsonBtn = document.getElementById('reloadTaskJson');
-        const cancelTaskJsonBtn = document.getElementById('cancelTaskJson');
-        // (ลบ event listener edit-task ที่ซ้ำออก ใช้แค่ event delegation)
-        
-        if (saveTaskJsonBtn) {
-            saveTaskJsonBtn.addEventListener('click', () => this.saveTaskConfiguration());
-        }
-        
-        if (reloadTaskJsonBtn) {
-            reloadTaskJsonBtn.addEventListener('click', () => {
-                if (this.selectedTaskId) {
-                    this.loadTaskConfiguration(this.selectedTaskId);
-                }
-            });
-        }
-        
-        if (cancelTaskJsonBtn) {
-            cancelTaskJsonBtn.addEventListener('click', () => {
-                this.hideTaskConfiguration();
-            });
-        }
+      if (generateDataset) {
+        generateDataset.addEventListener("click", () => this.generateDataset());
+      }
 
-        // Model provider selection
-        document.addEventListener('change', (e) => {
-            if (e.target.name === 'modelProvider') {
-                this.switchModelProvider(e.target.value);
-            }
+      if (stopGeneration) {
+        stopGeneration.addEventListener("click", () => this.stopGeneration());
+      }
+
+      // Model provider switching
+      const modelProviderInputs = document.querySelectorAll(
+        'input[name="modelProvider"]'
+      );
+      modelProviderInputs.forEach((input) => {
+        input.addEventListener("change", (e) =>
+          this.switchModelProvider(e.target.value)
+        );
+      });
+
+      // Download buttons
+      document.querySelectorAll(".download-btn").forEach((btn) => {
+        btn.addEventListener("click", (e) =>
+          this.downloadDataset(e.target.dataset.format)
+        );
+      });
+
+      // Modal button listeners - setup immediately
+      this.setupModalEventListeners();
+
+      // RAG Management
+      this.setupRagEventListeners();
+      this.loadRagStatus();
+
+      // PDF Drop Zone (Mistral Document AI)
+      const pdfDropZone = document.getElementById("pdfDropZone");
+      const pdfFileInput = document.getElementById("pdfFileInput");
+      const uploadPdfBtn = document.getElementById("uploadPdfBtn");
+
+      if (pdfDropZone && pdfFileInput) {
+        // Click to open file dialog
+        pdfDropZone.addEventListener("click", (e) => {
+          if (e.target.tagName !== "INPUT") {
+            pdfFileInput.value = "";
+            pdfFileInput.click();
+          }
         });
 
-        // Generation buttons
-        const testBtn = document.getElementById('testGeneration');
-        const generateBtn = document.getElementById('generateDataset');
-        const stopBtn = document.getElementById('stopGeneration'); // Add stop button
-        
-        if (testBtn) {
-            testBtn.addEventListener('click', () => this.testGeneration());
-        }
-        
-        if (generateBtn) {
-            generateBtn.addEventListener('click', () => this.generateDataset());
+        // Drag & drop support
+        ["dragenter", "dragover"].forEach((eventName) => {
+          pdfDropZone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            pdfDropZone.classList.add("dragover");
+          });
+        });
+        ["dragleave", "drop"].forEach((eventName) => {
+          pdfDropZone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            pdfDropZone.classList.remove("dragover");
+          });
+        });
+        pdfDropZone.addEventListener("drop", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          pdfDropZone.classList.remove("dragover");
+          if (
+            e.dataTransfer &&
+            e.dataTransfer.files &&
+            e.dataTransfer.files.length > 0
+          ) {
+            pdfFileInput.files = e.dataTransfer.files;
+            this.handlePdfFile(pdfFileInput.files[0]);
+          }
+        });
+
+        // File input change
+        pdfFileInput.addEventListener("change", (e) => {
+          if (pdfFileInput.files && pdfFileInput.files.length > 0) {
+            this.handlePdfFile(pdfFileInput.files[0]);
+          }
+        });
+      } // Upload PDF button
+      if (uploadPdfBtn) {
+        uploadPdfBtn.addEventListener("click", (e) => {
+          e.preventDefault();
+          if (pdfFileInput.files && pdfFileInput.files.length > 0) {
+            this.handlePdfFile(pdfFileInput.files[0], true);
+          } else {
+            notifications.warning("Please select or drag a PDF file first.");
+          }
+        });
+      }
+
+      // Dataset creation checkbox toggle
+      const createDatasetCheckbox = document.getElementById(
+        "createDatasetFromPdf"
+      );
+      const datasetOptionsPanel = document.getElementById(
+        "datasetOptionsPanel"
+      );
+      if (createDatasetCheckbox && datasetOptionsPanel) {
+        createDatasetCheckbox.addEventListener("change", (e) => {
+          datasetOptionsPanel.style.display = e.target.checked
+            ? "block"
+            : "none";
+        });
+      }
+    },
+
+    // Setup Modal Event Listeners (works with custom modal system)
+    setupModalEventListeners: function () {
+      // API Configuration listeners
+      document.addEventListener("click", (e) => {
+        // Handle Test API button click
+        if (
+          e.target &&
+          (e.target.id === "testApiBtn" || e.target.closest("#testApiBtn"))
+        ) {
+          e.preventDefault();
+          e.stopPropagation();
+          console.log("Test API button clicked");
+          this.testApiKey();
         }
 
-        // Add stop button event listener
-        if (stopBtn) {
-            stopBtn.addEventListener('click', () => this.stopGeneration());
-        }        // Modal buttons
-        const saveTaskBtn = document.getElementById('saveTask');
-        const updateTaskBtn = document.getElementById('updateTask');
-        const updateTaskJsonlBtn = document.getElementById('updateTaskJsonl');
-        const saveQualityBtn = document.getElementById('saveQuality');
-        const saveApiKeyBtn = document.getElementById('saveApiKey');
-        const testApiBtn = document.getElementById('testApiBtn');
-        
-        if (saveTaskBtn) {
-            saveTaskBtn.addEventListener('click', () => this.createTask());
-        }
-        
-        if (updateTaskBtn) {
-            updateTaskBtn.addEventListener('click', () => this.updateTask());
+        // Handle Save API Key button click
+        if (
+          e.target &&
+          (e.target.id === "saveApiKey" || e.target.closest("#saveApiKey"))
+        ) {
+          e.preventDefault();
+          e.stopPropagation();
+          console.log("Save API Key button clicked");
+          this.saveApiKey();
         }
 
-        if (updateTaskJsonlBtn) {
-            updateTaskJsonlBtn.addEventListener('click', () => this.updateTaskFromJsonl());
-        }
-        
-        if (saveQualityBtn) {
-            saveQualityBtn.addEventListener('click', () => this.updateQualitySettings());
+        // Handle Create Task button click
+        if (
+          e.target &&
+          (e.target.id === "saveTask" || e.target.closest("#saveTask"))
+        ) {
+          e.preventDefault();
+          e.stopPropagation();
+          console.log("Save Task button clicked");
+          this.createTask();
         }
 
-        // API Configuration buttons
-        if (saveApiKeyBtn) {
-            saveApiKeyBtn.addEventListener('click', () => this.saveApiKey());
+        // Handle Save Quality Settings button click
+        if (
+          e.target &&
+          (e.target.id === "saveQuality" || e.target.closest("#saveQuality"))
+        ) {
+          e.preventDefault();
+          e.stopPropagation();
+          console.log("Save Quality button clicked");
+          this.saveQualitySettings();
         }
-        
+
+        // Handle JSON editing buttons
+        if (
+          e.target &&
+          (e.target.id === "updateTaskJsonl" ||
+            e.target.closest("#updateTaskJsonl"))
+        ) {
+          e.preventDefault();
+          e.stopPropagation();
+          this.updateTaskFromJson();
+        }
+
+        if (
+          e.target &&
+          (e.target.id === "formatJsonBtn" ||
+            e.target.closest("#formatJsonBtn"))
+        ) {
+          e.preventDefault();
+          e.stopPropagation();
+          this.formatJson();
+        }
+
+        if (
+          e.target &&
+          (e.target.id === "validateJsonBtn" ||
+            e.target.closest("#validateJsonBtn"))
+        ) {
+          e.preventDefault();
+          e.stopPropagation();
+          this.validateJson();
+        }
+
+        if (
+          e.target &&
+          (e.target.id === "copyJsonBtn" || e.target.closest("#copyJsonBtn"))
+        ) {
+          e.preventDefault();
+          e.stopPropagation();
+          this.copyJson();
+        }
+      });
+
+      // Quality settings range slider listener
+      document.addEventListener("input", (e) => {
+        if (e.target && e.target.id === "similarityThreshold") {
+          const thresholdValue = document.getElementById("thresholdValue");
+          if (thresholdValue) {
+            thresholdValue.textContent = e.target.value;
+          }
+        }
+      });
+
+      console.log("Modal event listeners setup complete");
+    },
+
+    // Enhanced API key input finding with debugging
+    findApiKeyInput: function () {
+      // Multiple strategies to find the API key input
+      const selectors = [
+        ".custom-modal-body #apiKey", // Custom modal body (modal ที่แสดงจริง)
+        ".custom-modal-overlay #apiKey", // Anywhere in custom modal
+      ];
+
+      for (const selector of selectors) {
+        const input = document.querySelector(selector);
+        if (input) {
+          console.log(`Found API key input using selector: ${selector}`);
+          console.log("Input element:", input);
+          console.log("Input value length:", input.value.length);
+          console.log(
+            "Input value preview:",
+            input.value.substring(0, 10) + "..."
+          );
+          return input;
+        }
+      }
+
+      console.error("API key input not found with any selector!");
+      console.log(
+        "Available inputs in document:",
+        document.querySelectorAll("input")
+      );
+      return null;
+    },
+
+    // Enhanced API status finding with debugging
+    findApiStatus: function () {
+      const selectors = [
+        "#apiStatus",
+        ".custom-modal-body #apiStatus",
+        ".custom-modal-overlay #apiStatus",
+        ".alert", // Fallback to any alert in modal
+      ];
+
+      for (const selector of selectors) {
+        const status = document.querySelector(selector);
+        if (
+          status &&
+          (selector === ".alert" ? status.closest(".custom-modal-body") : true)
+        ) {
+          console.log(`Found API status using selector: ${selector}`);
+          return status;
+        }
+      }
+
+      console.error("API status element not found!");
+      return null;
+    },
+
+    // Test API Key with enhanced error handling and UI feedback
+    testApiKey: async function () {
+      console.log("Starting API key test...");
+
+      // Find API key input with enhanced detection
+      const apiKeyInput = this.findApiKeyInput();
+      if (!apiKeyInput) {
+        notifications.error("ไม่พบช่องใส่ API key กรุณาลองใหม่");
+        return;
+      }
+
+      const apiKey = apiKeyInput.value.trim();
+      console.log("API key length:", apiKey.length);
+
+      if (!apiKey) {
+        this.updateApiStatus("warning", "กรุณาใส่ API key ก่อน");
+        notifications.warning("กรุณาใส่ API key ก่อน");
+        // Focus on the input field
+        apiKeyInput.focus();
+        return;
+      }
+
+      if (!apiKey.startsWith("sk-")) {
+        this.updateApiStatus(
+          "danger",
+          "รูปแบบ API key ไม่ถูกต้อง (ต้องขึ้นต้นด้วย sk-)"
+        );
+        notifications.error("รูปแบบ API key ไม่ถูกต้อง");
+        return;
+      }
+
+      // Find and update test button
+      let testApiBtn = document.querySelector("#testApiBtn");
+      if (!testApiBtn) {
+        testApiBtn = document.querySelector(".custom-modal-footer #testApiBtn");
+      }
+
+      try {
+        // Update button state
         if (testApiBtn) {
-            testApiBtn.addEventListener('click', () => this.testApiKey());
+          testApiBtn.disabled = true;
+          testApiBtn.innerHTML =
+            '<i class="fas fa-spinner fa-spin"></i> กำลังทดสอบ...';
         }
 
-        // Download buttons
-        document.addEventListener('click', (e) => {
-            if (e.target.classList.contains('download-btn')) {
-                this.downloadDataset(e.target.dataset.format);
-            }
+        this.updateApiStatus(
+          "info",
+          '<i class="fas fa-spinner fa-spin"></i> กำลังทดสอบ API key...'
+        );
+        notifications.info("กำลังทดสอบ API key...", 0);
+
+        console.log("Sending test request to API...");
+
+        const response = await fetch("/api/test-api-key", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({ api_key: apiKey }),
         });
 
-        // Slider update
-        const similaritySlider = document.getElementById('similarityThreshold');
-        if (similaritySlider) {
-            similaritySlider.addEventListener('input', (e) => {
-                const thresholdValue = document.getElementById('thresholdValue');
-                if (thresholdValue) {
-                    thresholdValue.textContent = e.target.value;
-                }
-            });
+        console.log("Response status:", response.status);
+
+        const data = await response.json();
+        console.log("Response data:", data);
+
+        notifications.clear();
+
+        if (response.ok && data.valid) {
+          this.updateApiStatus(
+            "success",
+            `✅ API key ใช้งานได้! รุ่น: ${
+              data.model_accessible || "deepseek-chat"
+            }`
+          );
+          notifications.success("✅ API key ทดสอบสำเร็จ!");
+          console.log("API key test successful");
+        } else {
+          const errorMsg = data.message || "API key ไม่ถูกต้อง";
+          this.updateApiStatus("danger", `❌ ${errorMsg}`);
+          notifications.error(`❌ ${errorMsg}`);
+          console.error("API key test failed:", errorMsg);
+        }
+      } catch (error) {
+        console.error("API test error:", error);
+        notifications.clear();
+        this.updateApiStatus("danger", `❌ เกิดข้อผิดพลาด: ${error.message}`);
+        notifications.error(`เกิดข้อผิดพลาดในการทดสอบ: ${error.message}`);
+      } finally {
+        // Restore button state
+        if (testApiBtn) {
+          testApiBtn.disabled = false;
+          testApiBtn.innerHTML = '<i class="fas fa-flask"></i> Test API';
+        }
+      }
+    },
+
+    // Save API Key with enhanced input detection
+    saveApiKey: async function () {
+      console.log("Starting API key save...");
+
+      // Find API key input with enhanced detection
+      const apiKeyInput = this.findApiKeyInput();
+      if (!apiKeyInput) {
+        notifications.error("ไม่พบช่องใส่ API key");
+        return;
+      }
+
+      const apiKey = apiKeyInput.value.trim();
+      console.log("API key for save - length:", apiKey.length);
+
+      if (!apiKey) {
+        notifications.warning("กรุณาใส่ API key ก่อน");
+        apiKeyInput.focus();
+        return;
+      }
+
+      // Find save button
+      let saveApiKey = document.querySelector("#saveApiKey");
+      if (!saveApiKey) {
+        saveApiKey = document.querySelector(".custom-modal-footer #saveApiKey");
+      }
+
+      try {
+        if (saveApiKey) {
+          saveApiKey.disabled = true;
+          saveApiKey.innerHTML =
+            '<i class="fas fa-spinner fa-spin"></i> กำลังบันทึก...';
         }
 
-        // Refresh button
-        const refreshBtn = document.getElementById('refreshTasks');
-        if (refreshBtn) {
-            refreshBtn.addEventListener('click', () => this.loadTasks());
+        const response = await fetch("/api/config/api-key", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ api_key: apiKey }),
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.valid) {
+          notifications.success("✅ บันทึก API key สำเร็จ!");
+          this.updateApiStatus("success", "✅ API key ถูกตั้งค่าและใช้งานได้");
+
+          // Close modal
+          this.closeModalBySelector(".custom-modal-overlay");
+
+          // Refresh generation buttons
+          this.updateGenerationButtons();
+          this.loadModels(); // Reload models now that API is configured
+        } else {
+          throw new Error(data.message || "การบันทึก API key ล้มเหลว");
         }
-    }
-
-    switchModelProvider(provider) {
-        const deepseekSection = document.getElementById('deepseekModelSection');
-        const ollamaSection = document.getElementById('ollamaModelSection');
-        
-        if (provider === 'deepseek') {
-            deepseekSection.style.display = 'block';
-            ollamaSection.style.display = 'none';
-            deepseekSection.classList.add('active');
-            ollamaSection.classList.remove('active');
-        } else if (provider === 'ollama') {
-            deepseekSection.style.display = 'none';
-            ollamaSection.style.display = 'block';
-            ollamaSection.classList.add('active');
-            deepseekSection.classList.remove('active');
+      } catch (error) {
+        console.error("Error saving API key:", error);
+        notifications.error("ไม่สามารถบันทึก API key ได้: " + error.message);
+        this.updateApiStatus("danger", "❌ " + error.message);
+      } finally {
+        if (saveApiKey) {
+          saveApiKey.disabled = false;
+          saveApiKey.innerHTML = '<i class="fas fa-save"></i> Save & Set';
         }
-    }
+      }
+    },
 
-    getSelectedModel() {
-        const providerRadio = document.querySelector('input[name="modelProvider"]:checked');
-        if (!providerRadio) return null;
+    // Update API Status display with better element finding
+    updateApiStatus: function (type, message) {
+      const apiStatus = this.findApiStatus();
 
-        const provider = providerRadio.value;
-        
-        if (provider === 'deepseek') {
-            const deepseekSelect = document.getElementById('deepseekModelSelect');
-            return deepseekSelect ? deepseekSelect.value : null;
-        } else if (provider === 'ollama') {
-            const ollamaSelect = document.getElementById('ollamaModelSelect');
-            return ollamaSelect ? ollamaSelect.value : null;
+      if (!apiStatus) {
+        console.warn("API status element not found, using notifications only");
+        return;
+      }
+
+      const iconMap = {
+        success: "fas fa-check-circle",
+        danger: "fas fa-exclamation-circle",
+        warning: "fas fa-exclamation-triangle",
+        info: "fas fa-info-circle",
+      };
+
+      apiStatus.className = `alert alert-${type}`;
+      apiStatus.innerHTML = message.includes("<i class=")
+        ? message
+        : `<i class="${iconMap[type] || "fas fa-info-circle"}"></i> ${message}`;
+    },
+
+    // Helper to close modal by selector
+    closeModalBySelector: function (selector) {
+      const modal = document.querySelector(selector);
+      if (modal && modal.classList.contains("custom-modal-overlay")) {
+        modal.classList.remove("show");
+        setTimeout(() => {
+          if (modal.parentNode) {
+            modal.parentNode.removeChild(modal);
+          }
+        }, 300);
+      }
+    },
+
+    // Load available tasks
+    loadTasks: async function () {
+      try {
+        const response = await fetch("/api/tasks");
+        const data = await response.json();
+
+        if (response.ok) {
+          this.updateTaskList(data.tasks);
+          this.updateTaskDropdown(data.tasks);
+        } else {
+          throw new Error(data.detail || "Failed to load tasks");
         }
-        
-        return null;
-    }
+      } catch (error) {
+        console.error("Error loading tasks:", error);
+        notifications.error("Failed to load tasks: " + error.message);
+      }
+    },
 
-    async loadTasks() {
-        try {
-            this.showAlert('Loading tasks...', 'info');
-            const response = await fetch('/api/tasks');
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            
-            const data = await response.json();
-            console.log('API Response:', data);
-            
-            this.tasks = data.tasks || data || [];
-            this.updateTaskList(this.tasks);
-            this.showAlert(`Loaded ${this.tasks.length} tasks successfully`, 'success');
-        } catch (error) {
-            console.error('Error loading tasks:', error);
-            this.showAlert('Error loading tasks: ' + error.message, 'danger');
-            this.updateTaskList([]);
-        }
-    }    updateTaskList(tasks) {
-        const taskListContainer = document.getElementById('taskList');
-        const taskDropdown = document.getElementById('taskDropdown');
-        if (!taskListContainer || !taskDropdown) {
-            console.error('Task list container or dropdown not found');
-            return;
-        }
+    // Update task list display
+    updateTaskList: function (tasks) {
+      const taskList = document.getElementById("taskList");
+      if (!taskList) return;
 
-        // Update dropdown options
-        this.updateTaskDropdown(tasks);
+      if (tasks.length === 0) {
+        taskList.innerHTML =
+          '<div class="text-muted text-center py-4">No tasks available. Create your first task!</div>';
+        return;
+      }
 
-        if (!tasks || tasks.length === 0) {
-            taskListContainer.innerHTML = `
-                <div class="alert alert-info">
-                    <h5>No tasks found</h5>
-                    <p>Create your first task to get started!</p>
-                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createTaskModal">
-                        Create Task
+      let html = "";
+      tasks.forEach((task) => {
+        html += `
+        <div class="task-card shadow rounded-4 p-4 mb-3 bg-white border position-relative" data-task-id="${
+          task.id
+        }">
+            <div class="mb-2">
+                <h5 class="fw-semibold mb-1 text-primary">${
+                  task.name || task.id
+                }</h5>
+                <small class="text-muted d-block mb-3">${
+                  task.description || "No description available"
+                }</small>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-success" title="Select Task"
+                        onclick="datasetGenerator.selectTask('${task.id}')">
+                        <i class="fas fa-check"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-warning" title="Edit Task"
+                        onclick="datasetGenerator.editTask('${task.id}')">
+                        <i class="fas fa-pen"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" title="Delete Task"
+                        onclick="datasetGenerator.deleteTask('${task.id}')">
+                        <i class="fas fa-trash-alt"></i>
                     </button>
                 </div>
-            `;
-            return;
-        }
+            </div>
+        </div>
+    `;
+      });
 
-        taskListContainer.innerHTML = tasks.map(task => `
-            <div class="task-item card mb-2" data-task-id="${task.id}">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div class="flex-grow-1">
-                            <h6 class="card-title mb-1">${this.escapeHtml(task.id)}</h6>
-                            <p class="card-text text-muted small mb-2">
-                                ${this.escapeHtml(task.description || 'No description')}
-                            </p>
-                            <div class="d-flex gap-2">
-                                <span class="badge bg-secondary">${task.type || 'custom'}</span>
-                                ${task.created_at ? `<small class="text-muted">Created: ${new Date(task.created_at).toLocaleDateString()}</small>` : ''}
+      taskList.innerHTML = html;
+    },
+
+    // Update task dropdown
+    updateTaskDropdown: function (tasks) {
+      const dropdown = document.getElementById("taskDropdown");
+      if (!dropdown) return;
+
+      dropdown.innerHTML = '<option value="">-- Select Task --</option>';
+      tasks.forEach((task) => {
+        dropdown.innerHTML += `<option value="${task.id}">${
+          task.name || task.id
+        }</option>`;
+      });
+    },
+
+    // Load available models
+    loadModels: async function () {
+      try {
+        const response = await fetch("/api/models/all");
+        if (!response.ok) {
+          throw new Error("Not Found");
+        }
+        const data = await response.json();
+        console.log("Models loaded successfully:", data);
+        
+        // Store models data
+        this.models.deepseek = data.deepseek?.models || [];
+        this.models.ollama = data.ollama?.models || [];
+        
+        this.updateModelSelects(data);
+      } catch (error) {
+        console.error("Error loading models:", error);
+        
+        // Provide fallback model data
+        const fallbackData = {
+          deepseek: {
+            available: false,
+            models: [
+              {
+                id: "deepseek-chat",
+                name: "DeepSeek Chat",
+                description: "Advanced reasoning model (API key required)"
+              }
+            ]
+          },
+          ollama: {
+            available: false,
+            models: []
+          }
+        };
+        
+        this.models.deepseek = fallbackData.deepseek.models;
+        this.models.ollama = fallbackData.ollama.models;
+        
+        this.updateModelSelects(fallbackData);
+      }
+    },
+
+    // Update model select elements
+    updateModelSelects: function (data) {
+      const deepseekSelect = document.getElementById("deepseekModelSelect");
+      const ollamaSelect = document.getElementById("ollamaModelSelect");
+
+      // Ensure data structure exists
+      if (!data) {
+        console.error("No model data provided");
+        return;
+      }
+
+      if (deepseekSelect) {
+        deepseekSelect.innerHTML = "";
+        
+        // Check if DeepSeek data exists and has models
+        if (data.deepseek && data.deepseek.models && Array.isArray(data.deepseek.models)) {
+          if (data.deepseek.available && data.deepseek.models.length > 0) {
+            data.deepseek.models.forEach((model) => {
+              const option = document.createElement("option");
+              option.value = model.id;
+              option.textContent = model.name;
+              option.title = model.description || "";
+              deepseekSelect.appendChild(option);
+            });
+          } else {
+            const option = document.createElement("option");
+            option.value = "";
+            option.textContent = data.deepseek.available 
+              ? "No DeepSeek models available" 
+              : "DeepSeek API key required";
+            option.disabled = true;
+            deepseekSelect.appendChild(option);
+          }
+        } else {
+          console.warn("Invalid DeepSeek model data structure");
+          const option = document.createElement("option");
+          option.value = "";
+          option.textContent = "Error loading DeepSeek models";
+          option.disabled = true;
+          deepseekSelect.appendChild(option);
+        }
+      }
+
+      if (ollamaSelect) {
+        ollamaSelect.innerHTML = "";
+        
+        // Check if Ollama data exists and has models
+        if (data.ollama && data.ollama.models && Array.isArray(data.ollama.models)) {
+          if (data.ollama.available && data.ollama.models.length > 0) {
+            data.ollama.models.forEach((model) => {
+              const option = document.createElement("option");
+              option.value = model.id;
+              option.textContent = model.name;
+              option.title = model.description || "";
+              ollamaSelect.appendChild(option);
+            });
+          } else {
+            const option = document.createElement("option");
+            option.value = "";
+            option.textContent = data.ollama.available 
+              ? "No Ollama models found" 
+              : "Ollama server not available";
+            option.disabled = true;
+            ollamaSelect.appendChild(option);
+          }
+        } else {
+          console.warn("Invalid Ollama model data structure");
+          const option = document.createElement("option");
+          option.value = "";
+          option.textContent = "Ollama not available";
+          option.disabled = true;
+          ollamaSelect.appendChild(option);
+        }
+      }
+
+      // Hide loading indicator
+      const loadingIndicator = document.getElementById("modelLoadingIndicator");
+      if (loadingIndicator) {
+        loadingIndicator.style.display = "none";
+      }
+
+      this.updateGenerationButtons();
+    },
+
+    // Switch model provider
+    switchModelProvider: function (provider) {
+      const deepseekSection = document.getElementById("deepseekModelSection");
+      const ollamaSection = document.getElementById("ollamaModelSection");
+
+      if (provider === "deepseek") {
+        deepseekSection.style.display = "block";
+        ollamaSection.style.display = "none";
+        deepseekSection.classList.add("active");
+        ollamaSection.classList.remove("active");
+      } else if (provider === "ollama") {
+        deepseekSection.style.display = "none";
+        ollamaSection.style.display = "block";
+        ollamaSection.classList.add("active");
+        deepseekSection.classList.remove("active");
+      }
+
+      this.updateGenerationButtons();
+    },
+
+    // Select a task
+    selectTask: function (taskId) {
+      if (!taskId) {
+        this.currentTask = null;
+        this.updateSelectedTask(null);
+        this.updateGenerationButtons();
+        return;
+      }
+
+      fetch(`/api/tasks/${taskId}`)
+        .then((response) => response.json())
+        .then((task) => {
+          if (task) {
+            this.currentTask = task;
+            this.updateSelectedTask(task);
+            this.updateGenerationButtons();
+
+            // Update dropdown selection
+            const dropdown = document.getElementById("taskDropdown");
+            if (dropdown) dropdown.value = taskId;
+
+            // Update task list selection
+            document.querySelectorAll(".task-item").forEach((item) => {
+              item.classList.remove("selected");
+            });
+            const selectedItem = document.querySelector(
+              `.task-item[data-task-id="${taskId}"]`
+            );
+            if (selectedItem) selectedItem.classList.add("selected");
+
+            notifications.success(`Selected task: ${task.name || task.id}`);
+          }
+        })
+        .catch((error) => {
+          console.error("Error selecting task:", error);
+          notifications.error("Failed to select task: " + error.message);
+        });
+    },
+
+    // Update selected task display
+    updateSelectedTask: function (task) {
+      const selectedTaskInput = document.getElementById("selectedTask");
+      if (selectedTaskInput) {
+        selectedTaskInput.value = task ? task.name || task.id : "";
+      }
+    },
+
+    // Update generation buttons state
+    updateGenerationButtons: function () {
+      const testBtn = document.getElementById("testGeneration");
+      const generateBtn = document.getElementById("generateDataset");
+
+      const hasTask = this.currentTask !== null;
+      const hasModel = this.getSelectedModel() !== null;
+      const canGenerate = hasTask && hasModel && !this.isGenerating;
+
+      if (testBtn) testBtn.disabled = !canGenerate;
+      if (generateBtn) generateBtn.disabled = !canGenerate;
+    },
+
+    // Get selected model
+    getSelectedModel: function () {
+      const provider = document.querySelector(
+        'input[name="modelProvider"]:checked'
+      )?.value;
+
+      if (provider === "deepseek") {
+        const select = document.getElementById("deepseekModelSelect");
+        return select?.value || null;
+      } else if (provider === "ollama") {
+        const select = document.getElementById("ollamaModelSelect");
+        return select?.value || null;
+      }
+
+      return null;
+    },
+
+    // Test generation
+    testGeneration: async function () {
+      if (!this.currentTask) {
+        notifications.warning("Please select a task first");
+        return;
+      }
+
+      const model = this.getSelectedModel();
+      if (!model) {
+        notifications.warning("Please select a model first");
+        return;
+      }
+
+      try {
+        this.showProgress("Testing generation...", 0);
+
+        const response = await fetch("/api/test-generation", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            task_id: this.currentTask.id,
+            model: model,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          this.hideProgress();
+          this.displayTestResults(data);
+          notifications.success("Test generation completed successfully!");
+        } else {
+          throw new Error(data.detail || "Test generation failed");
+        }
+      } catch (error) {
+        this.hideProgress();
+        console.error("Test generation error:", error);
+        notifications.error("Test generation failed: " + error.message);
+      }
+    },
+
+    // Generate dataset
+    generateDataset: async function () {
+      if (!this.currentTask) {
+        notifications.warning("Please select a task first");
+        return;
+      }
+
+      const model = this.getSelectedModel();
+      if (!model) {
+        notifications.warning("Please select a model first");
+        return;
+      }
+
+      const entryCount = parseInt(
+        document.getElementById("entryCount")?.value || "10"
+      );
+      if (entryCount <= 0 || entryCount > 1000) {
+        notifications.warning("Entry count must be between 1 and 1000");
+        return;
+      }
+
+      try {
+        this.isGenerating = true;
+        this.updateGenerationButtons();
+        this.showProgress("Generating dataset...", 0);
+
+        const response = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            task_id: this.currentTask.id,
+            model: model,
+            count: entryCount,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          this.hideProgress();
+          this.displayResults(data);
+          notifications.success(
+            `Successfully generated ${data.entries.length} entries!`
+          );
+        } else {
+          throw new Error(data.detail || "Dataset generation failed");
+        }
+      } catch (error) {
+        this.hideProgress();
+        console.error("Generation error:", error);
+        notifications.error("Dataset generation failed: " + error.message);
+      } finally {
+        this.isGenerating = false;
+        this.updateGenerationButtons();
+      }
+    },
+
+    // Stop generation (placeholder)
+    stopGeneration: function () {
+      notifications.info("Stop generation functionality not implemented yet");
+    },
+
+    // Show progress
+    showProgress: function (message, progress) {
+      const progressSection = document.getElementById("progressSection");
+      const progressBar = progressSection?.querySelector(".progress-bar");
+      const progressText = document.getElementById("progressText");
+      const stopBtn = document.getElementById("stopGeneration");
+
+      if (progressSection) progressSection.style.display = "block";
+      if (progressBar) progressBar.style.width = `${progress}%`;
+      if (progressText)
+        progressText.innerHTML = `<i class="fas fa-cog fa-spin me-2"></i>${message}`;
+      if (stopBtn) stopBtn.style.display = "inline-flex";
+    },
+
+    // Hide progress
+    hideProgress: function () {
+      const progressSection = document.getElementById("progressSection");
+      const stopBtn = document.getElementById("stopGeneration");
+
+      if (progressSection) progressSection.style.display = "none";
+      if (stopBtn) stopBtn.style.display = "none";
+    },
+
+    // Display test results
+    displayTestResults: function (data) {
+      const resultsSection = document.getElementById("resultsSection");
+      if (!resultsSection) return;
+
+      let html = `
+                <h4><i class="fas fa-flask"></i> Test Results</h4>
+                <div class="alert alert-info">
+                    <strong>Test completed!</strong> Generated ${data.test_entries.length} sample entries.
+                </div>
+            `;
+
+      if (data.test_entries.length > 0) {
+        html += "<h5>Sample Entries:</h5>";
+        data.test_entries.slice(0, 3).forEach((entry, index) => {
+          html += `
+                        <div class="card mb-2">
+                            <div class="card-body">
+                                <h6>Entry ${index + 1}</h6>
+                                <pre class="bg-light p-2 rounded"><code>${JSON.stringify(
+                                  entry.content,
+                                  null,
+                                  2
+                                )}</code></pre>
                             </div>
                         </div>
-                        <div class="btn-group-vertical btn-group-sm">
-                            <button class="btn btn-outline-primary btn-sm select-task">
-                                Select
-                            </button>
-                            <button class="btn btn-outline-secondary btn-sm edit-task">
-                                Edit
-                            </button>
-                            <button class="btn btn-outline-danger btn-sm delete-task">
-                                Delete
-                            </button>
+                    `;
+        });
+      }
+
+      resultsSection.innerHTML = html;
+      resultsSection.style.display = "block";
+    },
+
+    // Display generation results
+    displayResults: function (data) {
+      const downloadSection = document.getElementById("downloadSection");
+      const resultSummary = document.getElementById("resultSummary");
+      const previewTableContainer = document.getElementById(
+        "previewTableContainer"
+      );
+
+      if (!downloadSection) return;
+
+      // Update summary
+      if (resultSummary) {
+        const quality = data.quality_report;
+        resultSummary.innerHTML = `
+                    <div class="alert alert-success">
+                        <h5><i class="fas fa-check-circle"></i> Dataset Generated Successfully!</h5>
+                        <div class="row mt-3">
+                            <div class="col-md-3">
+                                <strong>Entries Generated:</strong><br>
+                                <span class="h4 text-primary">${
+                                  data.entries.length
+                                }</span>
+                            </div>
+                            <div class="col-md-3">
+                                <strong>Quality Score:</strong><br>
+                                <span class="h4 text-success">${(
+                                  quality.quality_score * 100
+                                ).toFixed(1)}%</span>
+                            </div>
+                            <div class="col-md-3">
+                                <strong>Average Length:</strong><br>
+                                <span class="h4 text-info">${Math.round(
+                                  quality.average_length
+                                )} chars</span>
+                            </div>
+                            <div class="col-md-3">
+                                <strong>Duplicates Removed:</strong><br>
+                                <span class="h4 text-warning">${
+                                  quality.duplicates_removed
+                                }</span>
+                            </div>
                         </div>
                     </div>
-                </div>
-            </div>
-        `).join('');
-    }
-
-    selectTask(taskId) {
-        this.selectedTaskId = taskId;
-        
-        // Update UI to show selected task
-        document.querySelectorAll('.task-item').forEach(item => {
-            item.classList.remove('selected');
-        });
-        
-        const selectedItem = document.querySelector(`[data-task-id="${taskId}"]`);
-        if (selectedItem) {
-            selectedItem.classList.add('selected');
-        }
-        
-        // Update selected task display
-        const selectedTaskInput = document.getElementById('selectedTask');
-        if (selectedTaskInput) {
-            selectedTaskInput.value = taskId;
-        }
-
-        // Update task dropdown selection
-        const taskDropdown = document.getElementById('taskDropdown');
-        if (taskDropdown) {
-            taskDropdown.value = taskId;
-        }
-        
-        // Enable generation buttons only if not currently generating
-        if (!this.isGenerating) {
-            this.updateGenerationUI(false);
-        }
-        
-        // Load and show task configuration
-        // this.loadTaskConfiguration(taskId);
-        
-        this.showAlert(`Selected task: ${taskId}`, 'success');
-    }    // Task Configuration Management Methods
-    openTaskConfigModal(taskId) {
-        this.openEditTaskModal(taskId);
-    }    // New function to open edit task modal
-    async openEditTaskModal(taskId) {
-        try {
-            // Load task data
-            const response = await fetch(`/api/tasks/${taskId}/config`);
-            if (!response.ok) {
-                throw new Error(`Failed to load task: ${response.statusText}`);
-            }
-            const taskData = await response.json();
-            
-            // Reset to form mode when opening modal
-            const formModeRadio = document.getElementById('editModeForm');
-            if (formModeRadio) {
-                formModeRadio.checked = true;
-                this.switchEditMode('form');
-            }
-            
-            // Populate edit form fields
-            this.populateEditForm(taskData);
-            
-            // Open the edit modal using the custom modal system only
-            const modalElement = document.getElementById('editTaskModal');
-            
-            // Remove any Bootstrap modal instance to prevent double modals
-            if (window.bootstrap && window.bootstrap.Modal) {
-                const bsModalInstance = bootstrap.Modal.getInstance(modalElement);
-                if (bsModalInstance) {
-                    bsModalInstance.dispose();
-                }
-            }
-            
-            // Use custom modal system
-            if (modalElement && typeof CustomModal !== 'undefined') {
-                const customModal = new CustomModal(modalElement);
-                customModal.show();
-                
-                // Use our rebindEditTaskModalEvents function to attach all event handlers
-                // This ensures that cloned nodes in the custom modal get their event handlers
-                if (typeof this.rebindEditTaskModalEvents === 'function') {
-                    setTimeout(() => this.rebindEditTaskModalEvents(), 50);
-                }
-            } else {
-                this.showAlert('Edit modal not available', 'danger');
-            }
-        } catch (error) {
-            console.error('Error opening edit modal:', error);
-            this.showAlert('Error loading task for editing: ' + error.message, 'danger');
-        }
-    }// Function to populate edit form with task data
-    populateEditForm(taskData) {
-        // Map the real task data structure to the simplified edit form fields
-        document.getElementById('editTaskId').value = taskData.id || '';
-        
-        // Map format to type (if no type field exists)
-        const taskType = taskData.type || (taskData.format ? 'custom' : 'custom');
-        document.getElementById('editTaskType').value = taskType;
-        
-        // Use description or name
-        const description = taskData.description || taskData.name || '';
-        document.getElementById('editTaskDescription').value = description;
-        
-        // Extract system prompt from various possible locations
-        let systemPrompt = '';
-        if (taskData.system_prompt) {
-            systemPrompt = taskData.system_prompt;
-        } else if (taskData.parameters && taskData.parameters.system_prompt) {
-            systemPrompt = taskData.parameters.system_prompt;
-        } else if (taskData.prompt_template) {
-            systemPrompt = taskData.prompt_template;
-        }
-        document.getElementById('editSystemPrompt').value = systemPrompt;
-        
-        // Extract user template from various possible locations
-        let userTemplate = '';
-        if (taskData.user_template) {
-            userTemplate = taskData.user_template;
-        } else if (taskData.parameters && taskData.parameters.user_template) {
-            userTemplate = taskData.parameters.user_template;
-        } else if (taskData.examples && taskData.examples.length > 0) {
-            // If no explicit user template, try to extract pattern from examples
-            const firstExample = taskData.examples[0];
-            if (typeof firstExample === 'object' && firstExample.input) {
-                userTemplate = `Input: {input}\nOutput: {output}`;
-            }
-        }
-        document.getElementById('editUserTemplate').value = userTemplate;
-
-        // Populate JSONL textarea with complete task data
-        const jsonlTextarea = document.getElementById('editTaskJsonl');
-        if (jsonlTextarea) {
-            jsonlTextarea.value = JSON.stringify(taskData, null, 2);
-        }
-        
-        console.log('Populated edit form with task data:', {
-            id: taskData.id,
-            type: taskType,
-            description: description,
-            systemPrompt: systemPrompt,
-            userTemplate: userTemplate
-        });
-    }    // Function to switch between form and JSONL edit modes
-    switchEditMode(mode) {
-        const formMode = document.getElementById('editFormMode');
-        const jsonlMode = document.getElementById('editJsonlMode');
-        const updateTaskBtn = document.getElementById('updateTask');
-        const updateTaskJsonlBtn = document.getElementById('updateTaskJsonl');
-
-        // Find elements in the custom modal if present (after cloning)
-        const customModalBody = document.querySelector('.custom-modal-body');
-        let customFormMode = formMode;
-        let customJsonlMode = jsonlMode;
-        let customUpdateTaskBtn = updateTaskBtn;
-        let customUpdateTaskJsonlBtn = updateTaskJsonlBtn;
-
-        if (customModalBody) {
-            customFormMode = customModalBody.querySelector('#editFormMode') || formMode;
-            customJsonlMode = customModalBody.querySelector('#editJsonlMode') || jsonlMode;
-            customUpdateTaskBtn = document.querySelector('.custom-modal-footer #updateTask') || updateTaskBtn;
-            customUpdateTaskJsonlBtn = document.querySelector('.custom-modal-footer #updateTaskJsonl') || updateTaskJsonlBtn;
-        }
-
-        if (mode === 'form') {
-            // Sync JSONL to form fields
-            this.syncJsonlToForm();
-            if (customFormMode) customFormMode.style.display = 'block';
-            if (customJsonlMode) customJsonlMode.style.display = 'none';
-            if (customUpdateTaskBtn) customUpdateTaskBtn.style.display = 'inline-block';
-            if (customUpdateTaskJsonlBtn) customUpdateTaskJsonlBtn.style.display = 'none';
-        } else if (mode === 'jsonl') {
-            // Sync form fields to JSONL
-            this.syncFormToJsonl();
-            if (customFormMode) customFormMode.style.display = 'none';
-            if (customJsonlMode) customJsonlMode.style.display = 'block';
-            if (customUpdateTaskBtn) customUpdateTaskBtn.style.display = 'none';
-            if (customUpdateTaskJsonlBtn) customUpdateTaskJsonlBtn.style.display = 'inline-block';
-            setTimeout(() => {
-                const jsonlTextarea = document.querySelector('.custom-modal-body #editTaskJsonl') ||
-                                      document.getElementById('editTaskJsonl');
-                if (jsonlTextarea) {
-                    jsonlTextarea.focus();
-                }
-            }, 100);
-        }
-    }
-
-    // Sync form fields to JSONL textarea
-    syncFormToJsonl() {
-        const taskId = document.getElementById('editTaskId').value.trim();
-        const taskType = document.getElementById('editTaskType').value;
-        const taskDescription = document.getElementById('editTaskDescription').value.trim();
-        const systemPrompt = document.getElementById('editSystemPrompt').value.trim();
-        const userTemplate = document.getElementById('editUserTemplate').value.trim();
-
-        const taskData = {
-            id: taskId,
-            type: taskType,
-            description: taskDescription,
-            system_prompt: systemPrompt,
-            user_template: userTemplate,
-            format: "custom",
-            examples: [],
-            parameters: {}
-        };
-
-        const jsonlTextarea = document.getElementById('editTaskJsonl');
-        try {
-            const existingData = JSON.parse(jsonlTextarea.value || '{}');
-            const mergedData = { ...existingData, ...taskData };
-            jsonlTextarea.value = JSON.stringify(mergedData, null, 2);
-        } catch (error) {
-            jsonlTextarea.value = JSON.stringify(taskData, null, 2);
-        }
-    }
-
-    // Sync JSONL textarea to form fields
-    syncJsonlToForm() {
-        const jsonlTextarea = document.getElementById('editTaskJsonl');
-        if (!jsonlTextarea) return;
-        try {
-            const data = JSON.parse(jsonlTextarea.value);
-            if (data.id !== undefined) document.getElementById('editTaskId').value = data.id;
-            if (data.type !== undefined) document.getElementById('editTaskType').value = data.type;
-            if (data.description !== undefined) document.getElementById('editTaskDescription').value = data.description;
-            if (data.system_prompt !== undefined) document.getElementById('editSystemPrompt').value = data.system_prompt;
-            if (data.user_template !== undefined) document.getElementById('editUserTemplate').value = data.user_template;
-        } catch (error) {
-            // Ignore parse errors, do not update form
-        }
-    }
-
-    // Function to format JSONL content
-    formatJsonl() {
-        const jsonlTextarea = document.getElementById('editTaskJsonl');
-        try {
-            const data = JSON.parse(jsonlTextarea.value);
-            jsonlTextarea.value = JSON.stringify(data, null, 2);
-            this.showAlert('JSON formatted successfully', 'success');
-        } catch (error) {
-            this.showAlert('Invalid JSON format: ' + error.message, 'danger');
-        }
-    }
-
-    // Function to validate JSONL content
-    validateJsonl() {
-        const jsonlTextarea = document.getElementById('editTaskJsonl');
-        try {
-            const data = JSON.parse(jsonlTextarea.value);
-            
-            // Basic validation
-            const required = ['id', 'description'];
-            const missing = required.filter(field => !data[field]);
-            
-            if (missing.length > 0) {
-                this.showAlert(`Missing required fields: ${missing.join(', ')}`, 'warning');
-                return false;
-            }
-            
-            this.showAlert('JSON is valid', 'success');
-            return true;
-        } catch (error) {
-            this.showAlert('Invalid JSON format: ' + error.message, 'danger');
-            return false;
-        }
-    }
-
-    // Function to update task from JSONL
-    async updateTaskFromJsonl() {
-        const jsonlTextarea = document.getElementById('editTaskJsonl');
-        
-        // Validate first
-        if (!this.validateJsonl()) {
-            return;
-        }
-
-        try {
-            const taskData = JSON.parse(jsonlTextarea.value);
-            const taskId = taskData.id;
-
-            if (!taskId) {
-                this.showAlert('Task ID is required', 'warning');
-                return;
-            }
-
-            const response = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(taskData)
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            // Close the modal
-            const modalElement = document.getElementById('editTaskModal');
-            if (modalElement) {
-                // Find and hide any visible custom modal
-                const activeOverlay = document.querySelector('.custom-modal-overlay.show');
-                if (activeOverlay) {
-                    activeOverlay.classList.remove('show');
-                    setTimeout(() => {
-                        if (activeOverlay.parentNode) {
-                            activeOverlay.parentNode.removeChild(activeOverlay);
-                        }
-                    }, 300);
-                }
-            }
-
-            this.showAlert(`Task "${taskId}" updated successfully from JSONL!`, 'success');
-            
-            // Reload tasks to reflect changes
-            await this.loadTasks();
-            
-        } catch (error) {
-            console.error('Error updating task from JSONL:', error);
-            this.showAlert('Error updating task: ' + error.message, 'danger');
-        }
-    }
-
-    async loadTaskConfiguration(taskId, showModal = false) {
-        console.log('Loading task configuration for:', taskId);
-        try {
-            const response = await fetch(`/api/tasks/${taskId}/config`);
-            if (!response.ok) {
-                throw new Error(`Failed to load task configuration: ${response.statusText}`);
-            }
-            const config = await response.json();
-            console.log('Loaded task configuration:', config);
-            this.populateTaskJsonEditor(config);
-            if (showModal) {
-                // Use custom modal system instead of Bootstrap
-                const modalElement = document.getElementById('taskConfigModal');
-                if (modalElement) {
-                    // Check if CustomModal class is available
-                    if (typeof CustomModal !== 'undefined') {
-                        const customModal = new CustomModal(modalElement);
-                        customModal.show();
-                    } else {
-                        console.error('CustomModal class not available');
-                        this.showAlert('Modal system not available', 'danger');
-                    }
-                } else {
-                    console.error('Task configuration modal element not found');
-                    this.showAlert('Modal element not found', 'danger');
-                }
-            } else {
-                this.showTaskConfiguration();
-            }
-            this.currentConfigTaskId = taskId;
-        } catch (error) {
-            console.error('Error loading task configuration:', error);
-            this.showAlert('Error loading task configuration: ' + error.message, 'danger');
-        }
-    }
-
-    showTaskConfiguration() {
-        const taskJsonSection = document.getElementById('taskJsonSection');
-        if (taskJsonSection) {
-            taskJsonSection.classList.remove('collapsed');
-            taskJsonSection.classList.remove('collapsing');
-            taskJsonSection.style.display = 'block';
-            // Animate expand
-            taskJsonSection.style.maxHeight = taskJsonSection.scrollHeight + 'px';
-            setTimeout(() => {
-                taskJsonSection.style.maxHeight = '';
-            }, 400);
-            taskJsonSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-    }
-
-    hideTaskConfiguration() {
-        const taskJsonSection = document.getElementById('taskJsonSection');
-        if (taskJsonSection) {
-            // Animate collapse
-            taskJsonSection.classList.remove('collapsed');
-            taskJsonSection.classList.add('collapsing');
-            taskJsonSection.style.maxHeight = taskJsonSection.scrollHeight + 'px';
-            void taskJsonSection.offsetHeight;
-            taskJsonSection.style.maxHeight = '0px';
-            const onTransitionEnd = function (e) {
-                if (e.propertyName === 'max-height') {
-                    taskJsonSection.classList.remove('collapsing');
-                    taskJsonSection.classList.add('collapsed');
-                    taskJsonSection.style.display = 'none';
-                    taskJsonSection.style.maxHeight = '';
-                    taskJsonSection.removeEventListener('transitionend', onTransitionEnd);
-                }
-            };
-            taskJsonSection.addEventListener('transitionend', onTransitionEnd);
-        }
-        this.currentConfigTaskId = null;
-    }
-
-    populateTaskJsonEditor(config) {
-        const taskJsonArea = document.getElementById('taskJsonArea');
-        if (taskJsonArea) {
-            // Format JSON with proper indentation
-            taskJsonArea.value = JSON.stringify(config, null, 2);
-            
-            // Auto-resize textarea to fit content
-            taskJsonArea.style.height = 'auto';
-            taskJsonArea.style.height = Math.max(400, taskJsonArea.scrollHeight) + 'px';
-        }
-    }
-
-    async saveTaskConfiguration() {
-        if (!this.currentConfigTaskId) {
-            this.showAlert('No task selected for configuration update', 'warning');
-            return;
-        }
-
-        const taskJsonArea = document.getElementById('taskJsonArea');
-        if (!taskJsonArea) {
-            this.showAlert('Task configuration editor not found', 'danger');
-            return;
-        }
-
-        try {
-            // Parse JSON to validate it
-            const configData = JSON.parse(taskJsonArea.value);
-            
-            // Send update request
-            const response = await fetch(`/api/tasks/${this.currentConfigTaskId}/config`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(configData)
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            const result = await response.json();
-            this.showAlert('Task configuration updated successfully!', 'success');
-            
-            // Reload tasks to reflect changes
-            await this.loadTasks();
-            
-        } catch (error) {
-            console.error('Error saving task configuration:', error);
-            if (error instanceof SyntaxError) {
-                this.showAlert('Invalid JSON format. Please check your syntax.', 'danger');
-            } else {
-                this.showAlert('Error saving task configuration: ' + error.message, 'danger');
-            }
-        }
-    }
-
-    updateTaskDropdown(tasks) {
-        const taskDropdown = document.getElementById('taskDropdown');
-        if (!taskDropdown) {
-            console.error('Task dropdown not found');
-            return;
-        }
-
-        // Clear existing options
-        taskDropdown.innerHTML = '<option value="">Select a task...</option>';
-        
-        // Add task options
-        tasks.forEach(task => {
-            const option = document.createElement('option');
-            option.value = task.id;
-            option.textContent = `${task.id} - ${task.description || task.name || 'No description'}`;
-            taskDropdown.appendChild(option);
-        });
-        
-        console.log(`Updated task dropdown with ${tasks.length} tasks`);
-    }
-
-    async testGeneration() {
-        if (!this.selectedTaskId) {
-            this.showAlert('Please select a task first', 'warning');
-            return;
-        }
-        
-        const model = this.getSelectedModel() || 'deepseek-chat';
-        if (!model) {
-            this.showAlert('Please select a model first', 'warning');
-            return;
-        }
-
-        // Set generation state
-        this.isGenerating = true;
-        this.updateGenerationUI(true);
-        this.currentAbortController = new AbortController();
-        
-        this.showProgress('Testing generation...', 30);
-        
-        try {
-            const response = await fetch('/api/test-generation', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ task_id: this.selectedTaskId, model }),
-                signal: this.currentAbortController.signal
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            const result = await response.json();
-            this.hideProgress();
-
-            if (result.success) {
-                const output = result.sample || result.output || 'Generation completed successfully';
-                this.showAlert('Test generation completed successfully!', 'success');
-                
-                // Show result in a modal or alert
-                this.displayGenerationResult('Test Result', output);
-            } else {
-                this.showAlert('Test generation failed: ' + (result.error || 'Unknown error'), 'danger');
-            }
-        } catch (error) {
-            this.hideProgress();
-            
-            if (error.name === 'AbortError') {
-                this.showAlert('Test generation was cancelled by user', 'warning');
-            } else {
-                console.error('Error during test generation:', error);
-                this.showAlert('Error during test generation: ' + error.message, 'danger');
-            }
-        } finally {
-            // Reset generation state
-            this.isGenerating = false;
-            this.updateGenerationUI(false);
-            this.currentAbortController = null;
-        }
-    }
-
-    async generateDataset() {
-        if (!this.selectedTaskId) {
-            this.showAlert('Please select a task first', 'warning');
-            return;
-        }
-        
-        const model = this.getSelectedModel() || 'deepseek-chat';
-        if (!model) {
-            this.showAlert('Please select a model first', 'warning');
-            return;
-        }
-        
-        const entryCount = parseInt(document.getElementById('entryCount')?.value || '10');
-
-        // Set generation state
-        this.isGenerating = true;
-        this.updateGenerationUI(true);
-        this.currentAbortController = new AbortController();
-        
-        this.showProgress('Generating dataset...', 10);
-        
-        try {
-            const response = await fetch('/api/generate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    task_id: this.selectedTaskId, 
-                    model: model,
-                    count: entryCount // Fix: use 'count' instead of 'entry_count'
-                }),
-                signal: this.currentAbortController.signal
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            const result = await response.json();
-            this.hideProgress();
-
-            if (result.entries && result.entries.length > 0) {
-                this.showAlert(`Dataset generation completed! Generated ${result.entries.length} entries.`, 'success');
-                this.displayDatasetResult(result);
-            } else {
-                this.showAlert('Dataset generation completed but no entries were generated.', 'warning');
-            }
-        } catch (error) {
-            this.hideProgress();
-            
-            if (error.name === 'AbortError') {
-                this.showAlert('Dataset generation was cancelled by user', 'warning');
-            } else {
-                console.error('Error during dataset generation:', error);
-                this.showAlert('Error during dataset generation: ' + error.message, 'danger');
-            }
-        } finally {
-            // Reset generation state
-            this.isGenerating = false;
-            this.updateGenerationUI(false);
-            this.currentAbortController = null;
-        }
-    }
-
-    stopGeneration() {
-        if (this.currentAbortController && this.isGenerating) {
-            this.currentAbortController.abort();
-            this.showAlert('Stopping generation...', 'info');
-        }
-    }
-
-    updateGenerationUI(isGenerating) {
-        const testBtn = document.getElementById('testGeneration');
-        const generateBtn = document.getElementById('generateDataset');
-        const stopBtn = document.getElementById('stopGeneration');
-        const entryCountInput = document.getElementById('entryCount');
-        const modelProviderRadios = document.querySelectorAll('input[name="modelProvider"]');
-        const modelSelects = document.querySelectorAll('#deepseekModelSelect, #ollamaModelSelect');
-
-        if (isGenerating) {
-            // Disable generation buttons and inputs
-            if (testBtn) {
-                testBtn.disabled = true;
-                testBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
-            }
-            if (generateBtn) {
-                generateBtn.disabled = true;
-                generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
-            }
-            if (stopBtn) {
-                stopBtn.style.display = 'inline-flex';
-                stopBtn.disabled = false;
-            }
-            if (entryCountInput) entryCountInput.disabled = true;
-            
-            modelProviderRadios.forEach(radio => radio.disabled = true);
-            modelSelects.forEach(select => select.disabled = true);
-        } else {
-            // Re-enable generation buttons and inputs
-            if (testBtn) {
-                testBtn.disabled = !this.selectedTaskId;
-                testBtn.innerHTML = '<i class="fas fa-flask"></i> Test Generation';
-            }
-            if (generateBtn) {
-                generateBtn.disabled = !this.selectedTaskId;
-                generateBtn.innerHTML = '<i class="fas fa-rocket"></i> Generate Dataset';
-            }
-            if (stopBtn) {
-                stopBtn.style.display = 'none';
-            }
-            if (entryCountInput) entryCountInput.disabled = false;
-            
-            modelProviderRadios.forEach(radio => radio.disabled = false);
-            modelSelects.forEach(select => select.disabled = false);
-        }
-    }
-
-    showProgress(text, percent) {
-        const progressSection = document.getElementById('progressSection');
-        if (!progressSection) return;
-
-        const progressBar = progressSection.querySelector('.progress-bar');
-        const progressText = document.getElementById('progressText');
-
-        if (progressText) progressText.innerHTML = `<i class="fas fa-cog fa-spin me-2"></i>${text}`;
-        if (progressBar) {
-            progressBar.style.width = `${percent}%`;
-            progressBar.setAttribute('aria-valuenow', Math.min(percent, 100));
-        }
-
-        progressSection.style.display = 'block';
-    }
-
-    hideProgress() {
-        const progressSection = document.getElementById('progressSection');
-        if (progressSection) {
-            progressSection.style.display = 'none';
-        }
-        
-        // Reset UI state
-        this.updateGenerationUI(false);
-    }
-
-    showAlert(message, type = 'info') {
-        const alertContainer = document.getElementById('alertContainer');
-        if (!alertContainer) return;
-
-        const alertDiv = document.createElement('div');
-        alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
-        alertDiv.innerHTML = `
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        `;
-
-        alertContainer.appendChild(alertDiv);
-
-        // Auto-remove after 5 seconds
-        setTimeout(() => {
-            if (alertDiv.parentNode) {
-                alertDiv.remove();
-            }
-        }, 5000);
-    }
-
-    escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-
-    // Additional methods would go here (createTask, deleteTask, loadQualityConfig, etc.)
-    async createTask() {
-        const taskId = document.getElementById('taskId')?.value?.trim();
-        const taskDescription = document.getElementById('taskDescription')?.value?.trim();
-        const taskType = document.getElementById('taskType')?.value || 'custom';
-        const systemPrompt = document.getElementById('systemPrompt')?.value?.trim();
-        const userTemplate = document.getElementById('userTemplate')?.value?.trim();
-
-        if (!taskId) {
-            this.showAlert('Task ID is required', 'warning');
-            return;
-        }
-
-        if (!taskDescription && !systemPrompt && !userTemplate) {
-            this.showAlert('At least one of description, system prompt, or user template is required', 'warning');
-            return;
-        }
-
-        try {
-            const response = await fetch('/api/tasks', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    id: taskId,
-                    description: taskDescription,
-                    type: taskType,
-                    system_prompt: systemPrompt,
-                    user_template: userTemplate
-                })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            const result = await response.json();
-            
-            // Close the modal
-            const modal = bootstrap.Modal.getInstance(document.getElementById('createTaskModal'));
-            if (modal) modal.hide();
-
-            // Clear the form
-            document.getElementById('createTaskForm')?.reset();
-
-            this.showAlert(`Task "${taskId}" created successfully!`, 'success');
-            
-            // Reload tasks to show the new one
-            await this.loadTasks();
-
-        } catch (error) {
-            console.error('Error creating task:', error);
-            this.showAlert('Error creating task: ' + error.message, 'danger');
-        }
-    }
-
-    async deleteTask(taskId) {
-        if (!taskId) {
-            this.showAlert('Invalid task ID', 'warning');
-            return;
-        }
-
-        // Show confirmation dialog
-        const confirmed = confirm(`Are you sure you want to delete task "${taskId}"? This action cannot be undone.`);
-        if (!confirmed) return;
-
-        try {
-            const response = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' }
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            // If this was the selected task, clear selection
-            if (this.selectedTaskId === taskId) {
-                this.selectedTaskId = null;
-                const testBtn = document.getElementById('testGeneration');
-                const generateBtn = document.getElementById('generateDataset');
-                if (testBtn) testBtn.disabled = true;
-                if (generateBtn) generateBtn.disabled = true;
-            }
-
-            this.showAlert(`Task "${taskId}" deleted successfully!`, 'success');
-            
-            // Reload tasks to reflect the deletion
-            await this.loadTasks();
-
-        } catch (error) {
-            console.error('Error deleting task:', error);
-            this.showAlert('Error deleting task: ' + error.message, 'danger');
-        }
-    }
-
-    async loadQualityConfig() {
-        try {
-            const response = await fetch('/api/quality-config');
-            
-            if (response.ok) {
-                const config = await response.json();
-                
-                // Update UI elements with loaded config
-                const similaritySlider = document.getElementById('similarityThreshold');
-                const thresholdValue = document.getElementById('thresholdValue');
-                const enableFilter = document.getElementById('enableQualityFilter');
-                const minLength = document.getElementById('minResponseLength');
-                const maxLength = document.getElementById('maxResponseLength');
-                const enableDuplicateDetection = document.getElementById('enableDuplicateDetection');
-
-                if (similaritySlider && config.similarity_threshold !== undefined) {
-                    similaritySlider.value = config.similarity_threshold;
-                    if (thresholdValue) thresholdValue.textContent = config.similarity_threshold;
-                }
-                
-                if (enableFilter && config.enable_quality_filter !== undefined) {
-                    enableFilter.checked = config.enable_quality_filter;
-                }
-                
-                if (minLength && config.min_response_length !== undefined) {
-                    minLength.value = config.min_response_length;
-                }
-                
-                if (maxLength && config.max_response_length !== undefined) {
-                    maxLength.value = config.max_response_length;
-                }
-                
-                if (enableDuplicateDetection && config.enable_duplicate_detection !== undefined) {
-                    enableDuplicateDetection.checked = config.enable_duplicate_detection;
-                }
-
-                console.log('Quality config loaded:', config);
-            } else {
-                console.warn('Could not load quality config, using defaults');
-            }
-        } catch (error) {
-            console.error('Error loading quality config:', error);
-            // Don't show error alert for config loading as it's not critical
-        }
-    }
-
-    async updateQualitySettings() {
-        const similarityThreshold = parseFloat(document.getElementById('similarityThreshold')?.value || '0.8');
-        const enableFilter = document.getElementById('enableQualityFilter')?.checked || false;
-        const minLength = parseInt(document.getElementById('minResponseLength')?.value || '10');
-        const maxLength = parseInt(document.getElementById('maxResponseLength')?.value || '2000');
-        const enableDuplicateDetection = document.getElementById('enableDuplicateDetection')?.checked || true;
-
-        // Validate inputs
-        if (minLength < 0 || maxLength < 0 || minLength > maxLength) {
-            this.showAlert('Invalid length settings. Min length must be less than max length and both must be positive.', 'warning');
-            return;
-        }
-
-        if (similarityThreshold < 0 || similarityThreshold > 1) {
-            this.showAlert('Similarity threshold must be between 0 and 1.', 'warning');
-            return;
-        }
-
-        try {
-            const response = await fetch('/api/quality-config', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    similarity_threshold: similarityThreshold,
-                    enable_quality_filter: enableFilter,
-                    min_response_length: minLength,
-                    max_response_length: maxLength,
-                    enable_duplicate_detection: enableDuplicateDetection
-                })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            // Close the modal
-            const modal = bootstrap.Modal.getInstance(document.getElementById('qualityModal'));
-            if (modal) modal.hide();
-
-            this.showAlert('Quality settings updated successfully!', 'success');
-
-        } catch (error) {
-            console.error('Error updating quality settings:', error);
-            this.showAlert('Error updating quality settings: ' + error.message, 'danger');
-        }
-    }
-
-    async loadAvailableModels() {
-        try {
-            // Load DeepSeek models (always available)
-            const deepseekSelect = document.getElementById('deepseekModelSelect');
-            if (deepseekSelect) {
-                deepseekSelect.innerHTML = `
-                    <option value="deepseek-chat">DeepSeek-V3-0324</option>
-                    <option value="deepseek-reasoner">DeepSeek-R1-0528</option>
                 `;
-            }
+      }
 
-            // Load Ollama models
-            try {
-                const response = await fetch('/api/models/ollama');
-                if (response.ok) {
-                    const data = await response.json();
-                    const ollamaSelect = document.getElementById('ollamaModelSelect');
-                    
-                    if (ollamaSelect) {
-                        if (data.models && data.models.length > 0) {
-                            ollamaSelect.innerHTML = data.models.map(model => 
-                                `<option value="ollama:${model}">${model}</option>`
-                            ).join('');
-                            
-                            // Enable Ollama provider if models are available
-                            const ollamaRadio = document.querySelector('input[name="modelProvider"][value="ollama"]');
-                            if (ollamaRadio) {
-                                ollamaRadio.disabled = false;
-                                const ollamaLabel = ollamaRadio.closest('label');
-                                if (ollamaLabel) {
-                                    ollamaLabel.classList.remove('disabled');
-                                }
-                            }
-                        } else {
-                            ollamaSelect.innerHTML = '<option value="">No Ollama models available</option>';
-                            
-                            // Disable Ollama provider if no models
-                            const ollamaRadio = document.querySelector('input[name="modelProvider"][value="ollama"]');
-                            if (ollamaRadio) {
-                                ollamaRadio.disabled = true;
-                                const ollamaLabel = ollamaRadio.closest('label');
-                                if (ollamaLabel) {
-                                    ollamaLabel.classList.add('disabled');
-                                }
-                            }
-                        }
-                    }
-                }
-            } catch (error) {
-                console.warn('Could not load Ollama models:', error);
-                const ollamaSelect = document.getElementById('ollamaModelSelect');
-                if (ollamaSelect) {
-                    ollamaSelect.innerHTML = '<option value="">Ollama server not available</option>';
-                }
-            }
-
-            console.log('Available models loaded');
-        } catch (error) {
-            console.error('Error loading available models:', error);
-            // Don't show error alert as this is not critical for basic functionality
-        }
-    }
-
-    displayGenerationResult(title, output) {
-        // Create a modal to display generation results
-        const modalHtml = `
-            <div class="modal fade" id="generationResultModal" tabindex="-1">
-                <div class="modal-dialog modal-lg">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title">${this.escapeHtml(title)}</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <pre class="bg-light p-3 rounded" style="max-height: 400px; overflow-y: auto;">${this.escapeHtml(JSON.stringify(output, null, 2))}</pre>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        // Remove existing modal if any
-        const existingModal = document.getElementById('generationResultModal');
-        if (existingModal) {
-            existingModal.remove();
-        }
-
-        // Add modal to document
-        document.body.insertAdjacentHTML('beforeend', modalHtml);
-
-        // Show modal
-        const modal = new bootstrap.Modal(document.getElementById('generationResultModal'));
-        modal.show();
-
-        // Clean up modal when hidden
-        document.getElementById('generationResultModal').addEventListener('hidden.bs.modal', function() {
-            this.remove();
-        });
-    }
-
-    displayDatasetResult(result) {
-        // Show dataset generation results and enable download
-        const downloadSection = document.getElementById('downloadSection');
-        if (!downloadSection) return;
-
-        downloadSection.style.display = 'block';
-        
-        // Update result summary
-        const resultSummary = document.getElementById('resultSummary');
-        if (resultSummary) {
-            resultSummary.innerHTML = `
-                <div class="alert alert-success">
-                    <h5><i class="fas fa-check-circle"></i> Dataset Generated Successfully!</h5>
-                    <p><strong>Task:</strong> ${this.escapeHtml(result.task_id)}</p>
-                    <p><strong>Entries:</strong> ${result.count}</p>
-                    <p><strong>Generated:</strong> ${new Date(result.generated_at).toLocaleString()}</p>
-                    ${result.quality_report ? `<p><strong>Quality Score:</strong> ${(result.quality_report.quality_score * 100).toFixed(1)}%</p>` : ''}
-                </div>
-            `;
-        }
-
-        // Enable download buttons
-        const downloadBtns = document.querySelectorAll('.download-btn');
-        downloadBtns.forEach(btn => {
-            btn.disabled = false;
-            btn.dataset.taskId = result.task_id;
-        });
-
-        // Show preview table
-        this.displayPreviewTable(result.entries);
-
-        // Show a sample of the generated data
-        if (result.entries && result.entries.length > 0) {
-            const sampleEntry = result.entries[0];
-            const sampleDisplay = document.getElementById('sampleDisplay');
-            if (sampleDisplay) {
-                sampleDisplay.innerHTML = `
-                    <h6>Sample Entry (JSON):</h6>
-                    <pre class="bg-light p-2 rounded" style="max-height: 200px; overflow-y: auto;">${this.escapeHtml(JSON.stringify(sampleEntry, null, 2))}</pre>
-                `;
-            }
-        }
-    }
-
-    displayPreviewTable(entries) {
-        const previewContainer = document.getElementById('previewTableContainer');
-        if (!previewContainer || !entries || entries.length === 0) return;
-
-        // Extract all unique fields from content across all entries
-        const allFields = new Set(['id']); // Always include ID
-        entries.forEach(entry => {
-            if (entry.content && typeof entry.content === 'object') {
-                Object.keys(entry.content).forEach(field => allFields.add(field));
-            }
-        });
-
-        const fields = Array.from(allFields);
-        
-        // Create table HTML
-        const tableHtml = `
-            <div class="card mt-3">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5><i class="fas fa-table"></i> Dataset Preview</h5>                    <div class="btn-group btn-group-sm">
-                        <button class="btn btn-outline-primary" onclick="datasetGenerator.toggleViewMode('table')" id="tableViewBtn">
-                            <i class="fas fa-table"></i> Table
-                        </button>
-                        <button class="btn btn-outline-success" onclick="datasetGenerator.toggleViewMode('jsonl')" id="jsonlViewBtn">
-                            <i class="fas fa-code"></i> JSONL
-                        </button>
-                        <button class="btn btn-outline-primary" onclick="datasetGenerator.toggleTableView('compact')" id="compactBtn">
-                            <i class="fas fa-compress"></i> Compact
-                        </button>
-                        <button class="btn btn-outline-primary" onclick="datasetGenerator.toggleTableView('full')" id="fullBtn">
-                            <i class="fas fa-expand"></i> Full
-                        </button>
-                        <button class="btn btn-outline-secondary" onclick="datasetGenerator.exportTableToCSV()">
-                            <i class="fas fa-download"></i> Export CSV
-                        </button>
-                    </div>
-                </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
-                        <table class="table table-striped table-hover mb-0" id="previewTable">
-                            <thead class="table-dark sticky-top">
+      // Update preview table
+      if (previewTableContainer && data.entries.length > 0) {
+        let tableHTML = `
+                    <h5><i class="fas fa-table"></i> Dataset Preview (First 10 entries)</h5>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead class="table-dark">
                                 <tr>
-                                    ${fields.map(field => `<th class="text-nowrap">${this.escapeHtml(field)}</th>`).join('')}
-                                    <th class="text-nowrap">Source</th>
-                                    <th class="text-nowrap">Actions</th>
+                                    <th>ID</th>
+                                    <th>Content Preview</th>
+                                    <th>Metadata</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                ${entries.slice(0, 50).map((entry, index) => `
-                                    <tr data-entry-index="${index}">
-                                        <td class="text-nowrap">${this.escapeHtml(entry.id || `entry-${index + 1}`)}</td>
-                                        ${fields.slice(1).map(field => {
-                                            const value = entry.content && entry.content[field] ? entry.content[field] : '';
-                                            const displayValue = typeof value === 'string' ? value : JSON.stringify(value);
-                                            const truncated = displayValue.length > 100 ? displayValue.substring(0, 100) + '...' : displayValue;
-                                            return `<td class="entry-content" data-field="${field}" data-full-value="${this.escapeHtml(displayValue)}" title="${this.escapeHtml(displayValue)}">${this.escapeHtml(truncated)}</td>`;
-                                        }).join('')}
-                                        <td class="text-nowrap">
-                                            <small class="text-muted">${this.escapeHtml(entry.metadata?.source || 'Unknown')}</small>
-                                        </td>
-                                        <td class="text-nowrap">
-                                            <button class="btn btn-sm btn-outline-info me-1" onclick="datasetGenerator.viewEntryDetails(${index})" title="View Details">
-                                                <i class="fas fa-eye"></i>
-                                            </button>
-                                            <button class="btn btn-sm btn-outline-secondary" onclick="datasetGenerator.copyEntryToClipboard(${index})" title="Copy JSON">
-                                                <i class="fas fa-copy"></i>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                `).join('')}
-                                ${entries.length > 50 ? `
-                                    <tr>
-                                        <td colspan="${fields.length + 2}" class="text-center text-muted py-3">
-                                            <i class="fas fa-info-circle"></i> Showing first 50 entries out of ${entries.length} total entries.
-                                            <button class="btn btn-link btn-sm" onclick="datasetGenerator.showAllEntries()">Show All</button>
-                                        </td>
-                                    </tr>
-                                ` : ''}
+                `;
+
+        data.entries.slice(0, 10).forEach((entry) => {
+          const contentPreview = Object.keys(entry.content)
+            .map(
+              (key) =>
+                `<strong>${key}:</strong> ${String(
+                  entry.content[key]
+                ).substring(0, 100)}...`
+            )
+            .join("<br>");
+
+          const metadataPreview = Object.entries(entry.metadata)
+            .slice(0, 3)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join("<br>");
+
+          tableHTML += `
+                        <tr>
+                            <td><code>${entry.id}</code></td>
+                            <td>${contentPreview}</td>
+                            <td class="small text-muted">${metadataPreview}</td>
+                        </tr>
+                    `;
+        });
+
+        tableHTML += `
                             </tbody>
                         </table>
                     </div>
-                </div>
-                <div class="card-footer text-muted">
-                    <small>
-                        <i class="fas fa-info-circle"></i> Total: ${entries.length} entries | 
-                        Fields: ${fields.length} | 
-                        Click on entries to view full content
-                    </small>
-                </div>
-            </div>
-        `;
+                `;
 
-        previewContainer.innerHTML = tableHtml;
-        
-        // Store entries for later use
-        this.currentEntries = entries;
-        this.currentFields = fields;
+        previewTableContainer.innerHTML = tableHTML;
+      }
 
-        // Add click handlers for expandable content
-        this.addTableInteractivity();
-    }
+      // Enable download buttons
+      document.querySelectorAll(".download-btn").forEach((btn) => {
+        btn.disabled = false;
+      });
 
-    addTableInteractivity() {
-        // Add click to expand content
-        document.querySelectorAll('.entry-content').forEach(cell => {
-            cell.addEventListener('click', function() {
-                const fullValue = this.getAttribute('data-full-value');
-                const field = this.getAttribute('data-field');
-                
-                if (fullValue && fullValue.length > 100) {
-                    const modal = document.createElement('div');
-                    modal.className = 'modal fade';
-                    modal.innerHTML = `
-                        <div class="modal-dialog modal-lg">
-                            <div class="modal-content">
-                                <div class="modal-header">
-                                    <h5 class="modal-title">Field: ${field}</h5>
-                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                </div>
-                                <div class="modal-body">
-                                    <pre class="bg-light p-3 rounded" style="white-space: pre-wrap; word-break: break-word;">${fullValue}</pre>
-                                </div>
-                                <div class="modal-footer">
-                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                    <button type="button" class="btn btn-primary" onclick="navigator.clipboard.writeText('${fullValue.replace(/'/g, "\\'")}')">Copy</button>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                    
-                    document.body.appendChild(modal);
-                    const bsModal = new bootstrap.Modal(modal);
-                    bsModal.show();
-                    
-                    modal.addEventListener('hidden.bs.modal', () => {
-                        modal.remove();
-                    });
-                }
-            });
+      downloadSection.style.display = "block";
+    },
+
+    // Download dataset
+    downloadDataset: function (format) {
+      if (!this.currentTask) {
+        notifications.warning("No dataset to download");
+        return;
+      }
+
+      const url = `/api/download/${format}/${this.currentTask.id}`;
+      const link = document.createElement("a");
+      link.href = url;
+      link.style.display = "none";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      notifications.success(
+        `Downloading dataset in ${format.toUpperCase()} format...`
+      );
+    },
+
+    // Create new task
+    createTask: async function () {
+      let taskId = document.getElementById("taskId")?.value.trim();
+      let taskType = document.getElementById("taskType")?.value;
+      let description = document
+        .getElementById("taskDescription")
+        ?.value.trim();
+      let systemPrompt = document.getElementById("systemPrompt")?.value.trim();
+      let userTemplate = document.getElementById("userTemplate")?.value.trim();
+
+      // Try to find in custom modal if not found
+      if (!taskId) {
+        taskId = document
+          .querySelector(".custom-modal-body #taskId")
+          ?.value.trim();
+        taskType = document.querySelector(
+          ".custom-modal-body #taskType"
+        )?.value;
+        description = document
+          .querySelector(".custom-modal-body #taskDescription")
+          ?.value.trim();
+        systemPrompt = document
+          .querySelector(".custom-modal-body #systemPrompt")
+          ?.value.trim();
+        userTemplate = document
+          .querySelector(".custom-modal-body #userTemplate")
+          ?.value.trim();
+      }
+
+      if (!taskId) {
+        notifications.warning("Task ID is required");
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/tasks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: taskId,
+            type: taskType,
+            description: description,
+            system_prompt: systemPrompt,
+            user_template: userTemplate,
+          }),
         });
-    }
 
-    toggleTableView(viewType) {
-        const table = document.getElementById('previewTable');
-        if (!table) return;
+        const data = await response.json();
 
-        if (viewType === 'compact') {
-            table.classList.add('table-sm');
-            document.querySelectorAll('.entry-content').forEach(cell => {
-                const fullValue = cell.getAttribute('data-full-value');
-                if (fullValue && fullValue.length > 50) {
-                    cell.textContent = fullValue.substring(0, 50) + '...';
-                }
-            });
+        if (response.ok) {
+          notifications.success("Task created successfully!");
+          this.loadTasks();
+
+          // Close modal
+          this.closeModalBySelector(".custom-modal-overlay");
+
+          // Clear form
+          const form = document.getElementById("createTaskForm");
+          if (form) form.reset();
         } else {
-            table.classList.remove('table-sm');
-            document.querySelectorAll('.entry-content').forEach(cell => {
-                const fullValue = cell.getAttribute('data-full-value');
-                if (fullValue && fullValue.length > 100) {
-                    cell.textContent = fullValue.substring(0, 100) + '...';
-                } else if (fullValue) {
-                    cell.textContent = fullValue;
-                }
-            });
+          throw new Error(data.detail || "Failed to create task");
         }
-    }
+      } catch (error) {
+        console.error("Error creating task:", error);
+        notifications.error("Failed to create task: " + error.message);
+      }
+    },
 
-    viewEntryDetails(index) {
-        if (!this.currentEntries || !this.currentEntries[index]) return;
+    // Save Quality Settings
+    saveQualitySettings: async function () {
+      let enableQualityFilter = document.getElementById(
+        "enableQualityFilter"
+      )?.checked;
+      let minResponseLength = parseInt(
+        document.getElementById("minResponseLength")?.value || "10"
+      );
+      let maxResponseLength = parseInt(
+        document.getElementById("maxResponseLength")?.value || "2000"
+      );
+      let similarityThreshold = parseFloat(
+        document.getElementById("similarityThreshold")?.value || "0.8"
+      );
+      let enableDuplicateDetection = document.getElementById(
+        "enableDuplicateDetection"
+      )?.checked;
 
-        const entry = this.currentEntries[index];
-        const modalHtml = `
-            <div class="modal fade" id="entryDetailsModal" tabindex="-1">
-                <div class="modal-dialog modal-xl">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title">Entry Details: ${this.escapeHtml(entry.id || `Entry ${index + 1}`)}</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <h6>Content</h6>
-                                    <pre class="bg-light p-3 rounded" style="max-height: 300px; overflow-y: auto;">${this.escapeHtml(JSON.stringify(entry.content, null, 2))}</pre>
-                                </div>
-                                <div class="col-md-6">
-                                    <h6>Metadata</h6>
-                                    <pre class="bg-light p-3 rounded" style="max-height: 300px; overflow-y: auto;">${this.escapeHtml(JSON.stringify(entry.metadata, null, 2))}</pre>
-                                </div>
-                            </div>
+      // Try custom modal if not found
+      if (enableQualityFilter === undefined) {
+        enableQualityFilter = document.querySelector(
+          ".custom-modal-body #enableQualityFilter"
+        )?.checked;
+        minResponseLength = parseInt(
+          document.querySelector(".custom-modal-body #minResponseLength")
+            ?.value || "10"
+        );
+        maxResponseLength = parseInt(
+          document.querySelector(".custom-modal-body #maxResponseLength")
+            ?.value || "2000"
+        );
+        similarityThreshold = parseFloat(
+          document.querySelector(".custom-modal-body #similarityThreshold")
+            ?.value || "0.8"
+        );
+        enableDuplicateDetection = document.querySelector(
+          ".custom-modal-body #enableDuplicateDetection"
+        )?.checked;
+      }
+
+      try {
+        const response = await fetch("/api/quality-config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            min_length: minResponseLength,
+            max_length: maxResponseLength,
+            similarity_threshold: similarityThreshold,
+            required_fields: [],
+            custom_validators: [],
+          }),
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          notifications.success("Quality settings saved successfully!");
+          this.closeModalBySelector(".custom-modal-overlay");
+        } else {
+          throw new Error(data.detail || "Failed to save quality settings");
+        }
+      } catch (error) {
+        console.error("Error saving quality settings:", error);
+        notifications.error(
+          "Failed to save quality settings: " + error.message
+        );
+      }
+    },
+
+    // Load quality settings
+    loadQualitySettings: async function () {
+      try {
+        const response = await fetch("/api/quality-config");
+        const data = await response.json();
+
+        if (response.ok && data.config) {
+          const config = data.config;
+
+          const minLength = document.getElementById("minResponseLength");
+          const maxLength = document.getElementById("maxResponseLength");
+          const threshold = document.getElementById("similarityThreshold");
+          const thresholdValue = document.getElementById("thresholdValue");
+
+          if (minLength) minLength.value = config.min_length || 10;
+          if (maxLength) maxLength.value = config.max_length || 2000;
+          if (threshold) threshold.value = config.similarity_threshold || 0.8;
+          if (thresholdValue)
+            thresholdValue.textContent = config.similarity_threshold || 0.8;
+        }
+      } catch (error) {
+        console.error("Error loading quality settings:", error);
+      }
+    },
+
+    // Check API status
+    checkApiStatus: async function () {
+      try {
+        const response = await fetch("/api/status");
+        const data = await response.json();
+
+        if (response.ok) {
+          const apiStatus = document.getElementById("apiStatus");
+          if (apiStatus) {
+            if (data.deepseek_api_configured) {
+              this.updateApiStatus("success", "✅ DeepSeek API พร้อมใช้งาน");
+            } else {
+              this.updateApiStatus(
+                "warning",
+                "⚠ ยังไม่ได้ตั้งค่า DeepSeek API key"
+              );
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error checking API status:", error);
+      }
+    },
+
+    // Edit task
+    editTask: async function (taskId) {
+      try {
+        const response = await fetch(`/api/tasks/${taskId}`);
+        const task = await response.json();
+
+        if (response.ok) {
+          this.populateEditForm(task);
+
+          // Show edit modal using custom modal system
+          const modalElement = document.getElementById("editTaskModal");
+          if (modalElement && window.CustomModal) {
+            const customModal = new window.CustomModal(modalElement);
+            customModal.show();
+          }
+        } else {
+          throw new Error(task.detail || "Failed to load task");
+        }
+      } catch (error) {
+        console.error("Error loading task for edit:", error);
+        notifications.error("Failed to load task: " + error.message);
+      }
+    },
+
+    // Populate edit form
+    populateEditForm: function (taskData) {
+      const jsonlTextarea = document.getElementById("editTaskJsonl");
+      if (jsonlTextarea) {
+        jsonlTextarea.value = JSON.stringify(taskData, null, 2);
+      }
+    },
+
+    // Format JSON
+    formatJson: function () {
+      let textarea = document.getElementById("editTaskJsonl");
+      if (!textarea) {
+        textarea = document.querySelector(".custom-modal-body #editTaskJsonl");
+      }
+
+      if (!textarea) return;
+
+      try {
+        const parsed = JSON.parse(textarea.value);
+        textarea.value = JSON.stringify(parsed, null, 2);
+        notifications.success("JSON formatted successfully!");
+      } catch (error) {
+        notifications.error("Invalid JSON format: " + error.message);
+      }
+    },
+
+    // Validate JSON
+    validateJson: function () {
+      let textarea = document.getElementById("editTaskJsonl");
+      if (!textarea) {
+        textarea = document.querySelector(".custom-modal-body #editTaskJsonl");
+      }
+
+      if (!textarea) return;
+
+      try {
+        const parsed = JSON.parse(textarea.value);
+        notifications.success("JSON is valid!");
+        return true;
+      } catch (error) {
+        notifications.error("Invalid JSON format: " + error.message);
+        return false;
+      }
+    },
+
+    // Copy JSON
+    copyJson: function () {
+      let textarea = document.getElementById("editTaskJsonl");
+      if (!textarea) {
+        textarea = document.querySelector(".custom-modal-body #editTaskJsonl");
+      }
+
+      if (!textarea) return;
+
+      try {
+        textarea.select();
+        document.execCommand('copy');
+        notifications.success("JSON copied to clipboard!");
+      } catch (error) {
+        notifications.error("Failed to copy JSON: " + error.message);
+      }
+    },
+    // Update task from JSON
+    updateTaskFromJson: async function () {
+      let jsonTextarea = document.getElementById("editTaskJsonl");
+      if (!jsonTextarea) {
+        jsonTextarea = document.querySelector(
+          ".custom-modal-body #editTaskJsonl"
+        );
+      }
+
+      if (!jsonTextarea) return;
+
+      try {
+        const taskData = JSON.parse(jsonTextarea.value);
+        const taskId = taskData.id;
+
+        if (!taskId) {
+          notifications.warning("Task ID is required in JSON data");
+          return;
+        }
+
+        const response = await fetch(`/api/tasks/${taskId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(taskData),
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          notifications.success("Task updated successfully!");
+          this.loadTasks();
+          this.closeModalBySelector(".custom-modal-overlay");
+        } else {
+          throw new Error(result.detail || "Failed to update task");
+        }
+      } catch (error) {
+        if (error instanceof SyntaxError) {
+          notifications.error("Invalid JSON format. Please check your syntax.");
+        } else {
+          console.error("Error updating task:", error);
+          notifications.error("Failed to update task: " + error.message);
+        }
+      }
+    },
+
+    // Delete task
+    deleteTask: async function (taskId) {
+      if (
+        !confirm(
+          "Are you sure you want to delete this task? This action cannot be undone."
+        )
+      ) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/tasks/${taskId}`, {
+          method: "DELETE",
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          notifications.success("Task deleted successfully!");
+          this.loadTasks();
+
+          // Clear selection if deleted task was selected
+          if (this.currentTask && this.currentTask.id === taskId) {
+            this.currentTask = null;
+            this.updateSelectedTask(null);
+            this.updateGenerationButtons();
+          }
+        } else {
+          throw new Error(result.detail || "Failed to delete task");
+        }
+      } catch (error) {
+        console.error("Error deleting task:", error);
+        notifications.error("Failed to delete task: " + error.message);
+      }
+    },
+
+    // Handle PDF file selection or drop
+    handlePdfFile: function (file, triggerUpload) {
+      if (!file) {
+        notifications.warning("No file selected.");
+        return;
+      }
+      if (
+        !file.name.toLowerCase().endsWith(".pdf") &&
+        !file.type.startsWith("image/")
+      ) {
+        notifications.error("Only PDF or image files are supported.");
+        return;
+      }
+      // Show file name and enable upload button if present
+      const pdfFileLabel = document.getElementById("pdfFileLabel");
+      if (pdfFileLabel) {
+        pdfFileLabel.textContent = file.name;
+      }
+      if (triggerUpload) {
+        this.uploadPdfFile(file);
+      }
+    },
+    uploadPdfFile: async function (file) {
+      if (!file) {
+        notifications.warning("No file selected for upload.");
+        return;
+      }
+
+      this.showProgress("Uploading and processing file...", 10);
+
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        // Add Mistral API key if provided
+        const apiKeyInput = document.getElementById("mistralApiKey");
+        if (apiKeyInput && apiKeyInput.value) {
+          formData.append("mistral_api_key", apiKeyInput.value.trim());
+        }
+
+        // Add dataset creation options
+        const createDatasetCheckbox = document.getElementById(
+          "createDatasetFromPdf"
+        );
+        const datasetTypeSelect = document.getElementById("pdfDatasetType");
+
+        if (createDatasetCheckbox && createDatasetCheckbox.checked) {
+          formData.append("create_dataset", "true");
+          if (datasetTypeSelect && datasetTypeSelect.value) {
+            formData.append("dataset_type", datasetTypeSelect.value);
+          }
+        }
+
+        // Add OCR options
+        const bboxAnnotation = document.getElementById("bboxAnnotation");
+        const docAnnotation = document.getElementById("docAnnotation");
+        const ocrPages = document.getElementById("ocrPages");
+
+        if (bboxAnnotation && bboxAnnotation.checked) {
+          formData.append("bbox_annotation", "true");
+        }
+        if (docAnnotation && docAnnotation.checked) {
+          formData.append("doc_annotation", "true");
+        }
+        if (ocrPages && ocrPages.value.trim()) {
+          formData.append("pages", ocrPages.value.trim());
+        }
+
+        const response = await fetch("/api/pdf-upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          throw new Error(err.detail || "Failed to process file.");
+        }
+
+        const data = await response.json();
+        this.hideProgress();
+
+        notifications.success("File processed successfully!");
+        this.displayPdfResults(data);
+      } catch (error) {
+        this.hideProgress();
+        notifications.error("Error: " + (error.message || error));
+      }
+    },
+
+    displayPdfResults: function (data) {
+      console.log("PDF Results:", data);
+
+      // Show results in the upload status area
+      const statusDiv = document.getElementById("pdfUploadStatus");
+      const previewDiv = document.getElementById("pdfEntriesPreview");
+
+      if (statusDiv) {
+        let statusHtml = `
+                    <div class="alert alert-success mt-3">
+                        <h5><i class="fas fa-check-circle"></i> Processing Complete</h5>
+                        <p><strong>Text Extracted:</strong> ${
+                          data.extracted_text ? data.extracted_text.length : 0
+                        } characters</p>
+                        ${
+                          data.language_detected
+                            ? `<p><strong>Language:</strong> ${data.language_detected}</p>`
+                            : ""
+                        }
+                        ${
+                          data.confidence_score
+                            ? `<p><strong>Confidence:</strong> ${(
+                                data.confidence_score * 100
+                              ).toFixed(1)}%</p>`
+                            : ""
+                        }
+                `;
+
+        if (data.dataset_created) {
+          statusHtml += `
+                        <p><strong>Dataset Created:</strong> ${data.dataset_info.entries_count} entries</p>
+                        <p><strong>Dataset Type:</strong> ${data.dataset_info.dataset_type}</p>
+                        <p><strong>Task ID:</strong> <code>${data.task_id}</code></p>
+                    `;
+        }
+
+        statusHtml += "</div>";
+        statusDiv.innerHTML = statusHtml;
+      }
+
+      // Show dataset preview if available
+      if (data.dataset_preview && previewDiv) {
+        let previewHtml = '<div class="mt-3"><h6>Dataset Preview:</h6>';
+
+        if (data.dataset_preview.length > 0) {
+          previewHtml += '<div class="card"><div class="card-body">';
+
+          data.dataset_preview.forEach((entry, index) => {
+            previewHtml += `<div class="border-bottom pb-2 mb-2">`;
+            previewHtml += `<small class="text-muted">Entry ${
+              index + 1
+            }:</small><br>`;
+
+            // Display based on dataset type
+            if (entry.instruction && entry.response) {
+              previewHtml += `<strong>Instruction:</strong> ${this.truncateText(
+                entry.instruction,
+                150
+              )}<br>`;
+              previewHtml += `<strong>Response:</strong> ${this.truncateText(
+                entry.response,
+                150
+              )}`;
+            } else if (entry.question && entry.answer) {
+              previewHtml += `<strong>Question:</strong> ${this.truncateText(
+                entry.question,
+                150
+              )}<br>`;
+              previewHtml += `<strong>Answer:</strong> ${this.truncateText(
+                entry.answer,
+                150
+              )}`;
+            } else if (entry.text && entry.label) {
+              previewHtml += `<strong>Text:</strong> ${this.truncateText(
+                entry.text,
+                150
+              )}<br>`;
+              previewHtml += `<strong>Label:</strong> ${entry.label}`;
+            } else if (entry.source && entry.target) {
+              previewHtml += `<strong>Source:</strong> ${this.truncateText(
+                entry.source,
+                150
+              )}<br>`;
+              previewHtml += `<strong>Target:</strong> ${this.truncateText(
+                entry.target,
+                150
+              )}`;
+            } else if (entry.text && entry.summary) {
+              previewHtml += `<strong>Text:</strong> ${this.truncateText(
+                entry.text,
+                150
+              )}<br>`;
+              previewHtml += `<strong>Summary:</strong> ${this.truncateText(
+                entry.summary,
+                150
+              )}`;
+            } else {
+              // Fallback for unknown format
+              previewHtml += `<pre class="small">${JSON.stringify(
+                entry,
+                null,
+                2
+              )}</pre>`;
+            }
+
+            previewHtml += "</div>";
+          });
+
+          previewHtml += "</div></div>";
+
+          // Add download button if dataset was created
+          if (data.dataset_created && data.task_id) {
+            previewHtml += `
                             <div class="mt-3">
-                                <h6>Full Entry (JSON)</h6>
-                                <pre class="bg-dark text-light p-3 rounded" style="max-height: 200px; overflow-y: auto;">${this.escapeHtml(JSON.stringify(entry, null, 2))}</pre>
+                                <button class="btn btn-success" onclick="datasetGenerator.downloadPdfDataset('${data.task_id}')">
+                                    <i class="fas fa-download"></i> Download Dataset
+                                </button>
                             </div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                            <button type="button" class="btn btn-primary" onclick="datasetGenerator.copyEntryToClipboard(${index})">
-                                <i class="fas fa-copy"></i> Copy JSON
-                            </button>
+                        `;
+          }
+        } else {
+          previewHtml +=
+            '<p class="text-muted">No dataset entries to preview.</p>';
+        }
+
+        previewHtml += "</div>";
+        previewDiv.innerHTML = previewHtml;
+      }
+
+      // Show raw extracted text if no dataset was created
+      if (!data.dataset_created && data.extracted_text && previewDiv) {
+        previewDiv.innerHTML = `
+                    <div class="mt-3">
+                        <h6>Extracted Text:</h6>
+                        <div class="card">
+                            <div class="card-body">
+                                <pre class="small" style="max-height: 300px; overflow-y: auto;">${this.escapeHtml(
+                                  data.extracted_text
+                                )}</pre>
+                            </div>
                         </div>
                     </div>
-                </div>
-            </div>
-        `;
+                `;
+      }
+    },
 
-        // Remove existing modal
-        const existingModal = document.getElementById('entryDetailsModal');
-        if (existingModal) existingModal.remove();
+    downloadPdfDataset: function (taskId) {
+      if (!taskId) {
+        notifications.error("No task ID provided for download.");
+        return;
+      }
 
-        // Add and show modal
-        document.body.insertAdjacentHTML('beforeend', modalHtml);
-        const modal = new bootstrap.Modal(document.getElementById('entryDetailsModal'));
-        modal.show();
-    }
+      // Trigger download
+      const downloadUrl = `/api/download/${taskId}?format=json`;
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = `pdf-dataset-${taskId}.jsonl`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
 
-    copyEntryToClipboard(index) {
-        if (!this.currentEntries || !this.currentEntries[index]) return;
+      notifications.success("Dataset download started.");
+    },
 
-        const entry = this.currentEntries[index];
-        const jsonString = JSON.stringify(entry, null, 2);
-        
-        navigator.clipboard.writeText(jsonString).then(() => {
-            this.showAlert('Entry JSON copied to clipboard!', 'success');
-        }).catch(err => {
-            console.error('Failed to copy to clipboard:', err);
-            this.showAlert('Failed to copy to clipboard', 'warning');
+    truncateText: function (text, maxLength) {
+      if (!text) return "";
+      if (text.length <= maxLength) return this.escapeHtml(text);
+      return this.escapeHtml(text.substring(0, maxLength)) + "...";
+    },
+
+    escapeHtml: function (text) {
+      if (!text) return "";
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
+    },
+
+    // RAG Management Functions
+    setupRagEventListeners: function () {
+      const manageRagBtn = document.getElementById("manageRagBtn");
+      const refreshRagStatus = document.getElementById("refreshRagStatus");
+      const clearRagBtn = document.getElementById("clearRagBtn");
+      const ragSearchBtn = document.getElementById("ragSearchBtn");
+      const ragSearchQuery = document.getElementById("ragSearchQuery");
+
+      if (manageRagBtn) {
+        manageRagBtn.addEventListener("click", () =>
+          this.openRagManagementModal()
+        );
+      }
+
+      if (refreshRagStatus) {
+        refreshRagStatus.addEventListener("click", () => this.loadRagStatus());
+      }
+
+      if (clearRagBtn) {
+        clearRagBtn.addEventListener("click", () => this.clearRagDocuments());
+      }
+
+      if (ragSearchBtn) {
+        ragSearchBtn.addEventListener("click", () => this.searchRagDocuments());
+      }
+
+      if (ragSearchQuery) {
+        ragSearchQuery.addEventListener("keypress", (e) => {
+          if (e.key === "Enter") {
+            this.searchRagDocuments();
+          }
         });
-    }
+      }
+    },
 
-    exportTableToCSV() {
-        if (!this.currentEntries || !this.currentFields) return;
+    loadRagStatus: async function () {
+      try {
+        const response = await fetch("/api/rag/status");
+        const data = await response.json();
 
-        // Create CSV content
-        const headers = [...this.currentFields, 'source', 'generated_at'];
-        const csvRows = [headers.join(',')];
+        // Update main RAG panel
+        const ragStatusIcon = document.getElementById("ragStatusIcon");
+        const ragStatusMessage = document.getElementById("ragStatusMessage");
+        const ragDocumentInfo = document.getElementById("ragDocumentInfo");
 
-        this.currentEntries.forEach(entry => {
-            const row = [];
-            
-            // Add ID
-            row.push(this.escapeCSV(entry.id || ''));
-            
-            // Add content fields
-            this.currentFields.slice(1).forEach(field => {
-                const value = entry.content && entry.content[field] ? entry.content[field] : '';
-                const cellValue = typeof value === 'string' ? value : JSON.stringify(value);
-                row.push(this.escapeCSV(cellValue));
+        if (ragStatusIcon && ragStatusMessage && ragDocumentInfo) {
+          if (data.status === "active") {
+            ragStatusIcon.className = "fas fa-circle text-success me-1";
+            ragStatusMessage.textContent = "RAG system active";
+            ragDocumentInfo.textContent = `${data.document_count} documents loaded`;
+          } else {
+            ragStatusIcon.className = "fas fa-circle text-secondary me-1";
+            ragStatusMessage.textContent = "RAG system empty";
+            ragDocumentInfo.textContent = "No PDF documents loaded";
+          }
+        }
+
+        // Update modal status
+        const ragModalStatus = document.getElementById("ragModalStatus");
+        const ragModalDocCount = document.getElementById("ragModalDocCount");
+        const ragModalIndexed = document.getElementById("ragModalIndexed");
+        const ragDocumentsList = document.getElementById("ragDocumentsList");
+
+        if (ragModalStatus) {
+          ragModalStatus.className =
+            data.status === "active"
+              ? "badge bg-success"
+              : "badge bg-secondary";
+          ragModalStatus.textContent =
+            data.status === "active" ? "Active" : "Empty";
+        }
+
+        if (ragModalDocCount) {
+          ragModalDocCount.textContent = data.document_count;
+        }
+
+        if (ragModalIndexed) {
+          ragModalIndexed.className = data.indexed
+            ? "badge bg-success"
+            : "badge bg-secondary";
+          ragModalIndexed.textContent = data.indexed ? "Yes" : "No";
+        }
+
+        // Update documents list
+        if (ragDocumentsList) {
+          if (data.documents && data.documents.length > 0) {
+            let documentsHtml = "";
+            data.documents.forEach((doc) => {
+              documentsHtml += `
+                                <div class="border rounded p-2 mb-2">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div>
+                                            <h6 class="mb-1">${
+                                              doc.filename
+                                            }</h6>
+                                            <small class="text-muted">
+                                                ${
+                                                  doc.chunks
+                                                } chunks • Uploaded: ${new Date(
+                doc.upload_time
+              ).toLocaleString()}
+                                            </small>
+                                        </div>
+                                        <span class="badge bg-primary">${
+                                          doc.id.split("_")[0]
+                                        }</span>
+                                    </div>
+                                </div>
+                            `;
             });
-            
-            // Add metadata
-            row.push(this.escapeCSV(entry.metadata?.source || ''));
-            row.push(this.escapeCSV(entry.metadata?.generated_at || ''));
-            
-            csvRows.push(row.join(','));
+            ragDocumentsList.innerHTML = documentsHtml;
+          } else {
+            ragDocumentsList.innerHTML =
+              '<p class="text-muted">No documents loaded</p>';
+          }
+        }
+      } catch (error) {
+        console.error("Error loading RAG status:", error);
+        window.notifications.error("Failed to load RAG status");
+      }
+    },
+
+    openRagManagementModal: function () {
+      // Refresh status when opening modal
+      this.loadRagStatus();
+
+      // Use custom modal system if available, otherwise fallback to Bootstrap
+      if (window.customModals && window.customModals.ragManagementModal) {
+        window.customModals.ragManagementModal.show();
+      } else {
+        // Create custom modal for RAG management
+        const modalElement = document.getElementById("ragManagementModal");
+        if (modalElement) {
+          const customModal = new CustomModal(modalElement);
+          window.customModals = window.customModals || {};
+          window.customModals.ragManagementModal = customModal;
+          customModal.show();
+        }
+      }
+    },
+
+    searchRagDocuments: async function () {
+      const queryInput = document.getElementById("ragSearchQuery");
+      const resultsDiv = document.getElementById("ragSearchResults");
+
+      if (!queryInput || !resultsDiv) return;
+
+      const query = queryInput.value.trim();
+      if (!query) {
+        window.notifications.warning("Please enter a search query");
+        return;
+      }
+
+      try {
+        resultsDiv.innerHTML =
+          '<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Searching...</div>';
+
+        const response = await fetch("/api/rag/search", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ query: query }),
         });
 
-        // Download CSV
-        const csvContent = csvRows.join('\n');
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        
-        link.setAttribute('href', url);
-        link.setAttribute('download', `dataset_preview_${new Date().getTime()}.csv`);
-        link.style.visibility = 'hidden';
-        
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
-        this.showAlert('CSV exported successfully!', 'success');
+        const data = await response.json();
+
+        if (data.results && data.results.length > 0) {
+          let resultsHtml = `<h6 class="mb-3">Found ${data.result_count} results for "${query}"</h6>`;
+
+          data.results.forEach((result, index) => {
+            resultsHtml += `
+                            <div class="border rounded p-3 mb-2">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <h6 class="mb-0">${result.filename}</h6>
+                                    <span class="badge bg-primary">${(
+                                      result.score * 100
+                                    ).toFixed(1)}%</span>
+                                </div>
+                                <small class="text-muted">Chunk ${
+                                  result.chunk_index + 1
+                                }</small>
+                                <p class="mb-0 mt-2">${result.text_preview}</p>
+                            </div>
+                        `;
+          });
+
+          resultsDiv.innerHTML = resultsHtml;
+        } else {
+          resultsDiv.innerHTML = '<p class="text-muted">No results found</p>';
+        }
+      } catch (error) {
+        console.error("Error searching RAG documents:", error);
+        resultsDiv.innerHTML =
+          '<div class="alert alert-danger">Search failed</div>';
+        window.notifications.error("Failed to search documents");
+      }
+    },
+
+    clearRagDocuments: async function () {
+      if (
+        !confirm(
+          "Are you sure you want to clear all RAG documents? This action cannot be undone."
+        )
+      ) {
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/rag/clear", {
+          method: "DELETE",
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          window.notifications.success(data.message);
+          this.loadRagStatus(); // Refresh status
+
+          // Clear search results
+          const resultsDiv = document.getElementById("ragSearchResults");
+          if (resultsDiv) {
+            resultsDiv.innerHTML = "";
+          }
+        } else {
+          throw new Error(data.detail || "Failed to clear documents");
+        }
+      } catch (error) {
+        console.error("Error clearing RAG documents:", error);
+        window.notifications.error("Failed to clear RAG documents");
+      }
+    },
+  };
+})();
+
+// Enhanced Notification system with better display
+window.notifications = {
+  container: null,
+  notifications: [],
+
+  init: function () {
+    this.container = document.getElementById("alertContainer");
+    if (!this.container) {
+      this.container = document.createElement("div");
+      this.container.id = "alertContainer";
+      document.body.appendChild(this.container);
     }
+  },
 
-    escapeCSV(value) {
-        if (value === null || value === undefined) return '';
-        const stringValue = String(value);
-        if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
-            return `"${stringValue.replace(/"/g, '""')}"`;
-        }
-        return stringValue;
-    }
+  show: function (message, type = "info", duration = 5000) {
+    if (!this.container) this.init();
+    const icons = {
+      success: '<i class="fas fa-check-circle notification-icon"></i>',
+      error: '<i class="fas fa-times-circle notification-icon"></i>',
+      warning:
+        '<i class="fas fa-exclamation-triangle notification-icon"></i>',
+      info: '<i class="fas fa-info-circle notification-icon"></i>',
+    };
+    const notif = document.createElement("div");
+    notif.className = `notification notification-${type}`;
+    notif.innerHTML = `
+                ${icons[type] || icons.info}
+                <span style="flex:1;">${message}</span>
+                <button class="notification-close" aria-label="Close">&times;</button>
+            `;
+    // Close button
+    notif.querySelector(".notification-close").onclick = () =>
+      this._remove(notif);
+    // Auto-remove after duration
+    setTimeout(() => this._remove(notif), duration);
+    this.container.appendChild(notif);
+    // Animate exit on click (for accessibility)
+    notif.addEventListener("click", (e) => {
+      if (!e.target.classList.contains("notification-close"))
+        this._remove(notif);
+    });
+  },
 
-    showAllEntries() {
-        if (!this.currentEntries) return;
-        
-        // Re-render table with all entries
-        this.displayPreviewTable(this.currentEntries);
-    }
+  _remove: function (notif) {
+    if (!notif) return;
+    notif.classList.add("notification-exit");
+    setTimeout(() => {
+      if (notif.parentNode) notif.parentNode.removeChild(notif);
+    }, 350);
+  },
 
-    // API Configuration Methods
-    async saveApiKey() {
-        const apiKey = document.getElementById('apiKey')?.value?.trim();
-        
-        if (!apiKey) {
-            this.showAlert('Please enter an API key', 'warning');
-            return;
-        }
-        
-        if (!apiKey.startsWith('sk-')) {
-            this.showAlert('API key should start with "sk-"', 'warning');
-            return;
-        }
+  clear: function () {
+    if (!this.container) return;
+    this.container.innerHTML = "";
+  },
 
-        try {
-            // Test the API key before saving
-            const isValid = await this.validateApiKey(apiKey);
-            
-            if (!isValid) {
-                this.showAlert('Invalid API key. Please check and try again.', 'danger');
-                return;
-            }
+  success: function (message, duration = 5000) {
+    this.show(message, "success", duration);
+  },
+  error: function (message, duration = 8000) {
+    this.show(message, "error", duration);
+  },
+  warning: function (message, duration = 6000) {
+    this.show(message, "warning", duration);
+  },
+  info: function (message, duration = 5000) {
+    this.show(message, "info", duration);
+  },
+}; // Initialize when DOM is loaded
+document.addEventListener("DOMContentLoaded", function () {
+  console.log("DOM loaded, initializing dataset generator...");
+  window.datasetGenerator.init();
+  window.notifications.init();
 
-            // Save to session/environment (this would typically be done server-side)
-            const response = await fetch('/api/config/api-key', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ api_key: apiKey })
-            });
+  // Initialize RAG event listeners
+  initializeRagEventListeners();
 
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
-            }
+  // Load initial RAG status
+  if (window.ragManager) {
+    window.ragManager.loadRagStatus();
+  }
 
-            // Update status display
-            const apiStatus = document.getElementById('apiStatus');
-            if (apiStatus) {
-                apiStatus.innerHTML = `
-                    <i class="fas fa-check-circle text-success"></i>
-                    API key saved and verified successfully
-                `;
-                apiStatus.className = 'alert alert-success';
-            }
-
-            // Close the modal
-            const modal = bootstrap.Modal.getInstance(document.getElementById('apiConfigModal'));
-            if (modal) modal.hide();
-
-            this.showAlert('API key saved successfully!', 'success');
-
-        } catch (error) {
-            console.error('Error saving API key:', error);
-            this.showAlert('Error saving API key: ' + error.message, 'danger');
-            
-            // Update status display
-            const apiStatus = document.getElementById('apiStatus');
-            if (apiStatus) {
-                apiStatus.innerHTML = `
-                    <i class="fas fa-exclamation-triangle text-danger"></i>
-                    Error: ${error.message}
-                `;
-                apiStatus.className = 'alert alert-danger';
-            }
-        }
-    }
-
-    async testApiKey() {
-        const apiKey = document.getElementById('apiKey')?.value?.trim();
-        
-        if (!apiKey) {
-            this.showAlert('Please enter an API key to test', 'warning');
-            return;
-        }
-
-        const testBtn = document.getElementById('testApiBtn');
-        const originalText = testBtn?.innerHTML;
-        
-        try {
-            if (testBtn) {
-                testBtn.disabled = true;
-                testBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
-            }
-
-            const isValid = await this.validateApiKey(apiKey);
-            
-            const apiStatus = document.getElementById('apiStatus');
-            if (isValid) {
-                if (apiStatus) {
-                    apiStatus.innerHTML = `
-                        <i class="fas fa-check-circle text-success"></i>
-                        API key is valid and working
-                    `;
-                    apiStatus.className = 'alert alert-success';
-                }
-                this.showAlert('API key test successful!', 'success');
-            } else {
-                if (apiStatus) {
-                    apiStatus.innerHTML = `
-                        <i class="fas fa-times-circle text-danger"></i>
-                        API key is invalid or not working
-                    `;
-                    apiStatus.className = 'alert alert-danger';
-                }
-                this.showAlert('API key test failed', 'danger');
-            }
-
-        } catch (error) {
-            console.error('Error testing API key:', error);
-            this.showAlert('Error testing API key: ' + error.message, 'danger');
-            
-            const apiStatus = document.getElementById('apiStatus');
-            if (apiStatus) {
-                apiStatus.innerHTML = `
-                    <i class="fas fa-exclamation-triangle text-warning"></i>
-                    Test failed: ${error.message}
-                `;
-                apiStatus.className = 'alert alert-warning';
-            }
-        } finally {
-            if (testBtn) {
-                testBtn.disabled = false;
-                testBtn.innerHTML = originalText || '<i class="fas fa-flask"></i> Test API';
-            }
-        }
-    }
-
-    async validateApiKey(apiKey) {
-        try {
-            // Test the API key by making a simple request
-            const response = await fetch('/api/test-api-key', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ api_key: apiKey })
-            });
-
-            if (!response.ok) {
-                return false;
-            }
-
-            const result = await response.json();
-            return result.valid === true;
-
-        } catch (error) {
-            console.error('Error validating API key:', error);
-            return false;
-        }
-    }
-
-    // Remove duplicate/overriding methods at the end of the file:
-    // - loadTaskConfiguration
-    // - hideTaskConfiguration
-    // - populateJsonEditor
-    // - saveTaskConfiguration
-    // - formatJsonl
-    // - validateJsonl
-
-    // (Find and remove the following duplicate methods at the end of the file)
-    // async loadTaskConfiguration(taskId) { ... }
-    // hideTaskConfiguration() { ... }
-    // populateJsonEditor(config) { ... }
-    // async saveTaskConfiguration() { ... }
-    // formatJsonl() { ... }
-    // validateJsonl() { ... }
-
-    // The correct implementations are already present above and handle JSONL edit mode.
-
-    // --- No further changes needed for JSONL edit mode ---
-    // The Edit Task modal already supports switching between form and JSONL modes.
-    // The JSONL mode is shown/hidden by switchEditMode('jsonl') and the modal is opened by openEditTaskModal.
-    // The modal is only opened once at a time by the event delegation in bindEvents and openEditTaskModal.
-
-    // If you still see two Edit Task modals, ensure you are not calling both Bootstrap and CustomModal for the same modal.
-    // This code only uses the CustomModal system for Edit Task modal.
-
-    // ...existing code...
-}
-// Expose to window for custom modal system
-window.datasetGenerator = new DatasetGenerator();
-window.datasetGenerator.rebindEditTaskModalEvents = window.datasetGenerator.rebindEditTaskModalEvents.bind(window.datasetGenerator);
-
-// Initialize the application when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-    window.datasetGenerator = new DatasetGenerator();
+  // Add a test notification to verify system is working
+  setTimeout(() => {
+    console.log("DekDataset Web App fully loaded! 🚀");
+  }, 1000);
 });
 
+// RAG Event Listeners
+function initializeRagEventListeners() {
+  // RAG Management Modal button
+  const manageRagBtn = document.getElementById("manageRagBtn");
+  if (manageRagBtn) {
+    manageRagBtn.addEventListener("click", function () {
+      if (window.ragManager) {
+        window.ragManager.openRagManagementModal();
+      }
+    });
+  }
+
+  // RAG Search button
+  const ragSearchBtn = document.getElementById("ragSearchBtn");
+  if (ragSearchBtn) {
+    ragSearchBtn.addEventListener("click", function () {
+      if (window.ragManager) {
+        window.ragManager.searchRagDocuments();
+      }
+    });
+  }
+
+  // RAG Search input (Enter key)
+  const ragSearchQuery = document.getElementById("ragSearchQuery");
+  if (ragSearchQuery) {
+    ragSearchQuery.addEventListener("keypress", function (e) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (window.ragManager) {
+          window.ragManager.searchRagDocuments();
+        }
+      }
+    });
+  }
+
+  // RAG Clear button
+  const ragClearBtn = document.getElementById("ragClearBtn");
+  if (ragClearBtn) {
+    ragClearBtn.addEventListener("click", function () {
+      if (window.ragManager) {
+        window.ragManager.clearRagDocuments();
+      }
+    });
+  }
+
+  // RAG Status refresh button (if exists)
+  const ragRefreshBtn = document.getElementById("ragRefreshBtn");
+  if (ragRefreshBtn) {
+    ragRefreshBtn.addEventListener("click", function () {
+      if (window.ragManager) {
+        window.ragManager.loadRagStatus();
+      }
+    });
+  }
+}

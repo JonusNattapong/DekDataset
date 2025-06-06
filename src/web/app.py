@@ -1,32 +1,40 @@
-import sys
 import os
+import sys
+import json
+import time
+import shutil
+import hashlib
+import tempfile
+import traceback
+import zipfile
+import csv
+import requests
+import logging
+from pathlib import Path as PathLib
+from datetime import datetime
+from fastapi import BackgroundTasks, FastAPI, UploadFile, File, Form, HTTPException, Path, Request, Depends, Body
+from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel, Field
+from typing import List, Dict, Tuple, Any, Optional
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+from dotenv import load_dotenv
+
+# Add the parent directory to sys.path for imports
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "python"))
 from generate_dataset import build_data_entries_from_raw, export_jsonl
 from banner import print_ascii_banner  # Add banner import
-import os
-import json
-import logging
-import traceback
-import tempfile
-import zipfile
-import requests
 from openai import OpenAI
-import concurrent.futures
-import re
-import base64
-import time  # Add missing import
-from pathlib import Path
-from dotenv import load_dotenv
-from fastapi import BackgroundTasks
 
 # PDF and OCR dependencies
 try:
     import pdfplumber
     import pytesseract
+    from PIL import Image
     from pdf2image import convert_from_path
-    import re
     OCR_AVAILABLE = True
-    import os
     # Set tesseract_cmd for Windows if not already set
     if os.name == "nt":
         tesseract_path = r"C:\\Program Files\\Tesseract-OCR\\tesseract.exe"
@@ -34,32 +42,175 @@ try:
             pytesseract.pytesseract.tesseract_cmd = tesseract_path
 except ImportError:
     OCR_AVAILABLE = False
+    logger = logging.getLogger(__name__)
+    logger.warning("OCR dependencies not available. Install with: pip install pdfplumber pytesseract pdf2image Pillow")
 
-try:
-    from mistralai import Mistral
-    MISTRALAI_AVAILABLE = True
-except ImportError:
-    MISTRALAI_AVAILABLE = False
+# Vector Storage for PDF RAG
+class PDFVectorStore:
+    """Simple vector store for PDF content using TF-IDF"""
+    
+    def __init__(self):
+        self.documents = {}  # {doc_id: {'text': str, 'metadata': dict}}
+        self.vectorizer = None
+        self.vectors = None
+        self.doc_ids = []
+        
+    def add_document(self, doc_id: str, text: str, metadata: dict = None):
+        """Add document to vector store"""
+        self.documents[doc_id] = {
+            'text': text,
+            'metadata': metadata or {}
+        }
+        self._rebuild_index()
+        
+    def _rebuild_index(self):
+        """Rebuild TF-IDF index"""
+        if not self.documents:
+            return
+            
+        texts = []
+        doc_ids = []
+        
+        for doc_id, doc_data in self.documents.items():
+            texts.append(doc_data['text'])
+            doc_ids.append(doc_id)
+            
+        self.vectorizer = TfidfVectorizer(
+            max_features=5000,
+            stop_words='english',
+            ngram_range=(1, 2)
+        )
+        
+        self.vectors = self.vectorizer.fit_transform(texts)
+        self.doc_ids = doc_ids
+        
+    def search(self, query: str, top_k: int = 5) -> List[Tuple[str, float, dict]]:
+        """Search for similar documents"""
+        if not self.vectorizer or not self.vectors:
+            return []
+            
+        try:
+            query_vector = self.vectorizer.transform([query])
+            similarities = cosine_similarity(query_vector, self.vectors).flatten()
+            
+            # Get top k results
+            top_indices = similarities.argsort()[-top_k:][::-1]
+            
+            results = []
+            for idx in top_indices:
+                doc_id = self.doc_ids[idx]
+                score = similarities[idx]
+                if score > 0.1:  # Minimum similarity threshold
+                    results.append((
+                        doc_id,
+                        float(score),
+                        self.documents[doc_id]
+                    ))
+                    
+            return results
+            
+        except Exception as e:
+            logger.error(f"Error searching vector store: {e}")
+            return []
+            
+    def get_context(self, query: str, max_length: int = 2000) -> str:
+        """Get relevant context for RAG"""
+        results = self.search(query, top_k=3)
+        
+        if not results:
+            return ""
+            
+        context_parts = []
+        current_length = 0
+        
+        for doc_id, score, doc_data in results:
+            text = doc_data['text']
+            metadata = doc_data.get('metadata', {})
+            
+            # Add source info
+            source_info = f"[Source: {metadata.get('filename', doc_id)}]"
+            
+            if current_length + len(text) + len(source_info) < max_length:
+                context_parts.append(f"{source_info}\n{text}")
+                current_length += len(text) + len(source_info)
+            else:
+                # Truncate last piece to fit
+                remaining = max_length - current_length - len(source_info)
+                if remaining > 100:  # Only add if meaningful
+                    context_parts.append(f"{source_info}\n{text[:remaining]}...")
+                break
+                
+        return "\n\n---\n\n".join(context_parts)
 
-from fastapi import FastAPI, Request, HTTPException, Depends, Body, Path as FastApiPath, Query, Form, UploadFile, File, Response
-from fastapi.responses import JSONResponse, HTMLResponse, FileResponse, StreamingResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
-import sys
-import os
-import json
-from datetime import datetime
+# Global PDF vector store
+pdf_vector_store = PDFVectorStore()
 
-# Load environment variables from .env file
-load_dotenv()
+def add_pdf_to_rag(pdf_content: str, filename: str, metadata: dict = None):
+    """Add PDF content to RAG system"""
+    try:
+        # Create unique document ID
+        doc_id = hashlib.md5(f"{filename}_{pdf_content[:100]}".encode()).hexdigest()
+        
+        # Split long content into chunks
+        max_chunk_size = 1000
+        chunks = []
+        
+        if len(pdf_content) > max_chunk_size:
+            # Split by paragraphs first
+            paragraphs = pdf_content.split('\n\n')
+            current_chunk = ""
+            
+            for para in paragraphs:
+                if len(current_chunk) + len(para) > max_chunk_size:
+                    if current_chunk:
+                        chunks.append(current_chunk.strip())
+                    current_chunk = para
+                else:
+                    current_chunk += "\n\n" + para if current_chunk else para
+                    
+            if current_chunk:
+                chunks.append(current_chunk.strip())
+        else:
+            chunks = [pdf_content]
+            
+        # Add each chunk as separate document
+        for i, chunk in enumerate(chunks):
+            chunk_id = f"{doc_id}_chunk_{i}"
+            chunk_metadata = {
+                'filename': filename,
+                'chunk_index': i,
+                'total_chunks': len(chunks),
+                **(metadata or {})
+            }
+            pdf_vector_store.add_document(chunk_id, chunk, chunk_metadata)
+            
+        logger.info(f"Added PDF '{filename}' to RAG with {len(chunks)} chunks")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error adding PDF to RAG: {e}")
+        return False
+
+def get_rag_context(query: str) -> str:
+    """Get RAG context for dataset generation"""
+    return pdf_vector_store.get_context(query, max_length=1500)
 
 def save_dataset_to_cache_sync(task_id, cache_data):
-    """บันทึก cache_data ลงไฟล์ cache/{task_id}.json"""
-    cache_dir = os.path.join(os.path.dirname(__file__), "..", "..", "cache")
-    os.makedirs(cache_dir, exist_ok=True)
-    cache_path = os.path.join(cache_dir, f"{task_id}.json")
+    """Save cache_data to cache/{task_id}.json file"""
+    try:
+        cache_dir = os.path.join(os.path.dirname(__file__), "..", "..", "cache")
+        os.makedirs(cache_dir, exist_ok=True)
+        cache_path = os.path.join(cache_dir, f"{task_id}.json")
+        
+        with open(cache_path, 'w', encoding='utf-8') as f:
+            json.dump(cache_data, f, indent=2, ensure_ascii=False)
+        
+        logger.info(f"Dataset cached successfully: {cache_path}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error saving dataset to cache: {e}")
+        return False
 # --- Ollama Integration ---
 OLLAMA_API_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434")
 
@@ -77,9 +228,10 @@ def call_ollama_api(prompt, model_name):
     resp.raise_for_status()
     return resp.json()["response"]
 
-# ต้องประกาศ app ก่อนถึงจะใช้ @app.get ได้
-    with open(cache_path, "w", encoding="utf-8") as f:
-        json.dump(cache_data, f, ensure_ascii=False, indent=2)
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from typing import Optional
+
+# PDF upload endpoint will be defined later after main app initialization
 
 # Experiment tracking configuration loading removed
 
@@ -103,7 +255,7 @@ class TaskBase(BaseModel):
     system_prompt: Optional[str] = None
     user_template: Optional[str] = None
     validation_rules: Optional[Dict[str, Any]] = {}
-    schema: Optional[Dict[str, Any]] = {}
+    data_schema: Optional[Dict[str, Any]] = Field(default={}, alias="schema")
     examples: Optional[List[Dict[str, Any]]] = []
     parameters: Optional[Dict[str, Any]] = {}
     format: Optional[str] = None
@@ -124,7 +276,7 @@ class TaskResponse(BaseModel):
     system_prompt: Optional[str] = None
     user_template: Optional[str] = None
     validation_rules: Optional[Dict[str, Any]] = {}
-    schema: Optional[Dict[str, Any]] = {}
+    data_schema: Optional[Dict[str, Any]] = Field(default={}, alias="schema")
     examples: Optional[List[Dict[str, Any]]] = []
     parameters: Optional[Dict[str, Any]] = {}
     format: Optional[str] = None
@@ -222,7 +374,21 @@ class HealthResponse(BaseModel):
     status: str
     timestamp: datetime
 
-# Experiment tracking models removed
+# Add missing API Key models
+class ApiKeyRequest(BaseModel):
+    api_key: str = Field(..., description="DeepSeek API key starting with 'sk-'")
+
+class ApiKeyResponse(BaseModel):
+    message: str
+    valid: bool
+
+class ApiKeyTestRequest(BaseModel):
+    api_key: str = Field(..., description="DeepSeek API key to test")
+
+class ApiKeyTestResponse(BaseModel):
+    valid: bool
+    message: str
+    model_accessible: Optional[str] = None
 
 # --- Full DeepSeek Client Implementation (from generate_dataset.py) ---
 class DeepSeekClient:
@@ -268,6 +434,9 @@ class DeepSeekClient:
 ```json
 {schema_description}
 ```
+
+## Requirements
+สร้างชุดข้อมูล JSON จำนวน {count} รายการตาม Schema ข้างต้น โดยคำนึงถึงคุณภาพและความหลากหลาย:
 
 ## Requirements
 สร้างชุดข้อมูล JSON จำนวน {count} รายการตาม Schema ข้างต้น โดยคำนึงถึงคุณภาพและความหลากหลาย:
@@ -728,17 +897,35 @@ class SimpleTaskManager:
             return False
 
 # --- Simple Dataset Generation ---
-from .document_understanding import DocumentUnderstanding, BBoxImageAnnotation, DocumentAnnotation
+# DocumentUnderstanding import will be handled within the endpoint
 
-def real_generate_dataset(task: Dict, count: int, client: DeepSeekClient) -> tuple:
+def real_generate_dataset(task: Dict, count: int, client: DeepSeekClient, use_rag: bool = True) -> tuple:
     """
     Real dataset generation using full DeepSeek client with proper output format
     Returns data in {id, content, metadata} format like translation dataset
+    Enhanced with RAG context from uploaded PDFs
     """
     logger.info(f"[real_generate_dataset] Generating {count} entries for task: {task.get('id', 'unknown')}")
     
     try:
-        # Use the full DeepSeek client for generation
+        # Check if RAG context is available and should be used
+        rag_context = ""
+        if use_rag:
+            # Get RAG context based on task description and name
+            task_query = f"{task.get('name', '')} {task.get('description', '')}"
+            rag_context = get_rag_context(task_query)
+            
+            if rag_context:
+                logger.info(f"[RAG] Found relevant context from uploaded PDFs (length: {len(rag_context)} chars)")
+                # Temporarily modify the task to include RAG context
+                original_description = task.get('description', '')
+                enhanced_description = f"{original_description}\n\n## Reference Materials (from uploaded PDFs):\n{rag_context}\n\nโปรดใช้ข้อมูลอ้างอิงจาก PDF ข้างต้นเป็นแนวทางในการสร้างข้อมูล แต่ให้สร้างเนื้อหาใหม่ที่หลากหลายและไม่ซ้ำกับต้นฉบับ"
+                task = dict(task)  # Create a copy
+                task['description'] = enhanced_description
+            else:
+                logger.info("[RAG] No relevant context found from uploaded PDFs")
+        
+        # Use the full DeepSeek client for generation with enhanced task
         all_entries = client.generate_dataset_batch(
             task=task,
             total_count=count,
@@ -804,7 +991,7 @@ def real_generate_dataset(task: Dict, count: int, client: DeepSeekClient) -> tup
 # --- AppConfig and Initialization ---
 class AppConfig:
     def __init__(self):
-        self.script_dir = Path(__file__).parent.absolute()
+        self.script_dir = PathLib(__file__).parent.absolute()
         self.project_root = self.script_dir.parent.parent
         self.python_dir = self.script_dir.parent / 'python'
         self.cache_dir = self.project_root / 'cache'
@@ -1079,7 +1266,7 @@ async def create_task_api(task_data: TaskCreate, tm = Depends(get_task_manager))
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/tasks/{task_id}", response_model=TaskResponse, summary="Get Specific Task", tags=["Tasks API"])
-async def get_task_api(task_id: str = FastApiPath(..., title="The ID of the task to get"), tm = Depends(get_task_manager)):
+async def get_task_api(task_id: str = Path(..., title="The ID of the task to get"), tm = Depends(get_task_manager)):
     """Get a specific task by its ID."""
     try:
         task = tm.get_task(task_id)
@@ -1106,7 +1293,7 @@ async def get_task_api(task_id: str = FastApiPath(..., title="The ID of the task
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/tasks/{task_id}", response_model=MessageResponse, summary="Delete Task", tags=["Tasks API"])
-async def delete_task_api(task_id: str = FastApiPath(..., title="The ID of the task to delete"), tm = Depends(get_task_manager)):
+async def delete_task_api(task_id: str = Path(..., title="The ID of the task to delete"), tm = Depends(get_task_manager)):
     """Delete a task by its ID."""
     try:
         if not tm.get_task(task_id):
@@ -1125,7 +1312,7 @@ async def delete_task_api(task_id: str = FastApiPath(..., title="The ID of the t
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.put("/api/tasks/{task_id}", response_model=MessageResponse, summary="Update Task", tags=["Tasks API"])
-async def update_task_api(task_id: str = FastApiPath(..., title="The ID of the task to update"), 
+async def update_task_api(task_id: str = Path(..., title="The ID of the task to update"),
                          task_data: Dict[str, Any] = Body(...), 
                          tm = Depends(get_task_manager)):
     """Update an existing task by its ID."""
@@ -1150,7 +1337,7 @@ async def update_task_api(task_id: str = FastApiPath(..., title="The ID of the t
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/tasks/{task_id}/config", summary="Get Task Configuration", tags=["Tasks API"])
-async def get_task_config_api(task_id: str = FastApiPath(..., title="The ID of the task to get configuration for"), 
+async def get_task_config_api(task_id: str = Path(..., title="The ID of the task to get config"),
                              tm = Depends(get_task_manager)):
     """Get the complete configuration for a specific task."""
     try:
@@ -1167,7 +1354,7 @@ async def get_task_config_api(task_id: str = FastApiPath(..., title="The ID of t
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/tasks/{task_id}/config", response_model=MessageResponse, summary="Update Task Configuration", tags=["Tasks API"])
-async def update_task_config_api(task_id: str = FastApiPath(..., title="The ID of the task to update configuration for"),
+async def update_task_config_api(task_id: str = Path(..., title="The ID of the task to update config"),
                                 config_data: Dict[str, Any] = Body(...),
                                 tm = Depends(get_task_manager)):
     """Update the complete configuration for a specific task."""
@@ -1257,18 +1444,20 @@ async def generate_dataset_api(
             
             for i, entry in enumerate(all_entries[:payload.count], 1):
                 if isinstance(entry, dict):
-                    formatted_entries.append({
-                        'id': f"{task_name}-ollama-{i}",
-                        'content': {field: entry.get(field) for field in schema_fields} if schema_fields else entry,
-                        'metadata': {
-                            'source': getattr(client, "provider", f"Ollama-{client.model}"),
-                            'model': client.model,
-                            'provider': getattr(client, "provider", "ollama"),
-                            'generated_at': datetime.now().isoformat(),
-                            'task_id': payload.task_id,
-                            'generation_method': 'ollama_batch'
+                    content = {field: entry.get(field) for field in schema_fields}
+                    formatted_entry = {
+                        "id": f"{task_name}-{i}",
+                        "content": content,
+                        "metadata": {
+                            "source": f"Ollama-{client.model}",
+                            "model": client.model,
+                            "provider": "ollama",
+                            "generated_at": datetime.now().isoformat(),
+                            "task_id": payload.task_id,
+                            "generation_method": "ollama_batch"
                         }
-                    })
+                    }
+                    formatted_entries.append(formatted_entry)
             
             # If no entries were generated, provide fallback
             if not formatted_entries:
@@ -1296,18 +1485,18 @@ async def generate_dataset_api(
                 'details': {
                     'total_generated': len(entries_raw),
                     'valid_entries': len([e for e in entries_raw if 'error' not in e.get('content', {})]),
-                    'error_rate': len([e for e in entries_raw if 'error' in e.get('content', {})]) / max(1, len(entries_raw)),
-                    'generation_time': (datetime.now() - generation_start_time).total_seconds(),
+                    'issues_found': len([e for e in entries_raw if 'error' in e.get('content', {})]),                    'final_count': len(entries_raw),
                     'generation_method': 'ollama_batch'
                 }
             }
         else:
-            # Use DeepSeek client with timeout handling
+            # Use DeepSeek client with timeout handling and RAG support
             try:
                 entries_raw, quality_report_raw = real_generate_dataset(
                     task=task,
                     count=payload.count,
-                    client=client
+                    client=client,
+                    use_rag=True
                 )
             except requests.exceptions.ReadTimeout:
                 logger.warning("DeepSeek generation timed out")
@@ -1412,17 +1601,19 @@ async def test_generation_api(
             
             for i, entry in enumerate(test_entries[:3], 1):
                 if isinstance(entry, dict):
-                    formatted_entries.append({
-                        'id': f"test-{task_name}-ollama-{i}",
-                        'content': {field: entry.get(field) for field in schema_fields} if schema_fields else entry,
-                        'metadata': {
-                            'source': f"Ollama-{client.model}",
-                            'generated_at': datetime.now().isoformat(),
-                            'task_id': payload.task_id,
-                            'test': True,
-                            'generation_method': 'ollama'
+                    content = {field: entry.get(field) for field in schema_fields}
+                    formatted_entry = {
+                        "id": f"test-{task_name}-{i}",
+                        "content": content,
+                        "metadata": {
+                            "source": f"Ollama-{client.model}",
+                            "generated_at": datetime.now().isoformat(),
+                            "task_id": payload.task_id,
+                            "test": True,
+                            "generation_method": "ollama"
                         }
-                    })
+                    }
+                    formatted_entries.append(formatted_entry)
             
             entries_raw = formatted_entries
             quality_report_raw = {
@@ -1550,186 +1741,6 @@ async def get_api_status():
             error=str(e)
         )
 
-@app.get("/api/download/{format}/{task_id}", summary="Download Generated Dataset", tags=["Dataset Download API"])
-async def download_dataset_api(
-    format: str = FastApiPath(..., description="Dataset format: 'json', 'csv', or 'zip'"),
-    task_id: str = FastApiPath(..., description="ID of the task")
-):
-    """Download generated dataset in specified format."""
-    valid_formats = ['json', 'csv', 'zip']
-    if format not in valid_formats:
-        raise HTTPException(status_code=400, detail=f"Unsupported format. Use one of: {valid_formats}")
-    
-    cache_file = app_config.cache_dir / f'{task_id}.json'
-    if not cache_file.exists():
-        raise HTTPException(status_code=404, detail="Dataset not found. Generate dataset first.")
-    
-    try:
-        with open(cache_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            
-        if format == 'json':
-            # Export as JSONL format (JSON Lines) - each entry on separate line
-            entries = data.get('entries', [])
-            if not entries:
-                raise HTTPException(status_code=404, detail="No entries found in dataset.")
-            
-            jsonl_lines = []
-            for entry in entries:
-                # Reorder to put id first, then content, then metadata
-                ordered_entry = {
-                    "id": entry.get("id"),
-                    "content": entry.get("content"),
-                    "metadata": entry.get("metadata")
-                }
-                jsonl_lines.append(json.dumps(ordered_entry, ensure_ascii=False))
-            
-            jsonl_content = '\n'.join(jsonl_lines)
-            return Response(
-                content=jsonl_content, 
-                media_type='application/json',
-                headers={
-                    'Content-Disposition': f'attachment; filename="dataset_{task_id}.jsonl"'
-                }
-            )
-        elif format == 'csv':
-            import csv
-            from io import StringIO
-            entries = data.get('entries', [])
-            if not entries:
-                raise HTTPException(status_code=404, detail="No entries found in dataset.")
-            output = StringIO()
-            
-            # Handle DatasetEntry format with id, content, metadata structure
-            flattened_entries = []
-            fieldnames = set(['id'])  # Always include id
-            
-            for entry in entries:
-                flat_entry = {'id': entry.get('id', '')}
-                
-                # Flatten content fields
-                content = entry.get('content', {})
-                if isinstance(content, dict):
-                    for key, value in content.items():
-                        field_name = f"content_{key}"
-                        flat_entry[field_name] = str(value) if value is not None else ''
-                        fieldnames.add(field_name)
-                else:
-                    flat_entry['content'] = str(content) if content is not None else ''
-                    fieldnames.add('content')
-                
-                # Flatten key metadata fields
-                metadata = entry.get('metadata', {})
-                if isinstance(metadata, dict):
-                    # Only include important metadata fields to keep CSV readable
-                    important_fields = ['source', 'task', 'model', 'created_at']
-                    for key in important_fields:
-                        if key in metadata:
-                            field_name = f"metadata_{key}"
-                            flat_entry[field_name] = str(metadata[key]) if metadata[key] is not None else ''
-                            fieldnames.add(field_name)
-                
-                flattened_entries.append(flat_entry)
-            
-            fieldnames = sorted(list(fieldnames))  # Sort for consistent column order
-            writer = csv.DictWriter(output, fieldnames=fieldnames)
-            writer.writeheader()
-            for entry in flattened_entries:
-                writer.writerow(entry)
-            output.seek(0)
-            return Response(content=output.read(), media_type='text/csv', headers={
-                'Content-Disposition': f'attachment; filename="dataset_{task_id}.csv"'
-            })
-        elif format == 'zip':
-            import zipfile
-            from io import BytesIO
-            entries = data.get('entries', [])
-            if not entries:
-                raise HTTPException(status_code=404, detail="No entries found in dataset.")
-            mem_zip = BytesIO()
-            with zipfile.ZipFile(mem_zip, mode='w', compression=zipfile.ZIP_DEFLATED) as zf:
-                zf.writestr(f'dataset_{task_id}.json', json.dumps(data, ensure_ascii=False, indent=2))
-            mem_zip.seek(0)
-            return Response(content=mem_zip.read(), media_type='application/zip', headers={
-                'Content-Disposition': f'attachment; filename="dataset_{task_id}.zip"'
-            })
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error downloading dataset: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/models/ollama", summary="Get Available Ollama Models", tags=["Models API"])
-async def get_ollama_models_api():
-    """Get list of available Ollama models."""
-    try:
-        models = get_available_ollama_models()
-        return {
-            "models": models,
-            "count": len(models),
-            "server_available": len(models) > 0,
-            "endpoint": "http://localhost:11434"
-        }
-    except Exception as e:
-        logger.error(f"Error getting Ollama models: {e}")
-        return {
-            "models": [],
-            "count": 0,
-            "server_available": False,
-            "error": str(e)
-        }
-
-@app.get("/api/models/all", summary="Get All Available Models", tags=["Models API"])
-async def get_all_models_api():
-    """Get all available models from both DeepSeek and Ollama."""
-    try:
-        # DeepSeek models
-        deepseek_models = [
-            {"name": "deepseek-chat", "provider": "deepseek", "description": "DeepSeek-V3-0324"},
-            {"name": "deepseek-reasoner", "provider": "deepseek", "description": "DeepSeek-R1-0528"}
-        ]
-        
-        # Ollama models
-        ollama_models = []
-        try:
-            ollama_model_names = get_available_ollama_models()
-            ollama_models = [
-                {"name": f"ollama:{model}", "provider": "ollama", "description": f"Ollama - {model}"}
-                for model in ollama_model_names
-            ]
-        except Exception as e:
-            logger.warning(f"Failed to get Ollama models: {e}")
-        
-        all_models = deepseek_models + ollama_models
-        
-        return {
-            "models": all_models,
-            "deepseek_count": len(deepseek_models),
-            "ollama_count": len(ollama_models),
-            "total_count": len(all_models),
-            "ollama_available": len(ollama_models) > 0
-        }
-    except Exception as e:
-        logger.error(f"Error getting all models: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get models: {str(e)}")
-
-# Add after existing Pydantic models around line 220
-class ApiKeyRequest(BaseModel):
-    api_key: str
-
-class ApiKeyResponse(BaseModel):
-    message: str
-    valid: bool
-
-class ApiKeyTestRequest(BaseModel):
-    api_key: str
-
-class ApiKeyTestResponse(BaseModel):
-    valid: bool
-    message: str
-    model_accessible: Optional[str] = None
-
-# Add API Configuration endpoints after line 1630
 @app.post("/api/config/api-key", response_model=ApiKeyResponse, summary="Save API Key", tags=["Configuration API"])
 async def save_api_key(payload: ApiKeyRequest):
     """Save and validate API key configuration."""
@@ -1837,5 +1848,309 @@ async def test_api_key(payload: ApiKeyTestRequest):
             valid=False,
             message=f"Error testing API key: {str(e)}"
         )
+
+@app.post("/api/pdf-upload")
+async def upload_pdf(
+    file: UploadFile = File(...), 
+    mistral_api_key: Optional[str] = Form(None),
+    dataset_type: Optional[str] = Form('text_generation'),
+    create_dataset: Optional[bool] = Form(False)
+):
+    """Handle PDF upload, process with OCR/PDF extraction, and optionally create dataset-ready format."""
+    from pathlib import Path
+    
+    # Validate file type
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided")
+    
+    file_ext = PathLib(file.filename).suffix.lower()
+    if file_ext not in ['.pdf', '.png', '.jpg', '.jpeg', '.tiff', '.bmp']:
+        raise HTTPException(status_code=400, detail="Unsupported file type. Please upload PDF or image files.")
+    
+    # Validate dataset type
+    valid_dataset_types = ['text_generation', 'question_answer', 'classification', 'translation', 'summarization']
+    if dataset_type not in valid_dataset_types:
+        raise HTTPException(status_code=400, detail=f"Invalid dataset type. Must be one of: {valid_dataset_types}")
+    
+    # Save uploaded file to a temporary location
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp:
+            shutil.copyfileobj(file.file, tmp)
+            tmp_path = PathLib(tmp.name)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {e}")
+
+    try:
+        # Import DocumentUnderstanding here to avoid module loading issues
+        try:
+            from document_understanding import DocumentUnderstanding
+        except ImportError:
+            # Try relative import if absolute fails
+            try:
+                from .document_understanding import DocumentUnderstanding
+            except ImportError:
+                # Try importing from the src directory
+                current_dir = os.path.dirname(os.path.abspath(__file__))
+                src_dir = os.path.join(current_dir, 'src')
+                sys.path.insert(0, src_dir)
+                from document_understanding import DocumentUnderstanding
+        
+        # Process the file using DocumentUnderstanding
+        doc_processor = DocumentUnderstanding(mistral_api_key=mistral_api_key)
+        annotations = doc_processor.process_document(tmp_path)
+        analysis = doc_processor.analyze_document_structure(annotations)
+        combined_text = doc_processor.get_combined_text(annotations)
+        export_json = doc_processor.export_annotations(annotations, format='json')
+        
+        # Add PDF content to RAG system
+        pdf_rag_metadata = {
+            "filename": file.filename,
+            "upload_time": datetime.now().isoformat(),
+            "file_type": file_ext,
+            "extraction_method": "mistral_ai" if mistral_api_key else "tesseract_ocr"
+        }
+        
+        rag_success = add_pdf_to_rag(combined_text, file.filename, pdf_rag_metadata)
+        
+        # Base response
+        response_data = {
+            "status": "success",
+            "filename": file.filename,
+            "annotations": export_json.get("annotations", []),
+            "analysis": export_json.get("analysis", {}),
+            "combined_text": combined_text,
+            "message": "PDF processed successfully.",
+            "rag_indexed": rag_success
+        }
+        
+        # If dataset creation is requested, generate dataset formats
+        if create_dataset and annotations:
+            try:
+                # Create dataset entries in the specified format
+                dataset_entries = doc_processor.to_dataset_format(annotations, dataset_type)
+                
+                # Generate task ID for PDF-based dataset
+                task_id = f"pdf_{dataset_type}_{int(time.time())}"
+                
+                # Convert to proper DatasetEntry format
+                formatted_entries = []
+                for i, entry in enumerate(dataset_entries, 1):
+                    formatted_entry = {
+                        "id": f"{task_id}-{i}",
+                        "content": entry,
+                        "metadata": {
+                            "source": "pdf_document",
+                            "filename": file.filename,
+                            "dataset_type": dataset_type,
+                            "created_at": datetime.now().isoformat(),
+                            "extraction_method": "mistral_ai" if mistral_api_key else "tesseract_ocr"
+                        }
+                    }
+                    formatted_entries.append(formatted_entry)
+                
+                # Cache the dataset
+                cache_data = {
+                    'entries': formatted_entries,
+                    'quality_report': {
+                        'generated_entries': len(formatted_entries),
+                        'quality_score': 0.9,
+                        'duplicates_removed': 0,
+                        'average_length': sum(len(str(entry['content'])) for entry in formatted_entries) / len(formatted_entries) if formatted_entries else 0,
+                        'details': {
+                            'total_generated': len(formatted_entries),
+                            'valid_entries': len(formatted_entries),
+                            'source_type': 'pdf_document',
+                            'dataset_type': dataset_type,
+                            'extraction_confidence': sum(ann.confidence for ann in annotations) / len(annotations) if annotations else 0.8
+                        }
+                    },
+                    'generated_at': datetime.now().isoformat(),
+                    'task_id': task_id,
+                    'count': len(formatted_entries)
+                }
+                
+                # Save to cache
+                save_dataset_to_cache_sync(task_id, cache_data)
+                
+                # Add dataset info to response
+                response_data.update({
+                    "dataset_created": True,
+                    "dataset_type": dataset_type,
+                    "task_id": task_id,
+                    "dataset_entries": len(formatted_entries),
+                    "dataset_preview": formatted_entries[:3],
+                    "download_ready": True
+                })
+                
+                logger.info(f"Created {dataset_type} dataset from PDF: {file.filename} with {len(formatted_entries)} entries")
+                
+            except Exception as dataset_error:
+                logger.error(f"Error creating dataset from PDF: {dataset_error}")
+                response_data.update({
+                    "dataset_created": False,
+                    "dataset_error": str(dataset_error)
+                })
+        else:
+            response_data["dataset_created"] = False
+        
+        return response_data
+        
+    except Exception as e:
+        logger.error(f"Error processing document: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to process document: {e}")
+    finally:
+        # Clean up temporary file
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except Exception as cleanup_error:
+            logger.warning(f"Failed to cleanup temporary file: {cleanup_error}")
+
+# RAG Management API
+@app.get("/api/rag/status", summary="Get RAG System Status", tags=["RAG API"])
+async def get_rag_status():
+    """Get current status of RAG system."""
+    try:
+        doc_count = len(pdf_vector_store.documents)
+        has_index = pdf_vector_store.vectorizer is not None
+        
+        return {
+            "status": "active" if doc_count > 0 else "empty",
+            "document_count": doc_count,
+            "indexed": has_index,
+            "documents": [
+                {
+                    "id": doc_id,
+                    "filename": doc_data.get('metadata', {}).get('filename', 'Unknown'),
+                    "chunks": doc_data.get('metadata', {}).get('total_chunks', 1),
+                    "upload_time": doc_data.get('metadata', {}).get('upload_time', 'Unknown')
+                }
+                for doc_id, doc_data in pdf_vector_store.documents.items()
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Error getting RAG status: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get RAG status: {str(e)}")
+
+@app.post("/api/rag/search", summary="Search RAG Documents", tags=["RAG API"])
+async def search_rag_documents(query: str = Body(..., embed=True)):
+    """Search for relevant documents in RAG system."""
+    try:
+        if not query or not query.strip():
+            raise HTTPException(status_code=400, detail="Query cannot be empty")
+            
+        results = pdf_vector_store.search(query.strip(), top_k=5)
+        
+        formatted_results = []
+        for doc_id, score, doc_data in results:
+            formatted_results.append({
+                "document_id": doc_id,
+                "score": score,
+                "filename": doc_data.get('metadata', {}).get('filename', 'Unknown'),
+                "chunk_index": doc_data.get('metadata', {}).get('chunk_index', 0),
+                "text_preview": doc_data['text'][:200] + "..." if len(doc_data['text']) > 200 else doc_data['text'],
+                "metadata": doc_data.get('metadata', {})
+            })
+            
+        return {
+            "query": query,
+            "results": formatted_results,
+            "result_count": len(formatted_results)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error searching RAG documents: {e}")
+        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+
+@app.delete("/api/rag/clear", summary="Clear RAG Documents", tags=["RAG API"])
+async def clear_rag_documents():
+    """Clear all documents from RAG system."""
+    try:
+        global pdf_vector_store
+        doc_count = len(pdf_vector_store.documents)
+        pdf_vector_store = PDFVectorStore()  # Reset the vector store
+        
+        logger.info(f"Cleared {doc_count} documents from RAG system")
+        return {
+            "message": f"Successfully cleared {doc_count} documents from RAG system",
+            "cleared_count": doc_count
+        }
+        
+    except Exception as e:
+        logger.error(f"Error clearing RAG documents: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to clear RAG documents: {str(e)}")
+
+@app.get("/api/models/all", summary="Get All Available Models", tags=["System API"])
+async def get_all_models():
+    """Get all available models from both DeepSeek and Ollama."""
+    try:
+        models_data = {
+            "deepseek": {
+                "available": True,
+                "models": [
+                    {
+                        "id": "deepseek-chat",
+                        "name": "DeepSeek Chat",
+                        "description": "Advanced reasoning model for high-quality conversations"
+                    },
+                    {
+                        "id": "deepseek-reasoner", 
+                        "name": "DeepSeek Reasoner",
+                        "description": "Reasoning model with step-by-step thinking process"
+                    }
+                ]
+            },
+            "ollama": {
+                "available": False,
+                "models": []
+            }
+        }
+        
+        # Check if DeepSeek API is configured
+        api_key = get_deepseek_api_key()
+        models_data["deepseek"]["available"] = api_key is not None
+        
+        # Check Ollama availability and get models
+        try:
+            ollama_models = get_available_ollama_models()
+            if ollama_models:
+                models_data["ollama"]["available"] = True
+                models_data["ollama"]["models"] = [
+                    {
+                        "id": f"ollama:{model}",
+                        "name": model,
+                        "description": f"Local Ollama model: {model}"
+                    }
+                    for model in ollama_models
+                ]
+            else:
+                models_data["ollama"]["available"] = False
+                
+        except Exception as ollama_error:
+            logger.warning(f"Error checking Ollama models: {ollama_error}")
+            models_data["ollama"]["available"] = False
+        
+        return JSONResponse(content=models_data)
+        
+    except Exception as e:
+        logger.error(f"Error getting models: {e}")
+        # Return basic model info even if there's an error
+        return JSONResponse(content={
+            "deepseek": {
+                "available": False,
+                "models": [
+                    {
+                        "id": "deepseek-chat",
+                        "name": "DeepSeek Chat", 
+                        "description": "Advanced reasoning model (API key required)"
+                    }
+                ]
+            },
+            "ollama": {
+                "available": False,
+                "models": []
+            }
+        })
 
 
